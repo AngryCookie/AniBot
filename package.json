@@ -1,6 +1,6 @@
 {
-  "name": "название бота",
-  "description": "описание бота",
+  "name": "anibot",
+  "description": "discordbot",
   "version": "0.0.1",
   "main": "bot.js",
   "scripts": {
