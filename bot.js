@@ -8,7 +8,7 @@ client.on('message', (message) => {
     if (command == 'mute') {
         let member = message.mentions.members.first();
         if (!member) return;
-        member.addRole('id роли мута');
+        member.addRole('461227866869334019');
     }
 });
 
