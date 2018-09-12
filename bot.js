@@ -5,7 +5,7 @@ client.on('message', (message) => {
     if(message.content.indexOf(prefix) !== 0) return;
     const args = message.content.slice(prefix.length).trim().split(/ +/g);
     const command = args.shift().toLowerCase();
-    if (command == 'mute') {
+    if (command == 'mute' && message.member.hasPermission('MANAGE_ROLES')) {
         let member = message.mentions.members.first();
         if (!member) return;
         member.addRole('461227866869334019');
