@@ -1,10 +1,10 @@
 {
-  "name": "sergay",
+  "name": "anibot",
   "version": "0.0.1",
   "description": "ds",
-  "main": "lampota.js",
+  "main": "bot.js",
   "scripts": {
-    "start": "node main.js"
+    "start": "node bot.js"
   },
   "author": "Yuku",
   "license": "ISC",

@@ -1,1 +1,2 @@
-# lampota
+# FlexHub
+Discord bot

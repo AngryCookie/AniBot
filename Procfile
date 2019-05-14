@@ -1,1 +1,1 @@
-worker: node lampota.js
+worker: node bot.js
