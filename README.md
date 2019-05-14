@@ -1,2 +1,1 @@
-# AniBot
-Discord bot
+# lampota
