@@ -31,7 +31,7 @@ if(message.content.startsWith(p + 'say')) {
         .setDescription("Данный бот был создан для сервера FlexHub")
         .addField("OTHER","`s!say` - сказать что-то от именни бота\n`s!ping` - проверить нагрузку на бота\n`s!report`  - написать репорт на человека")
         .addField("MODER","`s!kick` - кикнуть пользователя\n`s!ban` - забанить пользователя\n`s!report` - написать жалобу\n`s!server` - проверить информацию про данный сервер")
-        .addField("FUN","ns!hi - сказать привет!\ns!sad - уйти в печаль\ns!angry - начать злится\ns!sleep - пойти спать\ns!suicide - сделать смэрть\ns!smoke - выкурить сигу")
+        .addField("FUN","s!hi - сказать привет!\ns!sad - уйти в печаль\ns!angry - начать злится\ns!sleep - пойти спать\ns!suicide - сделать смэрть\ns!smoke - выкурить сигу")
         try {
             message.author.send(embed).then(m =>{
             message.channel.send("**Проверь личные сообщение**");	
