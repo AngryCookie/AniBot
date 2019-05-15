@@ -295,6 +295,8 @@ if (message.content.startsWith(p + `suicide`)) {
             }
             if (message.content.startsWith(p + `bang`)) {
                 message.delete();
+                if (!user1 || user1.id === user.id) return message.channel.send(selfbite).then(function(message) {
+                }).catch(function() {});
                  let user = message.author;
                 let user1 = message.mentions.users.first();
                 const urls = ['https://tenor.com/view/jormungand-anime-shoot-gif-13757300', 'https://tenor.com/view/anime-shooting-gif-8118409', 'https://tenor.com/view/nichijou-gatlinggun-anime-shoot-gif-5359419', 'https://tenor.com/view/gun-fire-anime-shoot-blam-gif-5256396', 'https://tenor.com/view/anime-agent-aika-shooting-gun-gif-13871978', 'https://tenor.com/view/llenn-running-power-anime-gun-gif-12047152', 'https://tenor.com/view/chibiusa-anime-sailor-moon-small-lady-gun-gif-13671547', 'https://tenor.com/view/anime-wolfwood-aim-shoot-gun-gif-12206815', 'https://tenor.com/view/reisen-anime-power-shoot-gif-7245361', 'https://tenor.com/view/anime-no-mirai-nikki-shoot-calm-gif-12525522', 'https://tenor.com/view/anime-finger-gun-ishoot-you-gif-13451225', 'https://tenor.com/view/anime-agent-aika-shooting-gun-gif-13871976', 'https://tenor.com/view/osomatsusan-ichimatsu-karamatsu-anime-bazooka-shoot-gif-5706794','https://tenor.com/view/doraemon-shoots-gun-anime-gif-7174362']
