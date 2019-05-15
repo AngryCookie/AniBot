@@ -87,7 +87,7 @@ if(message.content.startsWith(p + 'ban')) {
   }
   if(message.content.startsWith(p + 'report')) {
     let rUser = message.guild.member(message.mentions.users.first() || message.guild.members.get(args[0]));
-    if(!rUser) return message.channel.send("Друг мой, я его не нашёл");
+    if(!rUser) return message.channel.send("не могу найти его");
     let rreason = args.join(" ").slice(22);
     let reportEmbed = new Discord.RichEmbed()
     .setDescription("Котейка репорт показал")
@@ -117,8 +117,8 @@ if(message.content.startsWith(p + 'ban')) {
   }
   if(message.content.startsWith(p + 'mute')) {
   let tomute = message.guild.member(message.mentions.users.first() || message.guild.members.get(args[0]));
-  if(!tomute) return message.reply("Друг мой, я его не нашёл");
-  if(tomute.hasPermission("KICK_MEMBERS")) return message.reply("Извини, но ты это сделать не можешь");
+  if(!tomute) return message.reply("я его не нашёл");
+  if(tomute.hasPermission("KICK_MEMBERS")) return message.reply("ты не можешь это сделать");
   let muterole = message.guild.roles.find(`name`, "muted");
   if(!muterole){
     try{
