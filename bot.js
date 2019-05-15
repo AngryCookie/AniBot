@@ -51,7 +51,7 @@ if(message.content.startsWith(p + 'kick')) {
     if (Kmember.kickable) { 
         Kmember.kick(`${reason}`);
         message.channel.send(`${Kmember} был кикнут по причине **${reason}**`);
-    } else message.reply(`Не удалось ${Kmember} кикнуть`);
+    } else (`Не удалось ${Kmember} кикнуть`);
     const kickEmbed = new Discord.RichEmbed()
     .setDescription("КИК от Котейки")
     .setColor(c)
@@ -138,9 +138,9 @@ if(message.content.startsWith(p + 'ban')) {
     }
   }
   let mutetime = args[1];
-  if(!mutetime) return message.reply("ВРЕМЯ УКАЖИ!");
+  if(!mutetime) return ("ВРЕМЯ УКАЖИ!");
  (tomute.addRole(muterole.id));
-  message.reply(`<@${tomute.id}> был замучен на **${ms(ms(mutetime))}**`);
+  (`<@${tomute.id}> был замучен на **${ms(ms(mutetime))}**`);
   setTimeout(function(){
     tomute.removeRole(muterole.id);
     message.channel.send(`<@${tomute.id}> был размучен!`);
