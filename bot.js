@@ -53,7 +53,7 @@ if(message.content.startsWith(p + 'kick')) {
         message.channel.send(`${Kmember} был кикнут по причине **${reason}**`);
     } else message.reply(`Не удалось ${Kmember} кикнуть`);
     const kickEmbed = new Discord.RichEmbed()
-    .setDescription("КИК от серГЕЯ")
+    .setDescription("КИК от Котейки")
     .setColor(c)
     .addField("Кикнут", `${Kmember} ID ${Kmember.id}`)
     .addField("Кикнул", `<@${message.author.id}> ID ${message.author.id}`)
@@ -72,7 +72,7 @@ if(message.content.startsWith(p + 'ban')) {
     if(!message.member.hasPermission("MANAGE_MEMBERS")) return message.channel.send("No can do pal!");
     if(bUser.hasPermission("BAN_MEMBERS")) return message.channel.send("У тебя нет прав!");
     const banEmbed = new Discord.RichEmbed()
-    .setDescription("БАН от серГЕЯ")
+    .setDescription("БАН от Котейки")
     .setColor(c)
     .addField("Забанили", `${bUser} ID ${bUser.id}`)
     .addField("Забанил", `<@${message.author.id}> ID ${message.author.id}`)
@@ -87,18 +87,18 @@ if(message.content.startsWith(p + 'ban')) {
   }
   if(message.content.startsWith(p + 'report')) {
     let rUser = message.guild.member(message.mentions.users.first() || message.guild.members.get(args[0]));
-    if(!rUser) return message.channel.send("Не такого,ты шо.");
+    if(!rUser) return message.channel.send("Друг мой, я его не нашёл");
     let rreason = args.join(" ").slice(22);
     let reportEmbed = new Discord.RichEmbed()
-    .setDescription("серГЕЙ репорт показал")
+    .setDescription("Котейка репорт показал")
     .setColor(c)
     .addField("Пользователь", `${rUser} ID ${rUser.id}`)
     .addField("Репорт сделал", `${message.author} ID ${message.author.id}`)
     .addField("Каанал", message.channel)
     .addField("Время", message.createdAt)
     .addField("Причина", rreason);
-    let reportschannel = message.guild.channels.find(`name`, "💡┇идеи-жалобы");
-    if(!reportschannel) return message.channel.send("Я не нашёл канал `💡┇идеи-жалобы`");
+    let reportschannel = message.guild.channels.find(`name`, "💡┇репорт");
+    if(!reportschannel) return message.channel.send("Я не нашёл канал `💡┇репорт`");
     message.delete().catch(O_o=>{});
     reportschannel.send(reportEmbed);
     return;
@@ -117,8 +117,8 @@ if(message.content.startsWith(p + 'ban')) {
   }
   if(message.content.startsWith(p + 'mute')) {
   let tomute = message.guild.member(message.mentions.users.first() || message.guild.members.get(args[0]));
-  if(!tomute) return message.reply("Вы ебобо?Нет  тут такого");
-  if(tomute.hasPermission("KICK_MEMBERS")) return message.reply("Прав нету у тебя");
+  if(!tomute) return message.reply("Друг мой, я его не нашёл");
+  if(tomute.hasPermission("KICK_MEMBERS")) return message.reply("Извини, но ты это сделать не можешь");
   let muterole = message.guild.roles.find(`name`, "muted");
   if(!muterole){
     try{
