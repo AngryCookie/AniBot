@@ -293,7 +293,7 @@ if (message.content.startsWith(p + `suicide`)) {
                                 ).then(function(message) {
                                 }).catch(function() {});
             }
-            if (message.content.startsWith(p + `bang`)) {
+            if (message.content.startsWith(p + `shoot`)) {
                 message.delete();
                  let user = message.author;
                 let user1 = message.mentions.users.first();
