@@ -28,7 +28,7 @@ if(message.content.startsWith(p + 'say')) {
     const embed = new Discord.RichEmbed()
         .setColor(c)
         .setTitle("Помощь от Кота")
-        .setDescription("Данный бот был создан для сервера FlexHub")
+        .setDescription("Данный бот был создан для сервера |L A M P O T A|")
         .addField("OTHER","`s!say` - сказать что-то от именни бота\n`s!ping` - проверить нагрузку на бота\n`s!report`  - написать репорт на человека")
         .addField("MODER","`s!kick` - кикнуть пользователя\n`s!ban` - забанить пользователя\n`s!report` - написать жалобу\n`s!server` - проверить информацию про данный сервер")
         .addField("FUN","s!hi - сказать привет!\ns!sad - уйти в печаль\ns!angry - начать злится\ns!sleep - пойти спать\ns!suicide - сделать смэрть\ns!smoke - выкурить сигу")
