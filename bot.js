@@ -94,7 +94,7 @@ if(message.content.startsWith(p + 'ban')) {
     .setColor(c)
     .addField("Пользователь", `${rUser} ID ${rUser.id}`)
     .addField("Репорт сделал", `${message.author} ID ${message.author.id}`)
-    .addField("Каанал", message.channel)
+    .addField("Канал", message.channel)
     .addField("Время", message.createdAt)
     .addField("Причина", rreason);
     let reportschannel = message.guild.channels.find(`name`, "💡┇репорт");
