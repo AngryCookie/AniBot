@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniBot Admin - Economy</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="economy">
+    <header>
+      <h1>AniBot Web Admin</h1>
+    </header>
+    <main>
+      <div class="notice" id="guildIdLabel">Guild: —</div>
+      <nav>
+        <a href="/overview.html" data-page="overview">Overview</a>
+        <a href="/leveling.html" data-page="leveling">Leveling</a>
+        <a href="/economy.html" data-page="economy">Economy</a>
+        <a href="/gambling.html" data-page="gambling">Gambling</a>
+        <a href="/shop.html" data-page="shop">Shop</a>
+        <a href="/logs.html" data-page="logs">Logs</a>
+      </nav>
+      <section class="card">
+        <h2>Настройки экономики</h2>
+        <form id="settingsForm">
+          <label>
+            <span>Включить экономику</span>
+            <input type="checkbox" name="enabled" />
+          </label>
+          <label>
+            <span>Ежедневная награда</span>
+            <input type="number" name="daily_amount" min="0" max="100000" />
+          </label>
+          <label>
+            <span>Максимум ежедневных получений</span>
+            <select name="max_daily_claims">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <label>
+            <span>Разрешить переводы</span>
+            <input type="checkbox" name="allow_transfers" />
+          </label>
+          <label>
+            <span>Налог на переводы (%)</span>
+            <input type="number" name="tax_rate_percent" min="0" max="25" step="0.5" />
+          </label>
+          <div class="footer-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" class="danger" id="resetSettings">Сбросить</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

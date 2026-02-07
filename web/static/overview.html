@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniBot Admin - Overview</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="overview">
+    <header>
+      <h1>AniBot Web Admin</h1>
+    </header>
+    <main>
+      <div class="notice" id="guildIdLabel">Guild: —</div>
+      <nav>
+        <a href="/overview.html" data-page="overview">Overview</a>
+        <a href="/leveling.html" data-page="leveling">Leveling</a>
+        <a href="/economy.html" data-page="economy">Economy</a>
+        <a href="/gambling.html" data-page="gambling">Gambling</a>
+        <a href="/shop.html" data-page="shop">Shop</a>
+        <a href="/logs.html" data-page="logs">Logs</a>
+      </nav>
+      <section class="card">
+        <h2>Статистика сервера</h2>
+        <div class="grid">
+          <div class="stat">Участники <span id="statMembers">0</span></div>
+          <div class="stat">Сумма баланса <span id="statBalance">0</span></div>
+          <div class="stat">Средний уровень <span id="statLevel">0</span></div>
+          <div class="stat">Предупреждения <span id="statWarnings">0</span></div>
+          <div class="stat">Товары магазина <span id="statShop">0</span></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Общие настройки сервера</h2>
+        <form id="settingsForm">
+          <label>
+            <span>Множитель опыта</span>
+            <input
+              type="range"
+              name="server_rate"
+              min="0.1"
+              max="10"
+              step="0.1"
+              data-output="rateValue"
+            />
+            <small>Текущее значение: <strong id="rateValue">1.0</strong></small>
+          </label>
+          <label>
+            <span>Название валюты</span>
+            <input type="text" name="currency_name" />
+          </label>
+          <label>
+            <span>Префикс команд</span>
+            <input type="text" name="prefix" maxlength="5" />
+          </label>
+          <label>
+            <span>ID канала приветствия</span>
+            <input type="number" name="welcome_channel_id" />
+          </label>
+          <label>
+            <span>Модерация включена</span>
+            <input type="checkbox" name="moderation_enabled" />
+          </label>
+          <div class="footer-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" class="danger" id="resetSettings">Сбросить</button>
+          </div>
+        </form>
+      </section>
+      <section>
+        <a href="/servers.html"><button class="secondary">Сменить сервер</button></a>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniBot Admin - Gambling</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="gambling">
+    <header>
+      <h1>AniBot Web Admin</h1>
+    </header>
+    <main>
+      <div class="notice" id="guildIdLabel">Guild: —</div>
+      <nav>
+        <a href="/overview.html" data-page="overview">Overview</a>
+        <a href="/leveling.html" data-page="leveling">Leveling</a>
+        <a href="/economy.html" data-page="economy">Economy</a>
+        <a href="/gambling.html" data-page="gambling">Gambling</a>
+        <a href="/shop.html" data-page="shop">Shop</a>
+        <a href="/logs.html" data-page="logs">Logs</a>
+      </nav>
+      <section class="card">
+        <h2>Настройки азартных игр</h2>
+        <form id="settingsForm">
+          <label>
+            <span>Включить азартные игры</span>
+            <input type="checkbox" name="enabled" />
+          </label>
+          <label>
+            <span>Минимальная ставка</span>
+            <input type="number" name="min_bet" min="1" max="100000" />
+          </label>
+          <label>
+            <span>Максимальная ставка</span>
+            <input type="number" name="max_bet" min="1" max="1000000" />
+          </label>
+          <label>
+            <span>Комиссия дома (%)</span>
+            <input type="number" name="house_edge_percent" min="0" max="25" step="0.5" />
+          </label>
+          <label>
+            <span>Бонус за серию побед</span>
+            <input type="checkbox" name="streak_bonus" />
+          </label>
+          <div class="footer-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" class="danger" id="resetSettings">Сбросить</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

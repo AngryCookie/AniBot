@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniBot Admin - Shop</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="shop">
+    <header>
+      <h1>AniBot Web Admin</h1>
+    </header>
+    <main>
+      <div class="notice" id="guildIdLabel">Guild: —</div>
+      <nav>
+        <a href="/overview.html" data-page="overview">Overview</a>
+        <a href="/leveling.html" data-page="leveling">Leveling</a>
+        <a href="/economy.html" data-page="economy">Economy</a>
+        <a href="/gambling.html" data-page="gambling">Gambling</a>
+        <a href="/shop.html" data-page="shop">Shop</a>
+        <a href="/logs.html" data-page="logs">Logs</a>
+      </nav>
+      <section class="card">
+        <h2>Настройки магазина</h2>
+        <form id="settingsForm">
+          <label>
+            <span>Включить магазин</span>
+            <input type="checkbox" name="enabled" />
+          </label>
+          <label>
+            <span>Показывать отсутствующие товары</span>
+            <input type="checkbox" name="show_out_of_stock" />
+          </label>
+          <label>
+            <span>Выделять скидки</span>
+            <input type="checkbox" name="highlight_discounts" />
+          </label>
+          <div class="footer-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" class="danger" id="resetSettings">Сбросить</button>
+          </div>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Товары магазина</h2>
+        <form id="shopItemForm">
+          <label>
+            <span>Название</span>
+            <input type="text" name="name" required />
+          </label>
+          <label>
+            <span>Описание</span>
+            <textarea name="description" rows="3"></textarea>
+          </label>
+          <label>
+            <span>Цена</span>
+            <input type="number" name="base_price" min="0" max="1000000" />
+          </label>
+          <label>
+            <span>Тип</span>
+            <select name="item_type">
+              <option value="role">Роль</option>
+              <option value="item">Предмет</option>
+              <option value="boost">Буст</option>
+            </select>
+          </label>
+          <label>
+            <span>ID роли (если тип роль)</span>
+            <input type="number" name="role_id" />
+          </label>
+          <label>
+            <span>Активен</span>
+            <input type="checkbox" name="is_active" checked />
+          </label>
+          <button type="submit">Добавить</button>
+        </form>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Цена</th>
+              <th>Тип</th>
+              <th>Активен</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="shopItemsBody"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
