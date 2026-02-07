@@ -5,8 +5,9 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
-from bot.cogs.utils import get_or_create_guild, get_or_create_user
+from bot.cogs.utils import get_or_create_guild
 from bot.database.models import CustomCommand, ModLog, Tag
+from bot.database.operations import apply_balance_change, get_or_create_user_locked
 
 
 class AdminCog(commands.Cog):
@@ -24,9 +25,9 @@ class AdminCog(commands.Cog):
             await interaction.response.send_message("Курс должен быть 0.5-3.0.", ephemeral=True)
             return
         async with self.bot.db.session() as session:
-            guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
-            guild.server_rate = rate
-            await session.commit()
+            async with session.begin():
+                guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
+                guild.server_rate = rate
         await interaction.response.send_message("Курс обновлен.", ephemeral=True)
 
     @rate_group.command(name="info", description="Посмотреть курс")
@@ -41,9 +42,9 @@ class AdminCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def rate_reset(self, interaction: discord.Interaction) -> None:
         async with self.bot.db.session() as session:
-            guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
-            guild.server_rate = 1.0
-            await session.commit()
+            async with session.begin():
+                guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
+                guild.server_rate = 1.0
         await interaction.response.send_message("Курс сброшен.", ephemeral=True)
 
     @economy_group.command(name="give", description="Выдать валюту")
@@ -52,17 +53,24 @@ class AdminCog(commands.Cog):
         self, interaction: discord.Interaction, member: discord.Member, amount: int
     ) -> None:
         async with self.bot.db.session() as session:
-            user = await get_or_create_user(session, interaction.guild.id, member.id)
-            user.balance += amount
-            log = ModLog(
-                guild_id=interaction.guild.id,
-                action="economy_give",
-                moderator_id=interaction.user.id,
-                user_id=member.id,
-                reason=f"+{amount}",
-            )
-            session.add(log)
-            await session.commit()
+            async with session.begin():
+                await get_or_create_user_locked(session, interaction.guild.id, member.id)
+                await apply_balance_change(
+                    session,
+                    guild_id=interaction.guild.id,
+                    user_id=member.id,
+                    amount=amount,
+                    ledger_type="admin",
+                    source="admin_give",
+                )
+                log = ModLog(
+                    guild_id=interaction.guild.id,
+                    action="economy_give",
+                    moderator_id=interaction.user.id,
+                    user_id=member.id,
+                    reason=f"+{amount}",
+                )
+                session.add(log)
         await interaction.response.send_message("Баланс обновлен.", ephemeral=True)
 
     @economy_group.command(name="take", description="Снять валюту")
@@ -71,36 +79,53 @@ class AdminCog(commands.Cog):
         self, interaction: discord.Interaction, member: discord.Member, amount: int
     ) -> None:
         async with self.bot.db.session() as session:
-            user = await get_or_create_user(session, interaction.guild.id, member.id)
-            user.balance = max(0, user.balance - amount)
-            log = ModLog(
-                guild_id=interaction.guild.id,
-                action="economy_take",
-                moderator_id=interaction.user.id,
-                user_id=member.id,
-                reason=f"-{amount}",
-            )
-            session.add(log)
-            await session.commit()
+            async with session.begin():
+                user = await get_or_create_user_locked(session, interaction.guild.id, member.id)
+                delta = -min(amount, user.balance)
+                if delta:
+                    await apply_balance_change(
+                        session,
+                        guild_id=interaction.guild.id,
+                        user_id=member.id,
+                        amount=delta,
+                        ledger_type="admin",
+                        source="admin_take",
+                    )
+                log = ModLog(
+                    guild_id=interaction.guild.id,
+                    action="economy_take",
+                    moderator_id=interaction.user.id,
+                    user_id=member.id,
+                    reason=f"{delta}",
+                )
+                session.add(log)
         await interaction.response.send_message("Баланс обновлен.", ephemeral=True)
 
     @economy_group.command(name="reset", description="Сбросить пользователя")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def economy_reset(self, interaction: discord.Interaction, member: discord.Member) -> None:
         async with self.bot.db.session() as session:
-            user = await get_or_create_user(session, interaction.guild.id, member.id)
-            user.balance = 0
-            user.xp = 0
-            user.level = 1
-            log = ModLog(
-                guild_id=interaction.guild.id,
-                action="economy_reset",
-                moderator_id=interaction.user.id,
-                user_id=member.id,
-                reason="reset",
-            )
-            session.add(log)
-            await session.commit()
+            async with session.begin():
+                user = await get_or_create_user_locked(session, interaction.guild.id, member.id)
+                if user.balance > 0:
+                    await apply_balance_change(
+                        session,
+                        guild_id=interaction.guild.id,
+                        user_id=member.id,
+                        amount=-user.balance,
+                        ledger_type="admin",
+                        source="admin_reset",
+                    )
+                user.xp = 0
+                user.level = 1
+                log = ModLog(
+                    guild_id=interaction.guild.id,
+                    action="economy_reset",
+                    moderator_id=interaction.user.id,
+                    user_id=member.id,
+                    reason="reset",
+                )
+                session.add(log)
         await interaction.response.send_message("Профиль сброшен.", ephemeral=True)
 
     @economy_group.command(name="log", description="Лог экономических операций")

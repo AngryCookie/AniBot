@@ -5,8 +5,9 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
-from bot.cogs.utils import get_or_create_guild, get_or_create_user
-from bot.database.models import ShopItem
+from bot.cogs.utils import get_or_create_guild
+from bot.database.models import ModLog, ShopItem, ShopPurchase
+from bot.database.operations import apply_balance_change, get_or_create_user_locked
 
 
 class ShopGroup(app_commands.Group):
@@ -73,25 +74,49 @@ class ShopGroup(app_commands.Group):
             await interaction.response.send_message("Команда доступна только на сервере.")
             return
         async with self.bot.db.session() as session:
-            guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
-            user = await get_or_create_user(session, interaction.guild.id, interaction.user.id)
-            item_result = await session.execute(
-                select(ShopItem).where(
-                    (ShopItem.guild_id == interaction.guild.id)
-                    & (ShopItem.name == name)
-                    & (ShopItem.is_active.is_(True))
+            async with session.begin():
+                guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
+                _ = await get_or_create_user_locked(session, interaction.guild.id, interaction.user.id)
+                item_result = await session.execute(
+                    select(ShopItem).where(
+                        (ShopItem.guild_id == interaction.guild.id)
+                        & (ShopItem.name == name)
+                        & (ShopItem.is_active.is_(True))
+                    )
                 )
-            )
-            item = item_result.scalars().first()
-            if not item:
-                await interaction.response.send_message("Товар не найден.", ephemeral=True)
-                return
-            price = int(item.base_price * guild.server_rate)
-            if user.balance < price:
-                await interaction.response.send_message("Недостаточно средств.", ephemeral=True)
-                return
-            user.balance -= price
-            await session.commit()
+                item = item_result.scalars().first()
+                if not item:
+                    await interaction.response.send_message("Товар не найден.", ephemeral=True)
+                    return
+                price = int(item.base_price * guild.server_rate)
+                try:
+                    await apply_balance_change(
+                        session,
+                        guild_id=interaction.guild.id,
+                        user_id=interaction.user.id,
+                        amount=-price,
+                        ledger_type="spend",
+                        source="shop_purchase",
+                    )
+                except ValueError:
+                    await interaction.response.send_message("Недостаточно средств.", ephemeral=True)
+                    return
+                purchase = ShopPurchase(
+                    guild_id=interaction.guild.id,
+                    user_id=interaction.user.id,
+                    item_id=item.id,
+                    price=price,
+                )
+                session.add(purchase)
+                session.add(
+                    ModLog(
+                        guild_id=interaction.guild.id,
+                        action="shop_purchase",
+                        moderator_id=interaction.user.id,
+                        user_id=interaction.user.id,
+                        reason=f"{item.name} ({price})",
+                    )
+                )
         if item.item_type == "role" and item.role_id:
             role = interaction.guild.get_role(item.role_id)
             if role:

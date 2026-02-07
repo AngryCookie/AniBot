@@ -9,8 +9,16 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from sqlalchemy import select
 
-from bot.cogs.utils import base_reward, get_or_create_guild, get_or_create_user, get_role_multiplier, parse_settings, xp_to_next
+from bot.cogs.utils import (
+    base_reward,
+    get_or_create_guild,
+    get_or_create_level_settings,
+    get_or_create_user,
+    get_role_multiplier,
+    xp_to_next,
+)
 from bot.database.models import LevelReward, UserProfile
+from bot.database.operations import apply_balance_change
 
 
 class LevelingCog(commands.Cog):
@@ -25,20 +33,36 @@ class LevelingCog(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
+        if message.content.startswith(("!", "/")):
+            return
         async with self.bot.db.session() as session:
-            guild = await get_or_create_guild(session, message.guild.id, "Coins")
-            settings = parse_settings(guild.settings)
-            if not settings.get("leveling_enabled", True):
-                return
-            user = await get_or_create_user(session, message.guild.id, message.author.id)
-            now = dt.datetime.utcnow()
-            if user.last_message_ts and (now - user.last_message_ts).total_seconds() < 60:
-                return
-            gained = random.randint(5, 10)
-            user.xp += gained
-            user.last_message_ts = now
-            await self._process_level_up(session, message.author, guild, user)
-            await session.commit()
+            async with session.begin():
+                guild = await get_or_create_guild(session, message.guild.id, "Coins")
+                settings = await get_or_create_level_settings(session, message.guild.id)
+                if not settings.enabled:
+                    return
+                if len(message.content.strip()) < settings.min_message_length:
+                    return
+                blacklist = set(json.loads(settings.blacklisted_channels or "[]"))
+                if message.channel.id in blacklist:
+                    return
+                user = await get_or_create_user(session, message.guild.id, message.author.id)
+                now = dt.datetime.utcnow()
+                if user.last_message_ts and (now - user.last_message_ts).total_seconds() < settings.cooldown_seconds:
+                    return
+                if user.last_message_content and user.last_message_content == message.content.strip():
+                    return
+                if user.last_xp_date and user.last_xp_date.date() != now.date():
+                    user.daily_xp = 0
+                if user.daily_xp >= settings.max_xp_per_day:
+                    return
+                gained = random.randint(5, 10)
+                user.xp += gained
+                user.daily_xp += gained
+                user.last_xp_date = now
+                user.last_message_ts = now
+                user.last_message_content = message.content.strip()
+                await self._process_level_up(session, message.author, guild, user, settings)
 
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -54,37 +78,57 @@ class LevelingCog(commands.Cog):
                 user.voice_join_ts = None
             await session.commit()
 
-    @tasks.loop(minutes=1)
+    @tasks.loop(minutes=5)
     async def voice_xp_task(self) -> None:
         for guild in self.bot.guilds:
             async with self.bot.db.session() as session:
-                guild_config = await get_or_create_guild(session, guild.id, "Coins")
-                settings = parse_settings(guild_config.settings)
-                if not settings.get("leveling_enabled", True):
-                    continue
-                for member in guild.members:
-                    if member.bot:
+                async with session.begin():
+                    guild_config = await get_or_create_guild(session, guild.id, "Coins")
+                    settings = await get_or_create_level_settings(session, guild.id)
+                    if not settings.enabled:
                         continue
-                    if member.voice and member.voice.channel:
+                    for member in guild.members:
+                        if member.bot:
+                            continue
+                        if not member.voice or not member.voice.channel:
+                            continue
+                        if member.voice.afk or member.voice.self_mute or member.voice.mute:
+                            continue
+                        if len(member.voice.channel.members) <= 1:
+                            continue
                         user = await get_or_create_user(session, guild.id, member.id)
+                        now = dt.datetime.utcnow()
+                        if user.last_xp_date and user.last_xp_date.date() != now.date():
+                            user.daily_xp = 0
+                        if user.daily_xp >= settings.max_xp_per_day:
+                            continue
                         user.xp += 2
-                        await self._process_level_up(session, member, guild_config, user)
-                await session.commit()
+                        user.daily_xp += 2
+                        user.last_xp_date = now
+                        await self._process_level_up(session, member, guild_config, user, settings)
 
     @voice_xp_task.before_loop
     async def before_voice_loop(self) -> None:
         await self.bot.wait_until_ready()
 
-    async def _process_level_up(self, session, member: discord.Member, guild, user) -> None:
+    async def _process_level_up(self, session, member: discord.Member, guild, user, settings) -> None:
         leveled_up = False
         while user.xp >= xp_to_next(user.level):
             user.xp -= xp_to_next(user.level)
             user.level += 1
             leveled_up = True
-            reward = base_reward(user.level)
-            multiplier = get_role_multiplier(member)
-            final_reward = int(reward * multiplier * guild.server_rate)
-            user.balance += final_reward
+            if settings.rewards_currency:
+                reward = base_reward(user.level)
+                multiplier = get_role_multiplier(member)
+                final_reward = int(reward * multiplier * guild.server_rate)
+                await apply_balance_change(
+                    session,
+                    guild_id=guild.guild_id,
+                    user_id=member.id,
+                    amount=final_reward,
+                    ledger_type="earn",
+                    source="level_up",
+                )
             rewards = await session.execute(
                 select(LevelReward).where(
                     (LevelReward.guild_id == guild.guild_id)
@@ -92,12 +136,19 @@ class LevelingCog(commands.Cog):
                 )
             )
             for reward_row in rewards.scalars().all():
-                if reward_row.role_id:
+                if reward_row.role_id and settings.rewards_roles:
                     role = member.guild.get_role(reward_row.role_id)
                     if role:
                         await member.add_roles(role, reason="Level reward")
-                if reward_row.reward_amount:
-                    user.balance += reward_row.reward_amount
+                if reward_row.reward_amount and settings.rewards_currency:
+                    await apply_balance_change(
+                        session,
+                        guild_id=guild.guild_id,
+                        user_id=member.id,
+                        amount=reward_row.reward_amount,
+                        ledger_type="earn",
+                        source="level_reward",
+                    )
         if leveled_up:
             channel = member.guild.system_channel
             if channel:
@@ -142,22 +193,18 @@ class LevelingCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def level_enable(self, interaction: discord.Interaction) -> None:
         async with self.bot.db.session() as session:
-            guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
-            settings = parse_settings(guild.settings)
-            settings["leveling_enabled"] = True
-            guild.settings = json.dumps(settings)
-            await session.commit()
+            async with session.begin():
+                settings = await get_or_create_level_settings(session, interaction.guild.id)
+                settings.enabled = True
         await interaction.response.send_message("Левелинг включен.", ephemeral=True)
 
     @level_group.command(name="disable", description="Выключить левелинг")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def level_disable(self, interaction: discord.Interaction) -> None:
         async with self.bot.db.session() as session:
-            guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
-            settings = parse_settings(guild.settings)
-            settings["leveling_enabled"] = False
-            guild.settings = json.dumps(settings)
-            await session.commit()
+            async with session.begin():
+                settings = await get_or_create_level_settings(session, interaction.guild.id)
+                settings.enabled = False
         await interaction.response.send_message("Левелинг выключен.", ephemeral=True)
 
     rewards_group = app_commands.Group(name="rewards", parent=level_group, description="Награды")
