@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniBot Admin - Leveling</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="leveling">
+    <header>
+      <h1>AniBot Web Admin</h1>
+    </header>
+    <main>
+      <div class="notice" id="guildIdLabel">Guild: —</div>
+      <nav>
+        <a href="/overview.html" data-page="overview">Overview</a>
+        <a href="/leveling.html" data-page="leveling">Leveling</a>
+        <a href="/economy.html" data-page="economy">Economy</a>
+        <a href="/gambling.html" data-page="gambling">Gambling</a>
+        <a href="/shop.html" data-page="shop">Shop</a>
+        <a href="/logs.html" data-page="logs">Logs</a>
+      </nav>
+      <section class="card">
+        <h2>Настройки уровней</h2>
+        <form id="settingsForm">
+          <label>
+            <span>Включить систему уровней</span>
+            <input type="checkbox" name="enabled" />
+          </label>
+          <label>
+            <span>XP за сообщение</span>
+            <input type="number" name="xp_per_message" min="1" max="100" />
+          </label>
+          <label>
+            <span>Кулдаун сообщений (сек)</span>
+            <input
+              type="range"
+              name="xp_cooldown_seconds"
+              min="0"
+              max="3600"
+              step="10"
+              data-output="cooldownValue"
+            />
+            <small>Текущее значение: <strong id="cooldownValue">0</strong></small>
+          </label>
+          <label>
+            <span>Анонсировать повышение уровня</span>
+            <input type="checkbox" name="announce_level_up" />
+          </label>
+          <label>
+            <span>ID канала для уведомлений</span>
+            <input type="number" name="level_up_channel_id" />
+          </label>
+          <div class="footer-actions">
+            <button type="submit">Сохранить</button>
+            <button type="button" class="danger" id="resetSettings">Сбросить</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
