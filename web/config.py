@@ -12,6 +12,7 @@ class Settings:
     discord_redirect_uri: str
     session_secret: str
     session_encryption_key: str
+    readonly_api_key: str
 
 
 settings = Settings(
@@ -21,4 +22,5 @@ settings = Settings(
     discord_redirect_uri=os.getenv("DISCORD_REDIRECT_URI", ""),
     session_secret=os.getenv("SESSION_SECRET", ""),
     session_encryption_key=os.getenv("SESSION_ENCRYPTION_KEY", ""),
+    readonly_api_key=os.getenv("READONLY_API_KEY", ""),
 )

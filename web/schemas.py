@@ -11,6 +11,7 @@ class GuildSettings(BaseModel):
     prefix: str = Field("!", min_length=1, max_length=5)
     welcome_channel_id: Optional[int] = None
     moderation_enabled: bool = True
+    explain_mode_enabled: bool = False
 
 
 class LevelingSettings(BaseModel):
@@ -19,6 +20,7 @@ class LevelingSettings(BaseModel):
     xp_cooldown_seconds: int = Field(60, ge=0, le=3600)
     announce_level_up: bool = True
     level_up_channel_id: Optional[int] = None
+    rewards_roles_enabled: bool = True
 
 
 class EconomySettings(BaseModel):
@@ -41,6 +43,7 @@ class ShopSettings(BaseModel):
     enabled: bool = True
     show_out_of_stock: bool = True
     highlight_discounts: bool = True
+    allow_temporary_items: bool = True
 
 
 class LogsSettings(BaseModel):
@@ -51,6 +54,42 @@ class LogsSettings(BaseModel):
     log_gambling: bool = False
 
 
+class FeatureToggles(BaseModel):
+    leveling_enabled: bool = True
+    leveling_roles_enabled: bool = True
+    economy_enabled: bool = True
+    gambling_enabled: bool = True
+    shop_enabled: bool = True
+    shop_temporary_items_enabled: bool = True
+    logs_enabled: bool = True
+
+
+class EconomySinkSettings(BaseModel):
+    inactivity_tax_percent: float = Field(1.0, ge=0, le=25)
+    cooldown_reset_cost: int = Field(250, ge=0, le=100000)
+    temp_boost_cost: int = Field(500, ge=0, le=250000)
+    role_rename_cost: int = Field(750, ge=0, le=250000)
+    admin_sink_enabled: bool = True
+    admin_sink_min_amount: int = Field(50, ge=0, le=1000000)
+
+
+class TrustScoreSettings(BaseModel):
+    account_age_weight: float = Field(0.2, ge=0, le=1)
+    activity_weight: float = Field(0.2, ge=0, le=1)
+    warnings_weight: float = Field(0.05, ge=0, le=1)
+    abuse_weight: float = Field(0.1, ge=0, le=1)
+    command_rate_weight: float = Field(0.02, ge=0, le=1)
+    min_trust_score: float = Field(0.0, ge=0, le=1)
+    max_trust_score: float = Field(1.0, ge=0, le=1)
+
+
+class ShadowPenaltySettings(BaseModel):
+    xp_multiplier_min: float = Field(0.5, ge=0, le=1)
+    cooldown_multiplier_max: float = Field(2.0, ge=1, le=10)
+    gambling_win_multiplier_min: float = Field(0.5, ge=0, le=1)
+    auto_apply_enabled: bool = True
+
+
 class OverviewStats(BaseModel):
     guild_id: int
     member_count: int
@@ -58,6 +97,43 @@ class OverviewStats(BaseModel):
     average_level: float
     total_warnings: int
     total_shop_items: int
+
+
+class PresetOut(BaseModel):
+    name: str
+    description: str
+    settings: dict
+
+
+class ChangeHistoryEntry(BaseModel):
+    id: int
+    guild_id: int
+    actor_id: Optional[int]
+    category: str
+    previous_settings: dict
+    new_settings: dict
+    reason: str
+    created_at: str
+
+
+class FeatureFlagState(BaseModel):
+    name: str
+    enabled: bool
+    description: str = ""
+
+
+class GuildFeatureFlagState(BaseModel):
+    name: str
+    enabled: bool
+
+
+class FeatureFlagUpdate(BaseModel):
+    enabled: bool
+    description: str = ""
+
+
+class GuildFeatureFlagUpdate(BaseModel):
+    enabled: bool
 
 
 class ShopItemIn(BaseModel):

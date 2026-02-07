@@ -180,3 +180,66 @@ class ReactionRole(Base):
     channel_id = Column(BigInteger, nullable=False)
     emoji = Column(String(100), nullable=False)
     role_id = Column(BigInteger, nullable=False)
+
+
+class GuildConfigHistory(Base):
+    __tablename__ = "guild_config_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    actor_id = Column(BigInteger, nullable=True)
+    category = Column(String(50), nullable=False)
+    previous_settings = Column(Text, nullable=False)
+    new_settings = Column(Text, nullable=False)
+    reason = Column(Text, default="")
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class FeatureFlag(Base):
+    __tablename__ = "feature_flags"
+
+    name = Column(String(64), primary_key=True)
+    enabled = Column(Boolean, default=False)
+    description = Column(Text, default="")
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class GuildFeatureFlag(Base):
+    __tablename__ = "guild_feature_flags"
+    __table_args__ = (UniqueConstraint("guild_id", "flag_name", name="uq_guild_flag"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    flag_name = Column(String(64), nullable=False)
+    enabled = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class UserTrustProfile(Base):
+    __tablename__ = "user_trust_profiles"
+    __table_args__ = (UniqueConstraint("user_id", "guild_id", name="uq_trust_user_guild"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)
+    guild_id = Column(BigInteger, nullable=False)
+    trust_score = Column(Float, default=1.0)
+    account_age_days = Column(Integer, default=0)
+    activity_score = Column(Float, default=0.0)
+    command_rate = Column(Float, default=0.0)
+    warnings_count = Column(Integer, default=0)
+    abuse_count = Column(Integer, default=0)
+    last_updated = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class ShadowPenaltyLog(Base):
+    __tablename__ = "shadow_penalties"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    penalty_type = Column(String(64), nullable=False)
+    multiplier = Column(Float, default=1.0)
+    reason = Column(Text, default="")
+    applied_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
