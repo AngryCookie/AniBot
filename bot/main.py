@@ -7,7 +7,8 @@ from discord.ext import commands
 
 from bot.config import load_config
 from bot.database.db import Database
-from bot.database.models import Base
+from bot.database.migrations import MIGRATIONS
+from bot.observability import setup_logging
 
 COGS = [
     "bot.cogs.error_handler",
@@ -20,6 +21,7 @@ COGS = [
     "bot.cogs.roles",
     "bot.cogs.admin",
     "bot.cogs.scheduler",
+    "bot.cogs.observability",
 ]
 
 
@@ -29,13 +31,14 @@ class AniBot(commands.Bot):
         self.db = database
 
     async def setup_hook(self) -> None:
-        await self.db.init_models(Base.metadata)
+        await self.db.apply_migrations(MIGRATIONS)
         for cog in COGS:
             await self.load_extension(cog)
         await self.tree.sync()
 
 
 async def main() -> None:
+    setup_logging()
     config = load_config()
     intents = discord.Intents.default()
     intents.message_content = True

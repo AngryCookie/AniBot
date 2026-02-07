@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy import text
 
 
 class Database:
@@ -24,6 +25,28 @@ class Database:
     async def init_models(self, base_metadata) -> None:
         async with self.engine.begin() as conn:
             await conn.run_sync(base_metadata.create_all)
+
+    async def apply_migrations(self, migrations) -> None:
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS schema_versions ("
+                    "version INTEGER NOT NULL,"
+                    "applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+            )
+            result = await conn.execute(
+                text("SELECT COALESCE(MAX(version), 0) FROM schema_versions")
+            )
+            current_version = result.scalar_one()
+            for index, migration in enumerate(migrations, start=1):
+                if index <= current_version:
+                    continue
+                await migration(conn)
+                await conn.execute(
+                    text("INSERT INTO schema_versions (version) VALUES (:version)"),
+                    {"version": index},
+                )
 
     @asynccontextmanager
     async def session(self) -> AsyncSession:
