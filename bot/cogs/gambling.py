@@ -8,7 +8,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.cogs.utils import get_or_create_guild, get_or_create_user
+from bot.cogs.utils import get_or_create_gambling_settings
+from bot.database.models import ModLog
+from bot.database.operations import apply_balance_change, get_or_create_user_locked
 
 
 class GamblingCog(commands.Cog):
@@ -24,33 +26,30 @@ class GamblingCog(commands.Cog):
             stats["last_bet_date"] = today
             user.gambling_stats = json.dumps(stats)
 
-    def _can_bet(self, user, amount: int) -> bool:
-        return user.daily_bet_amount + amount <= user.level * 1000
-
-    async def _apply_bet(self, session, user, amount: int, win: bool, multiplier: float) -> int:
-        user.daily_bet_amount += amount
-        if win:
-            winnings = int(amount * multiplier)
-            tax = int(winnings * 0.1)
-            user.balance += winnings - tax
-            await session.commit()
-            return winnings - tax
-        user.balance -= amount
-        await session.commit()
-        return -amount
-
     async def _prepare_bet(self, session, guild_id: int, user_id: int, amount: int):
-        user = await get_or_create_user(session, guild_id, user_id)
+        settings = await get_or_create_gambling_settings(session, guild_id)
+        if not settings.enabled:
+            raise ValueError("Азартные игры отключены.")
+        user = await get_or_create_user_locked(session, guild_id, user_id)
         self._reset_daily_bets(user)
+        stats = json.loads(user.gambling_stats or "{}")
+        last_bet_ts = stats.get("last_bet_ts")
+        now = dt.datetime.utcnow()
+        if last_bet_ts:
+            last_dt = dt.datetime.fromisoformat(last_bet_ts)
+            if (now - last_dt).total_seconds() < settings.rate_limit_seconds:
+                raise ValueError("Слишком быстро. Подождите немного.")
         if amount <= 0:
             raise ValueError("Ставка должна быть больше 0")
-        if amount > user.level * 100:
-            raise ValueError("Ставка превышает лимит уровня")
-        if not self._can_bet(user, amount):
+        if amount > settings.max_bet:
+            raise ValueError("Ставка превышает максимальный лимит сервера")
+        if user.daily_bet_amount + amount > settings.daily_limit:
             raise ValueError("Достигнут дневной лимит ставок")
         if user.balance < amount:
             raise ValueError("Недостаточно средств")
-        return user
+        stats["last_bet_ts"] = now.isoformat()
+        user.gambling_stats = json.dumps(stats)
+        return user, settings
 
     @app_commands.command(name="coinflip", description="Игра орел/решка")
     async def coinflip(
@@ -65,13 +64,48 @@ class GamblingCog(commands.Cog):
             return
         async with self.bot.db.session() as session:
             try:
-                user = await self._prepare_bet(session, interaction.guild.id, interaction.user.id, amount)
+                async with session.begin():
+                    user, settings = await self._prepare_bet(
+                        session, interaction.guild.id, interaction.user.id, amount
+                    )
+                    result = random.choice(["орел", "решка"])
+                    win = result == choice
+                    user.daily_bet_amount += amount
+                    house_multiplier = 2.0 * (1 - settings.house_edge)
+                    if win:
+                        winnings = int(amount * house_multiplier)
+                        tax = int(winnings * settings.tax_rate)
+                        payout = winnings - tax
+                        await apply_balance_change(
+                            session,
+                            guild_id=interaction.guild.id,
+                            user_id=interaction.user.id,
+                            amount=payout,
+                            ledger_type="gamble",
+                            source="coinflip_win",
+                        )
+                    else:
+                        payout = -amount
+                        await apply_balance_change(
+                            session,
+                            guild_id=interaction.guild.id,
+                            user_id=interaction.user.id,
+                            amount=-amount,
+                            ledger_type="gamble",
+                            source="coinflip_loss",
+                        )
+                    session.add(
+                        ModLog(
+                            guild_id=interaction.guild.id,
+                            action="gamble_coinflip",
+                            moderator_id=interaction.user.id,
+                            user_id=interaction.user.id,
+                            reason=str(payout),
+                        )
+                    )
             except ValueError as exc:
                 await interaction.response.send_message(str(exc), ephemeral=True)
                 return
-            result = random.choice(["орел", "решка"])
-            win = result == choice
-            payout = await self._apply_bet(session, user, amount, win, 2.0)
         await interaction.response.send_message(
             f"Выпало: {result}. {'Вы выиграли' if win else 'Вы проиграли'} {payout}.",
             ephemeral=True,
@@ -87,13 +121,48 @@ class GamblingCog(commands.Cog):
             return
         async with self.bot.db.session() as session:
             try:
-                user = await self._prepare_bet(session, interaction.guild.id, interaction.user.id, amount)
+                async with session.begin():
+                    user, settings = await self._prepare_bet(
+                        session, interaction.guild.id, interaction.user.id, amount
+                    )
+                    roll = random.randint(1, 6)
+                    win = roll == guess
+                    user.daily_bet_amount += amount
+                    house_multiplier = 5.0 * (1 - settings.house_edge)
+                    if win:
+                        winnings = int(amount * house_multiplier)
+                        tax = int(winnings * settings.tax_rate)
+                        payout = winnings - tax
+                        await apply_balance_change(
+                            session,
+                            guild_id=interaction.guild.id,
+                            user_id=interaction.user.id,
+                            amount=payout,
+                            ledger_type="gamble",
+                            source="dice_win",
+                        )
+                    else:
+                        payout = -amount
+                        await apply_balance_change(
+                            session,
+                            guild_id=interaction.guild.id,
+                            user_id=interaction.user.id,
+                            amount=-amount,
+                            ledger_type="gamble",
+                            source="dice_loss",
+                        )
+                    session.add(
+                        ModLog(
+                            guild_id=interaction.guild.id,
+                            action="gamble_dice",
+                            moderator_id=interaction.user.id,
+                            user_id=interaction.user.id,
+                            reason=str(payout),
+                        )
+                    )
             except ValueError as exc:
                 await interaction.response.send_message(str(exc), ephemeral=True)
                 return
-            roll = random.randint(1, 6)
-            win = roll == guess
-            payout = await self._apply_bet(session, user, amount, win, 5.0)
         await interaction.response.send_message(
             f"Кубик: {roll}. {'Вы выиграли' if win else 'Вы проиграли'} {payout}.",
             ephemeral=True,
@@ -109,13 +178,48 @@ class GamblingCog(commands.Cog):
             return
         async with self.bot.db.session() as session:
             try:
-                user = await self._prepare_bet(session, interaction.guild.id, interaction.user.id, amount)
+                async with session.begin():
+                    user, settings = await self._prepare_bet(
+                        session, interaction.guild.id, interaction.user.id, amount
+                    )
+                    roll = random.randint(0, 36)
+                    win = roll == guess
+                    user.daily_bet_amount += amount
+                    house_multiplier = 10.0 * (1 - settings.house_edge)
+                    if win:
+                        winnings = int(amount * house_multiplier)
+                        tax = int(winnings * settings.tax_rate)
+                        payout = winnings - tax
+                        await apply_balance_change(
+                            session,
+                            guild_id=interaction.guild.id,
+                            user_id=interaction.user.id,
+                            amount=payout,
+                            ledger_type="gamble",
+                            source="roulette_win",
+                        )
+                    else:
+                        payout = -amount
+                        await apply_balance_change(
+                            session,
+                            guild_id=interaction.guild.id,
+                            user_id=interaction.user.id,
+                            amount=-amount,
+                            ledger_type="gamble",
+                            source="roulette_loss",
+                        )
+                    session.add(
+                        ModLog(
+                            guild_id=interaction.guild.id,
+                            action="gamble_roulette",
+                            moderator_id=interaction.user.id,
+                            user_id=interaction.user.id,
+                            reason=str(payout),
+                        )
+                    )
             except ValueError as exc:
                 await interaction.response.send_message(str(exc), ephemeral=True)
                 return
-            roll = random.randint(0, 36)
-            win = roll == guess
-            payout = await self._apply_bet(session, user, amount, win, 10.0)
         await interaction.response.send_message(
             f"Рулетка: {roll}. {'Вы выиграли' if win else 'Вы проиграли'} {payout}.",
             ephemeral=True,

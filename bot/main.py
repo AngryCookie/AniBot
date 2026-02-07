@@ -10,6 +10,7 @@ from bot.database.db import Database
 from bot.database.models import Base
 
 COGS = [
+    "bot.cogs.error_handler",
     "bot.cogs.utils",
     "bot.cogs.moderation",
     "bot.cogs.leveling",
@@ -18,6 +19,7 @@ COGS = [
     "bot.cogs.gambling",
     "bot.cogs.roles",
     "bot.cogs.admin",
+    "bot.cogs.scheduler",
 ]
 
 

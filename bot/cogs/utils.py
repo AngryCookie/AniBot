@@ -8,7 +8,15 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.database.models import GuildConfig, UserProfile
+from sqlalchemy import select
+
+from bot.database.models import (
+    GuildConfig,
+    GuildGamblingSettings,
+    GuildLevelSettings,
+    GuildLogSettings,
+    UserProfile,
+)
 
 
 ROLE_MULTIPLIERS = {
@@ -53,23 +61,49 @@ async def get_or_create_guild(session, guild_id: int, currency_name: str) -> Gui
     if guild is None:
         guild = GuildConfig(guild_id=guild_id, currency_name=currency_name)
         session.add(guild)
-        await session.commit()
+        await session.flush()
     return guild
 
 
 async def get_or_create_user(session, guild_id: int, user_id: int) -> UserProfile:
     result = await session.execute(
-        UserProfile.__table__.select().where(
+        select(UserProfile).where(
             (UserProfile.guild_id == guild_id) & (UserProfile.user_id == user_id)
         )
     )
-    row = result.first()
-    if row is None:
+    user = result.scalars().first()
+    if user is None:
         user = UserProfile(user_id=user_id, guild_id=guild_id)
         session.add(user)
-        await session.commit()
-        return user
-    return await session.get(UserProfile, row.id)
+        await session.flush()
+    return user
+
+
+async def get_or_create_level_settings(session, guild_id: int) -> GuildLevelSettings:
+    settings = await session.get(GuildLevelSettings, guild_id)
+    if settings is None:
+        settings = GuildLevelSettings(guild_id=guild_id)
+        session.add(settings)
+        await session.flush()
+    return settings
+
+
+async def get_or_create_gambling_settings(session, guild_id: int) -> GuildGamblingSettings:
+    settings = await session.get(GuildGamblingSettings, guild_id)
+    if settings is None:
+        settings = GuildGamblingSettings(guild_id=guild_id)
+        session.add(settings)
+        await session.flush()
+    return settings
+
+
+async def get_or_create_log_settings(session, guild_id: int) -> GuildLogSettings:
+    settings = await session.get(GuildLogSettings, guild_id)
+    if settings is None:
+        settings = GuildLogSettings(guild_id=guild_id)
+        session.add(settings)
+        await session.flush()
+    return settings
 
 
 class UtilityCog(commands.Cog):
