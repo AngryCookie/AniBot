@@ -53,6 +53,27 @@ README.md
 python -m bot.main
 ```
 
+## Docker
+```bash
+docker compose build
+```
+
+```bash
+docker compose up
+```
+
+```bash
+docker compose up -d
+```
+
+```bash
+docker compose logs
+```
+
+```bash
+docker compose down
+```
+
 ## Примечания
 - SQLite база создается автоматически (`bot.db`).
 - Для работы команд нужны соответствующие права на сервере.
