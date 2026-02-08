@@ -1,6 +1,7 @@
 x-app-base: &app-base
-  build: .
-  image: anibot:local
+  image: anibot:prod
+  build:
+    context: .
   env_file: .env
   environment:
     DATABASE_URL: sqlite+aiosqlite:////data/bot.db
