@@ -10,11 +10,22 @@ x-app-base: &app-base
   restart: unless-stopped
   init: true
   stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 
 services:
   bot:
     <<: *app-base
     command: python -m bot.main
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   web:
     <<: *app-base
@@ -28,7 +39,8 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
 
 volumes:
   bot_data:
