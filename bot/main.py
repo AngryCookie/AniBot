@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-import asyncio
+from dotenv import load_dotenv
+from pathlib import Path
 
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+import asyncio
 import discord
 from discord.ext import commands
 
@@ -40,6 +45,7 @@ class AniBot(commands.Bot):
 async def main() -> None:
     setup_logging()
     config = load_config()
+
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = True
@@ -47,7 +53,9 @@ async def main() -> None:
     intents.voice_states = True
 
     database = Database(config.database_url)
+
     bot = AniBot(
+        database=database,
         command_prefix="!",
         intents=intents,
         activity=discord.Game("/help"),

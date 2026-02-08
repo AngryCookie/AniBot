@@ -1,0 +1,14 @@
+# env
+.env
+
+# virtual environment
+.venv/
+
+# local database
+*.db
+
+# python cache
+__pycache__/
+
+# ide
+.idea/
