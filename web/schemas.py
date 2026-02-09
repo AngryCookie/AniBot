@@ -179,6 +179,15 @@ class EconomyAnalyticsSummaryResponse(BaseModel):
     health: EconomyAnalyticsHealthSummary
 
 
+class EconomyInsight(BaseModel):
+    id: str
+    severity: str
+    title: str
+    description: str
+    affected_metric: str
+    period: int
+
+
 class BehaviorAnalyticsSegments(BaseModel):
     new_users: Optional[int]
     new_users_active: Optional[int]

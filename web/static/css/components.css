@@ -625,3 +625,61 @@ button:disabled {
   display: grid;
   gap: 6px;
 }
+
+.insight-item {
+  list-style: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.insight-item details {
+  cursor: pointer;
+}
+
+.insight-item summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  list-style: none;
+}
+
+.insight-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.insight-icon {
+  font-size: 14px;
+}
+
+.insight-title {
+  font-weight: 600;
+}
+
+.insight-meta {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.insight-item p {
+  margin: 8px 0 0 22px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.insight-info {
+  border-color: rgba(52, 152, 219, 0.4);
+  background: rgba(52, 152, 219, 0.12);
+}
+
+.insight-warning {
+  border-color: rgba(255, 165, 0, 0.4);
+  background: rgba(255, 165, 0, 0.12);
+}
+
+.insight-risk {
+  border-color: rgba(214, 69, 69, 0.5);
+  background: rgba(214, 69, 69, 0.16);
+}

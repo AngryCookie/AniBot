@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from starlette.middleware.sessions import SessionMiddleware
 
 from bot.analytics.economy import build_economy_analytics
+from bot.analytics.insights import build_economy_insights
 from bot.database.db import Database
 from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
@@ -38,6 +39,7 @@ from .schemas import (
     BehaviorAnalyticsResponse,
     ChangeHistoryEntry,
     EconomyAnalyticsSummaryResponse,
+    EconomyInsight,
     EconomySettings,
     EconomySinkSettings,
     FeatureFlagState,
@@ -606,6 +608,28 @@ async def get_economy_analytics(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/guilds/{guild_id}/economy/insights",
+    response_model=list[EconomyInsight],
+)
+async def get_economy_insights(
+    guild_id: int,
+    period: int = 7,
+    access_token: str = Depends(get_access_token),
+) -> list[EconomyInsight]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    try:
+        analytics = await build_economy_analytics(
+            database=database,
+            guild_id=guild_id,
+            period_days=period,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return build_economy_insights(analytics=analytics, period_days=period)
 
 
 @app.get("/api/analytics/behavior", response_model=BehaviorAnalyticsResponse)

@@ -1,4 +1,4 @@
-import { getEconomyAnalytics } from "../api.js";
+import { getEconomyAnalytics, getEconomyInsights } from "../api.js";
 
 const setHidden = (element, isHidden) => {
   if (!element) return;
@@ -152,25 +152,40 @@ const renderHealth = (data, ratioNode, statusNode) => {
   statusNode.className = `status-pill status-${status}`;
 };
 
-const renderInsights = (data, container) => {
+const renderInsights = (insights, container) => {
   if (!container) return;
-  const created = data?.created ?? 0;
-  const spent = data?.spent ?? 0;
-  const net = data?.net_flow ?? 0;
-  const activePercent = data?.activity?.active_users_percent ?? 0;
-  const topShare = data?.distribution?.top_10_percent_share ?? 0;
-  const sinkRatio = data?.health?.sink_ratio ?? 0;
-  const inflationFlag = Boolean(data?.health?.inflation_flag);
+
+  if (!Array.isArray(insights) || insights.length === 0) {
+    container.innerHTML = "<p>Критичных сигналов не обнаружено.</p>";
+    return;
+  }
+
+  const iconMap = {
+    info: "ℹ️",
+    warning: "⚠️",
+    risk: "🔥",
+  };
 
   container.innerHTML = `
     <ul class="insights-list">
-      <li>Создано ${formatNumber(created)}, потрачено ${formatNumber(spent)} (чистый поток: ${
-        formatNumber(net)
-      }).</li>
-      <li>Активные пользователи: ${formatPercent(activePercent)} от базы с балансом.</li>
-      <li>Доля топ-10% по богатству: ${formatPercent(topShare)}.</li>
-      <li>Sink ratio: ${formatNumber(sinkRatio)} — чем ближе к 1, тем лучше баланс источников и списаний.</li>
-      <li>Флаг инфляции: ${inflationFlag ? "есть риск" : "нет риска"}.</li>
+      ${insights
+        .map((insight) => {
+          const severity = insight.severity || "info";
+          const icon = iconMap[severity] || iconMap.info;
+          return `
+            <li class="insight-item insight-${severity}">
+              <details>
+                <summary>
+                  <span class="insight-icon">${icon}</span>
+                  <span class="insight-title">${insight.title}</span>
+                  <span class="insight-meta">${insight.period} дней · ${insight.affected_metric}</span>
+                </summary>
+                <p>${insight.description}</p>
+              </details>
+            </li>
+          `;
+        })
+        .join("")}
     </ul>
   `;
 };
@@ -214,10 +229,15 @@ export const initEconomyAnalytics = async (guildId) => {
     setHidden(empty, true);
     setHidden(content, true);
     showError("");
+    if (insightsNode) {
+      insightsNode.textContent = "Загрузка инсайтов...";
+    }
 
     try {
       const data = await getEconomyAnalytics(guildId, period);
       setHidden(loading, true);
+
+      loadInsights(currentPeriod);
 
       if (!isValidAnalytics(data)) {
         setHidden(empty, false);
@@ -239,12 +259,20 @@ export const initEconomyAnalytics = async (guildId) => {
         data.distribution?.top_10_percent_share
       );
       renderHealth(data, sinkRatioNode, inflationStatus);
-      renderInsights(data, insightsNode);
 
       setHidden(content, false);
     } catch (err) {
       setHidden(loading, true);
       showError(err?.message || "Не удалось загрузить аналитику");
+    }
+  };
+
+  const loadInsights = async (period) => {
+    try {
+      const insights = await getEconomyInsights(guildId, period);
+      renderInsights(insights, insightsNode);
+    } catch (err) {
+      renderInsights([], insightsNode);
     }
   };
 
