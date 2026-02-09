@@ -1,0 +1,71 @@
+<section class="page-header">
+  <h3>Shop</h3>
+  <p class="notice">Каталог предметов и общие настройки магазина.</p>
+</section>
+<section class="card">
+  <h4>Настройки магазина</h4>
+  <form data-endpoint="shop" data-success-message="Настройки магазина сохранены.">
+    <label>
+      <span>Включить магазин</span>
+      <input type="checkbox" name="enabled" />
+    </label>
+    <label>
+      <span>Показывать отсутствующие товары</span>
+      <input type="checkbox" name="show_out_of_stock" />
+    </label>
+    <label>
+      <span>Выделять скидки</span>
+      <input type="checkbox" name="highlight_discounts" />
+    </label>
+    <div class="footer-actions">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="danger" data-action="reset">Сбросить</button>
+    </div>
+  </form>
+</section>
+<section class="card">
+  <h4>Товары магазина</h4>
+  <form id="shopItemForm">
+    <label>
+      <span>Название</span>
+      <input type="text" name="name" required />
+    </label>
+    <label>
+      <span>Описание</span>
+      <textarea name="description" rows="3"></textarea>
+    </label>
+    <label>
+      <span>Цена</span>
+      <input type="number" name="base_price" min="0" max="1000000" />
+    </label>
+    <label>
+      <span>Тип</span>
+      <select name="item_type">
+        <option value="role">Роль</option>
+        <option value="item">Предмет</option>
+        <option value="boost">Буст</option>
+      </select>
+    </label>
+    <label>
+      <span>ID роли (если тип роль)</span>
+      <input type="number" name="role_id" />
+    </label>
+    <label>
+      <span>Активен</span>
+      <input type="checkbox" name="is_active" checked />
+    </label>
+    <button type="submit">Добавить</button>
+  </form>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Название</th>
+        <th>Цена</th>
+        <th>Тип</th>
+        <th>Активен</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="shopItemsBody"></tbody>
+  </table>
+</section>

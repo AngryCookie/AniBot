@@ -1,0 +1,41 @@
+<section class="page-header">
+  <h3>Leveling</h3>
+  <p class="notice">Настройки системы уровней и опыта.</p>
+</section>
+<section class="card">
+  <h4>Настройки уровней</h4>
+  <form data-endpoint="leveling" data-success-message="Настройки уровней сохранены.">
+    <label>
+      <span>Включить систему уровней</span>
+      <input type="checkbox" name="enabled" />
+    </label>
+    <label>
+      <span>XP за сообщение</span>
+      <input type="number" name="xp_per_message" min="1" max="100" />
+    </label>
+    <label>
+      <span>Кулдаун сообщений (сек)</span>
+      <input
+        type="range"
+        name="xp_cooldown_seconds"
+        min="0"
+        max="3600"
+        step="10"
+        data-output="cooldownValue"
+      />
+      <small>Текущее значение: <strong id="cooldownValue">0</strong></small>
+    </label>
+    <label>
+      <span>Анонсировать повышение уровня</span>
+      <input type="checkbox" name="announce_level_up" />
+    </label>
+    <label>
+      <span>ID канала для уведомлений</span>
+      <input type="number" name="level_up_channel_id" />
+    </label>
+    <div class="footer-actions">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="danger" data-action="reset">Сбросить</button>
+    </div>
+  </form>
+</section>

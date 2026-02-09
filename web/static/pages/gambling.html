@@ -1,0 +1,33 @@
+<section class="page-header">
+  <h3>Gambling</h3>
+  <p class="notice">Управление азартными механиками и лимитами ставок.</p>
+</section>
+<section class="card">
+  <h4>Настройки азартных игр</h4>
+  <form data-endpoint="gambling" data-success-message="Настройки азартных игр сохранены.">
+    <label>
+      <span>Включить азартные игры</span>
+      <input type="checkbox" name="enabled" />
+    </label>
+    <label>
+      <span>Минимальная ставка</span>
+      <input type="number" name="min_bet" min="1" max="100000" />
+    </label>
+    <label>
+      <span>Максимальная ставка</span>
+      <input type="number" name="max_bet" min="1" max="1000000" />
+    </label>
+    <label>
+      <span>Комиссия дома (%)</span>
+      <input type="number" name="house_edge_percent" min="0" max="25" step="0.5" />
+    </label>
+    <label>
+      <span>Бонус за серию побед</span>
+      <input type="checkbox" name="streak_bonus" />
+    </label>
+    <div class="footer-actions">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="danger" data-action="reset">Сбросить</button>
+    </div>
+  </form>
+</section>
