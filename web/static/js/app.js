@@ -1,4 +1,5 @@
 import { apiFetch } from "./api.js";
+import { initOverview } from "./pages/overview.js";
 
 const appState = {
   guildId: null,
@@ -9,7 +10,7 @@ const routes = {
   overview: {
     title: "Overview",
     page: "/static/pages/overview.html",
-    init: initOverview,
+    init: () => initOverview(appState.guildId),
   },
   leveling: {
     title: "Leveling",
@@ -176,58 +177,6 @@ const initSettingsPage = async (endpoint) => {
       }
     });
   }
-
-  setupRangeOutputs();
-};
-
-const initOverview = async () => {
-  const guildId = appState.guildId;
-  if (!guildId) return;
-
-  const stats = await apiFetch(`/api/guilds/${guildId}/overview`);
-  if (stats) {
-    document.getElementById("statMembers").textContent = stats.member_count;
-    document.getElementById("statBalance").textContent = stats.total_balance;
-    document.getElementById("statLevel").textContent = stats.average_level.toFixed(1);
-    document.getElementById("statWarnings").textContent = stats.total_warnings;
-    document.getElementById("statShop").textContent = stats.total_shop_items;
-  }
-
-  const form = document.getElementById("overviewSettingsForm");
-  const resetButton = form?.querySelector("[data-action='reset']");
-
-  const settings = await apiFetch(`/api/guilds/${guildId}/settings`);
-  if (settings && form) {
-    fillForm(form, settings);
-  }
-
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const payload = formToPayload(form);
-    await apiFetch(`/api/guilds/${guildId}/settings`, {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    });
-    alert("Настройки сервера сохранены");
-  });
-
-  resetButton?.addEventListener("click", async () => {
-    const confirmed = confirm("Сбросить настройки сервера?");
-    if (!confirmed) return;
-    const resetData = await apiFetch(`/api/guilds/${guildId}/settings`, {
-      method: "PUT",
-      body: JSON.stringify({
-        server_rate: 1.0,
-        currency_name: "Coins",
-        prefix: "!",
-        welcome_channel_id: null,
-        moderation_enabled: true,
-      }),
-    });
-    if (resetData) {
-      fillForm(form, resetData);
-    }
-  });
 
   setupRangeOutputs();
 };
