@@ -1,6 +1,7 @@
 import { apiFetch } from "./api.js";
 import { initOverview } from "./pages/overview.js";
 import { initLeveling } from "./pages/leveling.js";
+import { initEconomy } from "./pages/economy.js";
 
 const appState = {
   guildId: null,
@@ -21,7 +22,7 @@ const routes = {
   economy: {
     title: "Economy",
     page: "/static/pages/economy.html",
-    init: () => initSettingsPage("economy"),
+    init: () => initEconomy(appState.guildId),
   },
   gambling: {
     title: "Gambling",

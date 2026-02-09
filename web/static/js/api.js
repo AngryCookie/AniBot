@@ -45,3 +45,20 @@ export const resetLevelingSettings = (guildId) =>
   apiFetch(`/api/guilds/${guildId}/leveling/reset`, {
     method: "POST",
   });
+
+export const getEconomySettings = (guildId) =>
+  apiFetch(`/api/guilds/${guildId}/economy`);
+
+export const updateEconomySettings = (guildId, payload) =>
+  apiFetch(`/api/guilds/${guildId}/economy`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+export const resetEconomySettings = (guildId) =>
+  apiFetch(`/api/guilds/${guildId}/economy/reset`, {
+    method: "POST",
+  });
+
+export const getEconomyAnalytics = (guildId, period) =>
+  apiFetch(`/api/guilds/${guildId}/economy/analytics?period=${period}`);

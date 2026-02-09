@@ -139,3 +139,120 @@ button:disabled {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tab-list {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab-button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.tab-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.analytics-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.analytics-title {
+  font-weight: 600;
+}
+
+.period-switcher {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kpi-card {
+  display: grid;
+  gap: 6px;
+}
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.kpi-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analytics-health {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.analytics-health h5 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.status-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #2b313f;
+  border: 1px solid #3a4353;
+  color: #cfd6e6;
+}
+
+.status-stable {
+  background: rgba(46, 204, 113, 0.16);
+  border-color: rgba(46, 204, 113, 0.4);
+  color: #9cf0c1;
+}
+
+.status-inflating {
+  background: rgba(255, 165, 0, 0.16);
+  border-color: rgba(255, 165, 0, 0.4);
+  color: #ffd39c;
+}
+
+.status-deflating {
+  background: rgba(214, 69, 69, 0.16);
+  border-color: rgba(214, 69, 69, 0.4);
+  color: #ffb2b2;
+}
+
+.analytics-interpretation {
+  font-size: 13px;
+}
