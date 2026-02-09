@@ -5,6 +5,7 @@ from typing import Awaitable, Callable, List
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from bot.database.models import Base
+import bot.betting.models  # noqa: F401
 
 Migration = Callable[[AsyncConnection], Awaitable[None]]
 
