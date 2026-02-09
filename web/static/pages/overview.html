@@ -1,51 +1,32 @@
 <section class="page-header">
   <h3>Обзор сервера</h3>
-  <p class="notice">Краткая статистика и базовые настройки выбранного сервера.</p>
+  <p class="notice">Ключевые показатели активности и экономики выбранного сервера.</p>
 </section>
 <section class="card">
   <h4>Статистика сервера</h4>
-  <div class="grid">
-    <div class="stat">Участники <span id="statMembers">0</span></div>
-    <div class="stat">Сумма баланса <span id="statBalance">0</span></div>
-    <div class="stat">Средний уровень <span id="statLevel">0</span></div>
-    <div class="stat">Предупреждения <span id="statWarnings">0</span></div>
-    <div class="stat">Товары магазина <span id="statShop">0</span></div>
-  </div>
-</section>
-<section class="card">
-  <h4>Общие настройки сервера</h4>
-  <form id="overviewSettingsForm">
-    <label>
-      <span>Множитель опыта</span>
-      <input
-        type="range"
-        name="server_rate"
-        min="0.1"
-        max="10"
-        step="0.1"
-        data-output="rateValue"
-      />
-      <small>Текущее значение: <strong id="rateValue">1.0</strong></small>
-    </label>
-    <label>
-      <span>Название валюты</span>
-      <input type="text" name="currency_name" />
-    </label>
-    <label>
-      <span>Префикс команд</span>
-      <input type="text" name="prefix" maxlength="5" />
-    </label>
-    <label>
-      <span>ID канала приветствия</span>
-      <input type="number" name="welcome_channel_id" />
-    </label>
-    <label>
-      <span>Модерация включена</span>
-      <input type="checkbox" name="moderation_enabled" />
-    </label>
-    <div class="footer-actions">
-      <button type="submit">Сохранить</button>
-      <button type="button" class="danger" data-action="reset">Сбросить</button>
+  <div class="loading" id="overviewLoading">Загрузка статистики...</div>
+  <div class="alert error hidden" id="overviewError" role="alert"></div>
+  <div class="notice hidden" id="overviewEmpty">Нет данных для отображения.</div>
+  <div class="grid hidden" id="overviewStats">
+    <div class="stat" data-stat="member_count">
+      <span data-stat-value>—</span>
+      <p>Участники</p>
     </div>
-  </form>
+    <div class="stat" data-stat="total_balance">
+      <span data-stat-value>—</span>
+      <p>Суммарный баланс</p>
+    </div>
+    <div class="stat" data-stat="average_level">
+      <span data-stat-value>—</span>
+      <p>Средний уровень</p>
+    </div>
+    <div class="stat" data-stat="total_warnings">
+      <span data-stat-value>—</span>
+      <p>Всего предупреждений</p>
+    </div>
+    <div class="stat" data-stat="total_shop_items">
+      <span data-stat-value>—</span>
+      <p>Товары в магазине</p>
+    </div>
+  </div>
 </section>
