@@ -20,7 +20,6 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from bot.analytics.economy import build_economy_analytics
 from bot.analytics.insights import build_economy_insights
-from bot.database.db import Database
 from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
     Base,
@@ -35,6 +34,8 @@ from bot.database.models import (
 
 from .analytics.behavior import build_behavior_analytics
 from .config import settings
+from .database import database
+from .betting import router as betting_router
 from .schemas import (
     BehaviorAnalyticsResponse,
     ChangeHistoryEntry,
@@ -78,7 +79,6 @@ app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.middleware("http")(request_logger())
 
 
-database = Database(settings.database_url)
 _readonly_requests: Dict[str, List[float]] = {}
 READONLY_RATE_LIMIT = 60
 
@@ -1162,3 +1162,4 @@ async def serve_page(page: str) -> FileResponse:
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.include_router(betting_router)
