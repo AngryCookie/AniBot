@@ -23,6 +23,7 @@ COGS = [
     "bot.cogs.economy",
     "bot.cogs.shop",
     "bot.cogs.gambling",
+    "bot.cogs.betting",
     "bot.cogs.roles",
     "bot.cogs.admin",
     "bot.cogs.scheduler",
