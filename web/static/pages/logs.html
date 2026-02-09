@@ -1,0 +1,33 @@
+<section class="page-header">
+  <h3>Logs</h3>
+  <p class="notice">Настройки аудит-логов и событий сервера.</p>
+</section>
+<section class="card">
+  <h4>Настройки логов</h4>
+  <form data-endpoint="logs" data-success-message="Настройки логов сохранены.">
+    <label>
+      <span>Включить логирование</span>
+      <input type="checkbox" name="enabled" />
+    </label>
+    <label>
+      <span>ID канала для логов</span>
+      <input type="number" name="log_channel_id" />
+    </label>
+    <label>
+      <span>Логи модерации</span>
+      <input type="checkbox" name="log_moderation" />
+    </label>
+    <label>
+      <span>Логи экономики</span>
+      <input type="checkbox" name="log_economy" />
+    </label>
+    <label>
+      <span>Логи азартных игр</span>
+      <input type="checkbox" name="log_gambling" />
+    </label>
+    <div class="footer-actions">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="danger" data-action="reset">Сбросить</button>
+    </div>
+  </form>
+</section>

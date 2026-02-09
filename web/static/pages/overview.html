@@ -1,0 +1,51 @@
+<section class="page-header">
+  <h3>Обзор сервера</h3>
+  <p class="notice">Краткая статистика и базовые настройки выбранного сервера.</p>
+</section>
+<section class="card">
+  <h4>Статистика сервера</h4>
+  <div class="grid">
+    <div class="stat">Участники <span id="statMembers">0</span></div>
+    <div class="stat">Сумма баланса <span id="statBalance">0</span></div>
+    <div class="stat">Средний уровень <span id="statLevel">0</span></div>
+    <div class="stat">Предупреждения <span id="statWarnings">0</span></div>
+    <div class="stat">Товары магазина <span id="statShop">0</span></div>
+  </div>
+</section>
+<section class="card">
+  <h4>Общие настройки сервера</h4>
+  <form id="overviewSettingsForm">
+    <label>
+      <span>Множитель опыта</span>
+      <input
+        type="range"
+        name="server_rate"
+        min="0.1"
+        max="10"
+        step="0.1"
+        data-output="rateValue"
+      />
+      <small>Текущее значение: <strong id="rateValue">1.0</strong></small>
+    </label>
+    <label>
+      <span>Название валюты</span>
+      <input type="text" name="currency_name" />
+    </label>
+    <label>
+      <span>Префикс команд</span>
+      <input type="text" name="prefix" maxlength="5" />
+    </label>
+    <label>
+      <span>ID канала приветствия</span>
+      <input type="number" name="welcome_channel_id" />
+    </label>
+    <label>
+      <span>Модерация включена</span>
+      <input type="checkbox" name="moderation_enabled" />
+    </label>
+    <div class="footer-actions">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="danger" data-action="reset">Сбросить</button>
+    </div>
+  </form>
+</section>

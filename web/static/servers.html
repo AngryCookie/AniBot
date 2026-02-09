@@ -4,22 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AniBot Admin - Серверы</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/css/main.css" />
   </head>
-  <body data-page="servers">
-    <header>
-      <h1>AniBot Web Admin</h1>
-    </header>
-    <main>
-      <section class="card">
+  <body>
+    <main class="auth-layout start">
+      <div class="card auth-card">
+        <h1>AniBot Web Admin</h1>
         <h2>Выбор сервера</h2>
         <p class="notice">Показаны только серверы, где у вас есть права администратора.</p>
-      </section>
+        <div class="loading hidden" id="serversLoading">Загрузка серверов...</div>
+      </div>
       <section id="guildList" class="grid"></section>
       <section>
         <a href="/auth/logout"><button class="secondary">Выйти</button></a>
       </section>
     </main>
-    <script src="/static/app.js" defer></script>
+    <script type="module" src="/static/js/servers.js"></script>
   </body>
 </html>

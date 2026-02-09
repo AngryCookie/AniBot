@@ -1,0 +1,39 @@
+<section class="page-header">
+  <h3>Economy</h3>
+  <p class="notice">Настройка валюты, наград и правил экономики.</p>
+</section>
+<section class="card">
+  <h4>Настройки экономики</h4>
+  <form data-endpoint="economy" data-success-message="Настройки экономики сохранены.">
+    <label>
+      <span>Включить экономику</span>
+      <input type="checkbox" name="enabled" />
+    </label>
+    <label>
+      <span>Ежедневная награда</span>
+      <input type="number" name="daily_amount" min="0" max="100000" />
+    </label>
+    <label>
+      <span>Максимум ежедневных получений</span>
+      <select name="max_daily_claims">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </label>
+    <label>
+      <span>Разрешить переводы</span>
+      <input type="checkbox" name="allow_transfers" />
+    </label>
+    <label>
+      <span>Налог на переводы (%)</span>
+      <input type="number" name="tax_rate_percent" min="0" max="25" step="0.5" />
+    </label>
+    <div class="footer-actions">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="danger" data-action="reset">Сбросить</button>
+    </div>
+  </form>
+</section>
