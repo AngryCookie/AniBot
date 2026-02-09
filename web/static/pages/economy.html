@@ -13,7 +13,7 @@
         aria-selected="true"
         data-economy-tab="settings"
       >
-        Настройки
+        Economy Settings
       </button>
       <button
         type="button"
@@ -22,7 +22,7 @@
         aria-selected="false"
         data-economy-tab="analytics"
       >
-        Analytics
+        Economy Analytics
       </button>
     </div>
   </div>
@@ -146,37 +146,91 @@
     <div class="notice hidden" id="economyAnalyticsEmpty">
       Нет данных для выбранного периода.
     </div>
-    <div class="grid hidden" id="economyAnalyticsKpis">
-      <div class="stat kpi-card" data-kpi="total_currency">
-        <span class="kpi-value" data-kpi-value>—</span>
-        <p class="kpi-label">Всего валюты</p>
+    <div class="analytics-content hidden" id="economyAnalyticsContent">
+      <div class="analytics-section">
+        <div class="section-header">
+          <h5>Обзор экономики</h5>
+          <p class="field-hint">Ключевые показатели оборота валюты за период.</p>
+        </div>
+        <div class="grid" id="economyOverview">
+          <div class="stat kpi-card" data-overview="total_currency">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Всего валюты</p>
+          </div>
+          <div class="stat kpi-card" data-overview="average_balance">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Средний баланс</p>
+          </div>
+          <div class="stat kpi-card" data-overview="median_balance">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Медианный баланс</p>
+          </div>
+          <div class="stat kpi-card" data-overview="active_users">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Активные пользователи</p>
+          </div>
+        </div>
       </div>
-      <div class="stat kpi-card" data-kpi="minted">
-        <span class="kpi-value" data-kpi-value>—</span>
-        <p class="kpi-label">Начислено</p>
+      <div class="analytics-section">
+        <div class="section-header">
+          <h5>Потоки валюты</h5>
+          <p class="field-hint">Суммарные начисления и списания за период.</p>
+        </div>
+        <div class="grid" id="economyFlowKpis">
+          <div class="stat kpi-card" data-flow="generated">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Начислено</p>
+          </div>
+          <div class="stat kpi-card" data-flow="removed">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Списано</p>
+          </div>
+          <div class="stat kpi-card" data-flow="net_flow">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Чистый поток</p>
+          </div>
+        </div>
+        <div class="flow-chart" id="economyFlowChart"></div>
       </div>
-      <div class="stat kpi-card" data-kpi="sunk">
-        <span class="kpi-value" data-kpi-value>—</span>
-        <p class="kpi-label">Списано</p>
+      <div class="analytics-section">
+        <div class="section-header">
+          <h5>Топ активности</h5>
+          <p class="field-hint">5 пользователей с наибольшим оборотом валюты.</p>
+        </div>
+        <div class="activity-grid">
+          <div class="activity-card">
+            <h6>Топ заработавшие</h6>
+            <ol class="activity-list" id="economyTopEarners"></ol>
+          </div>
+          <div class="activity-card">
+            <h6>Топ потратившие</h6>
+            <ol class="activity-list" id="economyTopSpenders"></ol>
+          </div>
+        </div>
       </div>
-      <div class="stat kpi-card" data-kpi="net_flow">
-        <span class="kpi-value" data-kpi-value>—</span>
-        <p class="kpi-label">Чистый поток</p>
+      <div class="analytics-section">
+        <div class="section-header">
+          <h5>Индикаторы здоровья</h5>
+          <p class="field-hint">Сигналы инфляции и качества sink-механик.</p>
+        </div>
+        <div class="analytics-health" id="economyHealth">
+          <div>
+            <h5>Индикатор инфляции</h5>
+            <p class="field-hint">Сравнение источников и списаний.</p>
+          </div>
+          <span class="status-pill" id="economyHealthStatus">—</span>
+        </div>
+        <div class="grid" id="economyHealthMetrics">
+          <div class="stat kpi-card" data-health="sink_source_ratio">
+            <span class="kpi-value" data-value>—</span>
+            <p class="kpi-label">Sink / Source</p>
+          </div>
+        </div>
+        <div class="warning-list" id="economyWarnings"></div>
+        <div class="notice analytics-interpretation" id="economyInterpretation">
+          Выберите период, чтобы увидеть интерпретацию состояния экономики.
+        </div>
       </div>
-      <div class="stat kpi-card" data-kpi="active_users">
-        <span class="kpi-value" data-kpi-value>—</span>
-        <p class="kpi-label">Активные пользователи</p>
-      </div>
-    </div>
-    <div class="analytics-health" id="economyHealth">
-      <div>
-        <h5>Состояние экономики</h5>
-        <p class="field-hint">Оценка баланса между притоком и оттоком валюты.</p>
-      </div>
-      <span class="status-pill" id="economyHealthStatus">—</span>
-    </div>
-    <div class="notice analytics-interpretation" id="economyInterpretation">
-      Выберите период, чтобы увидеть интерпретацию состояния экономики.
     </div>
   </div>
 </section>
