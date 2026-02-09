@@ -31,3 +31,17 @@ export const apiFetch = async (url, options = {}) => {
 
   return response.json();
 };
+
+export const getLevelingSettings = (guildId) =>
+  apiFetch(`/api/guilds/${guildId}/leveling`);
+
+export const updateLevelingSettings = (guildId, payload) =>
+  apiFetch(`/api/guilds/${guildId}/leveling`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+export const resetLevelingSettings = (guildId) =>
+  apiFetch(`/api/guilds/${guildId}/leveling/reset`, {
+    method: "POST",
+  });
