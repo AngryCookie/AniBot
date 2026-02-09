@@ -62,3 +62,6 @@ export const resetEconomySettings = (guildId) =>
 
 export const getEconomyAnalytics = (guildId, period) =>
   apiFetch(`/api/guilds/${guildId}/economy/analytics?period=${period}`);
+
+export const getEconomyInsights = (guildId, period) =>
+  apiFetch(`/api/guilds/${guildId}/economy/insights?period=${period}`);
