@@ -1,0 +1,179 @@
+<section class="page-header">
+  <h3>Economy Analytics</h3>
+  <p class="notice">
+    Сводка по обороту валюты, распределению балансов и состоянию экономики.
+  </p>
+</section>
+
+<section class="card economy-analytics">
+  <div class="analytics-toolbar">
+    <span class="analytics-title">Период</span>
+    <div class="period-switcher" role="group" aria-label="Период аналитики">
+      <button type="button" class="tab-button is-active" data-period="7">
+        7 дней
+      </button>
+      <button type="button" class="tab-button" data-period="30">30 дней</button>
+      <button type="button" class="tab-button" data-period="90">90 дней</button>
+    </div>
+  </div>
+
+  <div class="loading hidden" id="economyAnalyticsLoading">
+    Загрузка аналитики...
+  </div>
+  <div class="alert error hidden" id="economyAnalyticsError" role="alert"></div>
+  <div class="notice hidden" id="economyAnalyticsEmpty">
+    Нет данных для выбранного периода.
+  </div>
+
+  <div class="analytics-content hidden" id="economyAnalyticsContent">
+    <div class="analytics-section">
+      <div class="section-header">
+        <h5>Ключевые метрики</h5>
+        <p class="field-hint">
+          Основные показатели оборота валюты и распределения балансов.
+        </p>
+      </div>
+      <div class="grid analytics-metrics">
+        <div class="stat kpi-card" data-metric="total_created">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Всего создано
+            <span
+              class="tooltip-icon"
+              title="Сколько валюты начислено за выбранный период."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+        <div class="stat kpi-card" data-metric="total_spent">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Всего потрачено
+            <span
+              class="tooltip-icon"
+              title="Сколько валюты списано за выбранный период."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+        <div class="stat kpi-card" data-metric="net_flow">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Чистый поток
+            <span
+              class="tooltip-icon"
+              title="Разница между начислениями и списаниями."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+        <div class="stat kpi-card" data-metric="active_users_percent" data-format="percent">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Активные пользователи
+            <span
+              class="tooltip-icon"
+              title="Доля пользователей с операциями за период."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+        <div class="stat kpi-card" data-metric="average_balance">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Средний баланс
+            <span
+              class="tooltip-icon"
+              title="Среднее значение баланса активных кошельков."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+        <div class="stat kpi-card" data-metric="median_balance">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Медианный баланс
+            <span
+              class="tooltip-icon"
+              title="Баланс середины распределения, без влияния крупных сумм."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+        <div class="stat kpi-card" data-metric="top_10_percent_share" data-format="percent">
+          <span class="kpi-value" data-value>—</span>
+          <p class="kpi-label">
+            Доля топ-10%
+            <span
+              class="tooltip-icon"
+              title="Сколько валюты сконцентрировано у 10% самых богатых."
+              >ⓘ</span
+            >
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <div class="section-header">
+        <h5>Графики</h5>
+        <p class="field-hint">
+          Визуальное сравнение поступлений, списаний и структуры балансов.
+        </p>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h6>Created vs Spent</h6>
+          <div class="bar-chart" id="economyCreatedSpentChart"></div>
+        </div>
+        <div class="chart-card">
+          <h6>Net flow за период</h6>
+          <div class="net-flow" id="economyNetFlowChart"></div>
+          <div class="chart-note" id="economyNetFlowLabel">—</div>
+        </div>
+        <div class="chart-card">
+          <h6>Распределение баланса</h6>
+          <div class="distribution-chart" id="economyDistributionChart"></div>
+          <div class="chart-legend" id="economyDistributionLegend"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <div class="section-header">
+        <h5>Economy Health</h5>
+        <p class="field-hint">
+          Сигналы баланса между источниками и списаниями.
+        </p>
+      </div>
+      <div class="analytics-health economy-health" id="economyHealthBlock">
+        <div>
+          <h5>Экономика</h5>
+          <p class="field-hint">
+            Контроль инфляции и эффективности sink-механик.
+          </p>
+        </div>
+        <div class="health-indicators">
+          <div class="health-item">
+            <span class="health-label">Sink ratio</span>
+            <span class="health-value" id="economySinkRatio">—</span>
+          </div>
+          <div class="health-item">
+            <span class="health-label">Инфляция</span>
+            <span class="status-pill" id="economyInflationStatus">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <div class="section-header">
+        <h5>Текстовые выводы</h5>
+        <p class="field-hint">
+          Короткие подсказки для администратора по состоянию экономики.
+        </p>
+      </div>
+      <div class="notice analytics-insights" id="economyAnalyticsInsights">—</div>
+    </div>
+  </div>
+</section>

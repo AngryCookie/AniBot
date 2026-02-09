@@ -2,6 +2,7 @@ import { apiFetch } from "./api.js";
 import { initOverview } from "./pages/overview.js";
 import { initLeveling } from "./pages/leveling.js";
 import { initEconomy } from "./pages/economy.js";
+import { initEconomyAnalytics } from "./pages/economy_analytics.js";
 
 const appState = {
   guildId: null,
@@ -23,6 +24,11 @@ const routes = {
     title: "Economy",
     page: "/static/pages/economy.html",
     init: () => initEconomy(appState.guildId),
+  },
+  "economy-analytics": {
+    title: "Economy Analytics",
+    page: "/static/pages/economy-analytics.html",
+    init: () => initEconomyAnalytics(appState.guildId),
   },
   gambling: {
     title: "Gambling",
