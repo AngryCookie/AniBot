@@ -12,7 +12,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![Status](https://img.shields.io/badge/Status-Active%20Development-57F287?style=flat-square)]()
 
-[📋 Роутмап 2026](#-роутмап-развития) • [🚀 Быстрый старт](#-быстрый-старт) • [📖 Документация](#-документация)
+[📋 ROADMAP 2026](#-роутмап-развития) • [🚀 Быстрый старт](#-быстрый-старт) • [📖 Документация](#-документация)
 
 </div>
 
