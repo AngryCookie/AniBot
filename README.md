@@ -1,131 +1,105 @@
-# AniBot (Discord bot)
+# Discord-бот с web-панелью администрирования
 
-Полностью модульный Discord-бот на `discord.py` с экономикой, модерацией, левелингом, магазином и гемблингом.
-Проект использует только Python-реализацию; старая Node.js версия удалена.
+Инструмент для владельцев и администраторов Discord-серверов. Бот отвечает за пользовательский интерфейс, а вся логика и управление сосредоточены в web-панели.
 
-## Очистка устаревшей Node.js версии
-- Удалены `bot.js`, `package.json` и `Procfile`.
-- Удалена директория `node_modules`.
+## Краткий обзор
+Проект объединяет Discord-бота и web-панель администрирования для управления внутренней экономикой, аналитикой и системой ставок на вымышленные киберспортивные команды.
 
 ## Возможности
-- Модерация: предупреждения, муты, кики, баны, очистка сообщений, логирование
-- Левелинг и награды
-- Экономика с курсом валюты
-- Магазин (роли/доступы/действия)
-- Гемблинг (coinflip/dice/roulette)
-- Онбординг: welcome/goodbye, autorole, реакционные роли, verify
-- Кастомные команды и теги
+### Discord-бот
+- Слэш-команды.
+- Эфемерные ответы там, где это уместно.
+- Экономика с внутренней валютой.
+- Система ставок на вымышленные команды.
+- Подтверждение ставок кнопками (подтвердить / отменить).
+- Флаги функций (глобальные и на уровне сервера).
+- Без реальных денег и без реальных данных киберспорта.
 
-## Структура проекта
+### Система ставок (v1)
+- Полностью вымышленные команды.
+- Матчи создаются через web-панель.
+- Настраиваемые окна приема ставок.
+- Автоматически генерируемые коэффициенты.
+- Ставки только на победителя (Team A / Team B).
+- Результат определяется системой (случайно с учетом силы команды).
+- Интеграция с экономикой (обновление балансов).
+
+### Web-панель администрирования
+- Управление параметрами экономики.
+- Управление командами, матчами и событиями ставок.
+- Включение/выключение функций через флаги.
+- Источник истины для всей игровой логики.
+
+## Архитектура и стек
+- Python.
+- Discord.py.
+- FastAPI (backend панели).
+- SQLAlchemy (async).
+- SQLite (по умолчанию).
+- Docker и Docker Compose.
+
+## Что это за проект
+- Контролируемая игровая система для Discord-серверов.
+- Админ-инструмент, ориентированный на аналитику.
+- Песочница для экспериментов с экономикой и механиками ставок.
+
+## Что это не проект
+- Не реальный гэмблинг.
+- Не реальные ставки на киберспорт.
+- Нет интеграции с внешними API матчей.
+- Не фокус на музыке, модерации или развлечениях ради развлечений.
+
+## Структура проекта (высокоуровневая)
 ```
-/bot
-  /cogs
-    moderation.py
-    leveling.py
-    economy.py
-    shop.py
-    gambling.py
-    roles.py
-    admin.py
-    utils.py
-  /database
-    models.py
-    db.py
-  config.py
-  main.py
-requirements.txt
-README.md
+/bot          # Discord-бот
+/web          # Web backend и панель
+/tests        # Тесты
 ```
 
-## Установка
-1. Установите Python 3.10+
+## Переменные окружения
+Создайте `.env` на основе примера (без секретов):
+
+```
+DISCORD_TOKEN=your_discord_bot_token
+DISCORD_CLIENT_ID=your_discord_client_id
+DISCORD_CLIENT_SECRET=your_discord_client_secret
+DISCORD_REDIRECT_URI=http://localhost:8000/auth/callback
+SESSION_SECRET=your_session_secret
+SESSION_ENCRYPTION_KEY=your_session_encryption_key
+DATABASE_URL=sqlite+aiosqlite:///bot.db
+```
+
+## Запуск локально (без Docker)
+1. Установите Python 3.10+.
 2. Установите зависимости:
    ```bash
    pip install -r requirements.txt
    ```
-3. Укажите токен Discord:
-   ```bash
-   export DISCORD_TOKEN="your_token_here"
-   ```
-
-## Запуск
-```bash
-python -m bot.main
-```
-
-## Docker
-```bash
-docker compose build
-```
-
-```bash
-docker compose up
-```
-
-```bash
-docker compose up -d
-```
-
-```bash
-docker compose logs
-```
-
-```bash
-docker compose down
-```
-
-## Примечания
-- SQLite база создается автоматически (`bot.db`).
-- Для работы команд нужны соответствующие права на сервере.
-
-## Web Admin Dashboard (Version 2)
-
-### Запуск web backend
-1. Установите зависимости (добавлены FastAPI + HTTP-клиент):
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Укажите переменные окружения для OAuth и сессий:
-   ```bash
-   export DISCORD_CLIENT_ID="your_client_id"
-   export DISCORD_CLIENT_SECRET="your_client_secret"
-   export DISCORD_REDIRECT_URI="http://localhost:8000/auth/callback"
-   export SESSION_SECRET="your_session_secret"
-   export SESSION_ENCRYPTION_KEY="your_fernet_key_or_passphrase"
-   export DATABASE_URL="sqlite+aiosqlite:///bot.db"
-   ```
-   > `SESSION_ENCRYPTION_KEY` используется для шифрования токенов в сессии.
-3. Запустите сервер:
+3. Запустите web backend:
    ```bash
    uvicorn web.main:app --reload --host 0.0.0.0 --port 8000
    ```
-4. Откройте в браузере: `http://localhost:8000/login.html`.
+4. Запустите Discord-бота:
+   ```bash
+   python -m bot.main
+   ```
 
-### Структура API
-- `GET /api/me` — профиль пользователя Discord.
-- `GET /api/guilds` — список серверов с правами admin/manage_guild.
-- `GET /api/guilds/{guild_id}/overview` — статистика сервера.
-- `GET/PUT /api/guilds/{guild_id}/settings` — общие настройки сервера.
-- `GET/PUT /api/guilds/{guild_id}/leveling` — настройки левелинга.
-- `GET/PUT /api/guilds/{guild_id}/economy` — настройки экономики.
-- `GET/PUT /api/guilds/{guild_id}/gambling` — настройки гемблинга.
-- `GET/PUT /api/guilds/{guild_id}/shop` — настройки магазина.
-- `GET/PUT /api/guilds/{guild_id}/logs` — настройки логов.
-- `POST /api/guilds/{guild_id}/{category}/reset` — сброс категории (`leveling`, `economy`, `gambling`, `shop`, `logs`).
-- `GET/POST/PUT/DELETE /api/guilds/{guild_id}/shop/items` — управление товарами магазина.
-
-### Примеры запросов
+## Запуск через Docker Compose
 ```bash
-curl -H "Cookie: session=..." \
-  http://localhost:8000/api/guilds/123456789/overview
+docker compose up --build
 ```
 
-```bash
-curl -X PUT -H "Content-Type: application/json" \
-  -d '{"enabled": true, "xp_per_message": 20, "xp_cooldown_seconds": 30, "announce_level_up": true}' \
-  http://localhost:8000/api/guilds/123456789/leveling
-```
+## Базовое использование
+- Администраторы управляют экономикой и ставками через web-панель.
+- Пользователи взаимодействуют с ботом через слэш-команды в Discord.
+- Все игровые правила и сущности (команды, матчи, события) задаются в панели.
 
-### Примечания по безопасности
-- OAuth-токены шифруются перед сохранением в сессии.
-- Доступ к API проверяется по правам Discord (admin/manage_guild).
+## Ограничения v1
+- Ставки только на исход матча (Team A / Team B).
+- Нет реальных команд и матчей.
+- Источник данных — web-панель, внешние API не используются.
+
+## Project Status
+- Активная разработка.
+- Текущий фокус: экономика, аналитика, система ставок v1.
+- Проект спроектирован для постепенного расширения без поломки ядра.
