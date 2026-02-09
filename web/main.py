@@ -31,8 +31,10 @@ from bot.database.models import (
     Warning,
 )
 
+from .analytics.behavior import build_behavior_analytics
 from .config import settings
 from .schemas import (
+    BehaviorAnalyticsResponse,
     ChangeHistoryEntry,
     EconomyAnalyticsResponse,
     EconomySettings,
@@ -710,6 +712,24 @@ async def get_economy_analytics(
         raise HTTPException(status_code=400, detail="Unsupported analytics period")
     # TODO: заменить мок-данные на реальные агрегаты по economy_ledger.
     return _mock_economy_analytics(guild_id, period)
+
+
+@app.get("/api/analytics/behavior", response_model=BehaviorAnalyticsResponse)
+async def get_behavior_analytics(
+    guild_id: int,
+    period: str = "7d",
+    access_token: str = Depends(get_access_token),
+) -> BehaviorAnalyticsResponse:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    try:
+        return await build_behavior_analytics(
+            database=database,
+            guild_id=guild_id,
+            period=period,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 app.get("/api/guilds/{guild_id}/gambling", response_model=GamblingSettings)(gambling_get)
 app.put("/api/guilds/{guild_id}/gambling", response_model=GamblingSettings)(gambling_put)

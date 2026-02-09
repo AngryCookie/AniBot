@@ -153,6 +153,32 @@ class EconomyAnalyticsResponse(BaseModel):
     health: EconomyAnalyticsHealth
 
 
+class BehaviorAnalyticsSegments(BaseModel):
+    new_users: Optional[int]
+    new_users_active: Optional[int]
+    new_users_inactive: Optional[int]
+    rich_but_inactive: Optional[int]
+    active_but_poor: Optional[int]
+
+
+class BehaviorAnalyticsDistribution(BaseModel):
+    median_balance: Optional[float]
+    average_balance: Optional[float]
+    top_10_balance_share: Optional[float]
+    top_10_activity_share: Optional[float]
+
+
+class BehaviorAnalyticsResponse(BaseModel):
+    period: str
+    users_total: int
+    active_users: int
+    inactive_users: int
+    activity_rate: float
+    segments: BehaviorAnalyticsSegments
+    retention_rate: Optional[float]
+    distribution: BehaviorAnalyticsDistribution
+
+
 class PresetOut(BaseModel):
     name: str
     description: str
