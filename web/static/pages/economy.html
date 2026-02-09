@@ -3,37 +3,198 @@
   <p class="notice">Настройка валюты, наград и правил экономики.</p>
 </section>
 <section class="card">
-  <h4>Настройки экономики</h4>
-  <form data-endpoint="economy" data-success-message="Настройки экономики сохранены.">
-    <label>
-      <span>Включить экономику</span>
-      <input type="checkbox" name="enabled" />
-    </label>
-    <label>
-      <span>Ежедневная награда</span>
-      <input type="number" name="daily_amount" min="0" max="100000" />
-    </label>
-    <label>
-      <span>Максимум ежедневных получений</span>
-      <select name="max_daily_claims">
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-      </select>
-    </label>
-    <label>
-      <span>Разрешить переводы</span>
-      <input type="checkbox" name="allow_transfers" />
-    </label>
-    <label>
-      <span>Налог на переводы (%)</span>
-      <input type="number" name="tax_rate_percent" min="0" max="25" step="0.5" />
-    </label>
-    <div class="footer-actions">
-      <button type="submit">Сохранить</button>
-      <button type="button" class="danger" data-action="reset">Сбросить</button>
+  <div class="card-header">
+    <h4>Экономика сервера</h4>
+    <div class="tab-list" role="tablist" aria-label="Экономика">
+      <button
+        type="button"
+        class="tab-button is-active"
+        role="tab"
+        aria-selected="true"
+        data-economy-tab="settings"
+      >
+        Настройки
+      </button>
+      <button
+        type="button"
+        class="tab-button"
+        role="tab"
+        aria-selected="false"
+        data-economy-tab="analytics"
+      >
+        Analytics
+      </button>
     </div>
-  </form>
+  </div>
+
+  <div class="tab-panel" data-economy-panel="settings" role="tabpanel">
+    <div class="loading hidden" id="economyLoading">Загрузка настроек...</div>
+    <div class="alert error hidden" id="economyError" role="alert"></div>
+    <div class="alert success hidden" id="economySuccess" role="status"></div>
+    <div class="notice hidden" id="economyEmpty">Нет данных для отображения.</div>
+    <form id="economyForm" class="settings-form">
+      <label class="setting">
+        <div class="setting-row">
+          <span class="setting-title">Включить экономику</span>
+          <span class="toggle">
+            <input type="checkbox" name="enabled" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <p class="field-hint">
+          При отключении экономика не начисляет награды и блокирует операции.
+        </p>
+      </label>
+
+      <fieldset class="settings-group" id="economyDependent">
+        <label class="setting">
+          <div class="setting-row">
+            <span class="setting-title">Ежедневная награда</span>
+            <input
+              class="input-field"
+              type="number"
+              name="daily_amount"
+              min="0"
+              max="100000"
+              step="1"
+            />
+          </div>
+          <p class="field-hint">
+            Сколько валюты выдаётся пользователю за ежедневный сбор.
+          </p>
+        </label>
+        <label class="setting">
+          <div class="setting-row">
+            <span class="setting-title">Максимум ежедневных получений</span>
+            <select class="input-field" name="max_daily_claims">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+          <p class="field-hint">
+            Ограничивает количество ежедневных получений на пользователя.
+          </p>
+        </label>
+        <label class="setting">
+          <div class="setting-row">
+            <span class="setting-title">Разрешить переводы</span>
+            <span class="toggle">
+              <input type="checkbox" name="allow_transfers" />
+              <span class="toggle-track" aria-hidden="true"></span>
+            </span>
+          </div>
+          <p class="field-hint">
+            Пользователи смогут переводить валюту друг другу.
+          </p>
+        </label>
+        <fieldset class="settings-group" id="economyTransfersGroup">
+          <label class="setting">
+            <div class="setting-row">
+              <span class="setting-title">Налог на переводы (%)</span>
+              <input
+                class="input-field"
+                type="number"
+                name="tax_rate_percent"
+                min="0"
+                max="25"
+                step="0.5"
+              />
+            </div>
+            <p class="field-hint">
+              Процент комиссии, который будет списан при переводе.
+            </p>
+          </label>
+        </fieldset>
+      </fieldset>
+
+      <div class="notice hidden dirty-indicator" id="economyDirty">
+        Есть несохранённые изменения.
+      </div>
+      <div class="footer-actions">
+        <button type="submit" id="economySave" disabled>
+          Сохранить изменения
+        </button>
+        <button type="button" class="danger" id="economyReset">
+          Сбросить настройки
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel hidden" data-economy-panel="analytics" role="tabpanel">
+    <div class="analytics-toolbar">
+      <span class="analytics-title">Период</span>
+      <div class="period-switcher" role="group" aria-label="Период аналитики">
+        <button type="button" class="tab-button is-active" data-period="7">
+          7 дней
+        </button>
+        <button type="button" class="tab-button" data-period="30">30 дней</button>
+        <button type="button" class="tab-button" data-period="90">90 дней</button>
+      </div>
+    </div>
+    <div class="loading hidden" id="economyAnalyticsLoading">
+      Загрузка аналитики...
+    </div>
+    <div class="alert error hidden" id="economyAnalyticsError" role="alert"></div>
+    <div class="notice hidden" id="economyAnalyticsMock">
+      Используются мок-данные. Подключите реальный эндпоинт аналитики, чтобы
+      увидеть актуальные показатели.
+    </div>
+    <div class="notice hidden" id="economyAnalyticsEmpty">
+      Нет данных для выбранного периода.
+    </div>
+    <div class="grid hidden" id="economyAnalyticsKpis">
+      <div class="stat kpi-card" data-kpi="total_currency">
+        <span class="kpi-value" data-kpi-value>—</span>
+        <p class="kpi-label">Всего валюты</p>
+      </div>
+      <div class="stat kpi-card" data-kpi="minted">
+        <span class="kpi-value" data-kpi-value>—</span>
+        <p class="kpi-label">Начислено</p>
+      </div>
+      <div class="stat kpi-card" data-kpi="sunk">
+        <span class="kpi-value" data-kpi-value>—</span>
+        <p class="kpi-label">Списано</p>
+      </div>
+      <div class="stat kpi-card" data-kpi="net_flow">
+        <span class="kpi-value" data-kpi-value>—</span>
+        <p class="kpi-label">Чистый поток</p>
+      </div>
+      <div class="stat kpi-card" data-kpi="active_users">
+        <span class="kpi-value" data-kpi-value>—</span>
+        <p class="kpi-label">Активные пользователи</p>
+      </div>
+    </div>
+    <div class="analytics-health" id="economyHealth">
+      <div>
+        <h5>Состояние экономики</h5>
+        <p class="field-hint">Оценка баланса между притоком и оттоком валюты.</p>
+      </div>
+      <span class="status-pill" id="economyHealthStatus">—</span>
+    </div>
+    <div class="notice analytics-interpretation" id="economyInterpretation">
+      Выберите период, чтобы увидеть интерпретацию состояния экономики.
+    </div>
+  </div>
 </section>
+<div
+  class="modal-backdrop hidden"
+  id="economyResetModal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="economyResetTitle"
+>
+  <div class="modal-card">
+    <h4 id="economyResetTitle">Сбросить настройки экономики?</h4>
+    <p class="field-hint">
+      Настройки будут возвращены к значениям по умолчанию для сервера.
+    </p>
+    <div class="modal-actions">
+      <button type="button" class="secondary" data-action="cancel">Отмена</button>
+      <button type="button" class="danger" data-action="confirm">Сбросить</button>
+    </div>
+  </div>
+</div>
