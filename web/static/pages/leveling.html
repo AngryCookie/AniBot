@@ -1,41 +1,112 @@
 <section class="page-header">
   <h3>Leveling</h3>
-  <p class="notice">Настройки системы уровней и опыта.</p>
+  <p class="notice">Управляйте опытом, кулдауном и наградами за уровни.</p>
 </section>
 <section class="card">
   <h4>Настройки уровней</h4>
-  <form data-endpoint="leveling" data-success-message="Настройки уровней сохранены.">
-    <label>
-      <span>Включить систему уровней</span>
-      <input type="checkbox" name="enabled" />
+  <div class="loading hidden" id="levelingLoading">Загрузка настроек...</div>
+  <div class="alert error hidden" id="levelingError" role="alert"></div>
+  <div class="alert success hidden" id="levelingSuccess" role="status"></div>
+  <div class="notice hidden" id="levelingEmpty">Нет данных для отображения.</div>
+  <form id="levelingForm" class="settings-form">
+    <label class="setting">
+      <div class="setting-row">
+        <span class="setting-title">Включить систему уровней</span>
+        <span class="toggle">
+          <input type="checkbox" name="enabled" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
+      </div>
+      <p class="field-hint">
+        Отключение системы уровней временно замораживает начисление опыта.
+      </p>
     </label>
-    <label>
-      <span>XP за сообщение</span>
-      <input type="number" name="xp_per_message" min="1" max="100" />
-    </label>
-    <label>
-      <span>Кулдаун сообщений (сек)</span>
-      <input
-        type="range"
-        name="xp_cooldown_seconds"
-        min="0"
-        max="3600"
-        step="10"
-        data-output="cooldownValue"
-      />
-      <small>Текущее значение: <strong id="cooldownValue">0</strong></small>
-    </label>
-    <label>
-      <span>Анонсировать повышение уровня</span>
-      <input type="checkbox" name="announce_level_up" />
-    </label>
-    <label>
-      <span>ID канала для уведомлений</span>
-      <input type="number" name="level_up_channel_id" />
-    </label>
+
+    <fieldset class="settings-group" id="levelingDependent">
+      <label class="setting">
+        <div class="setting-row">
+          <span class="setting-title">XP за сообщение</span>
+          <input
+            class="input-field"
+            type="number"
+            name="xp_per_message"
+            min="1"
+            max="100"
+            step="1"
+          />
+        </div>
+        <p class="field-hint">
+          Сколько опыта получает пользователь за одно сообщение.
+        </p>
+      </label>
+      <label class="setting">
+        <div class="setting-row">
+          <span class="setting-title">Кулдаун сообщений (сек)</span>
+          <input
+            class="input-field"
+            type="number"
+            name="xp_cooldown_seconds"
+            min="0"
+            max="3600"
+            step="5"
+          />
+        </div>
+        <p class="field-hint">
+          Минимальное время между начислением опыта за сообщения.
+        </p>
+      </label>
+      <label class="setting">
+        <div class="setting-row">
+          <span class="setting-title">Анонсировать повышение уровня</span>
+          <span class="toggle">
+            <input type="checkbox" name="announce_level_up" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <p class="field-hint">
+          Отправлять уведомление в канал, когда пользователь повышает уровень.
+        </p>
+      </label>
+      <label class="setting">
+        <div class="setting-row">
+          <span class="setting-title">Награды за роли</span>
+          <span class="toggle">
+            <input type="checkbox" name="rewards_roles_enabled" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+        <p class="field-hint">
+          Позволяет выдавать роли за достижение определённых уровней.
+        </p>
+      </label>
+    </fieldset>
+
+    <div class="notice hidden dirty-indicator" id="levelingDirty">
+      Есть несохранённые изменения.
+    </div>
     <div class="footer-actions">
-      <button type="submit">Сохранить</button>
-      <button type="button" class="danger" data-action="reset">Сбросить</button>
+      <button type="submit" id="levelingSave" disabled>Сохранить изменения</button>
+      <button type="button" class="danger" id="levelingReset">
+        Сбросить настройки
+      </button>
     </div>
   </form>
 </section>
+<div
+  class="modal-backdrop hidden"
+  id="levelingResetModal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="levelingResetTitle"
+>
+  <div class="modal-card">
+    <h4 id="levelingResetTitle">Сбросить настройки уровней?</h4>
+    <p class="field-hint">
+      Настройки будут возвращены к значениям по умолчанию для сервера.
+    </p>
+    <div class="modal-actions">
+      <button type="button" class="secondary" data-action="cancel">Отмена</button>
+      <button type="button" class="danger" data-action="confirm">Сбросить</button>
+    </div>
+  </div>
+</div>

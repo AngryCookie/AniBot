@@ -1,5 +1,6 @@
 import { apiFetch } from "./api.js";
 import { initOverview } from "./pages/overview.js";
+import { initLeveling } from "./pages/leveling.js";
 
 const appState = {
   guildId: null,
@@ -15,7 +16,7 @@ const routes = {
   leveling: {
     title: "Leveling",
     page: "/static/pages/leveling.html",
-    init: () => initSettingsPage("leveling"),
+    init: () => initLeveling(appState.guildId),
   },
   economy: {
     title: "Economy",
