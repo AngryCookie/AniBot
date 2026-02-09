@@ -99,6 +99,60 @@ class OverviewStats(BaseModel):
     total_shop_items: int
 
 
+class EconomyAnalyticsOverview(BaseModel):
+    total_currency: int
+    average_balance: float
+    median_balance: int
+    active_users: int
+
+
+class EconomyAnalyticsPoint(BaseModel):
+    label: str
+    generated: int
+    removed: int
+    net: int
+
+
+class EconomyAnalyticsFlow(BaseModel):
+    generated: int
+    removed: int
+    net_flow: int
+    series: list[EconomyAnalyticsPoint]
+
+
+class EconomyAnalyticsTopEntry(BaseModel):
+    user_id: int
+    user_name: str
+    amount: int
+
+
+class EconomyAnalyticsTopActivity(BaseModel):
+    earners: list[EconomyAnalyticsTopEntry]
+    spenders: list[EconomyAnalyticsTopEntry]
+
+
+class EconomyAnalyticsWarning(BaseModel):
+    code: str
+    message: str
+    severity: str
+
+
+class EconomyAnalyticsHealth(BaseModel):
+    inflation_indicator: str
+    sink_source_ratio: float
+    warnings: list[EconomyAnalyticsWarning]
+    interpretation: str
+
+
+class EconomyAnalyticsResponse(BaseModel):
+    period: int
+    is_mocked: bool
+    overview: EconomyAnalyticsOverview
+    flow: EconomyAnalyticsFlow
+    top_activity: EconomyAnalyticsTopActivity
+    health: EconomyAnalyticsHealth
+
+
 class PresetOut(BaseModel):
     name: str
     description: str

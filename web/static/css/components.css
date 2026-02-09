@@ -183,6 +183,25 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.analytics-content {
+  display: grid;
+  gap: 20px;
+}
+
+.analytics-section {
+  display: grid;
+  gap: 12px;
+}
+
+.section-header h5 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.section-header .field-hint {
+  margin: 0;
+}
+
 .analytics-title {
   font-weight: 600;
 }
@@ -255,4 +274,126 @@ button:disabled {
 
 .analytics-interpretation {
   font-size: 13px;
+}
+
+.flow-chart {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  font-size: 12px;
+}
+
+.flow-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow-label {
+  color: var(--muted);
+}
+
+.flow-bars {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.flow-bar {
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.flow-generated {
+  background: rgba(46, 204, 113, 0.7);
+}
+
+.flow-removed {
+  background: rgba(214, 69, 69, 0.7);
+}
+
+.flow-value {
+  text-align: right;
+  font-weight: 600;
+}
+
+.activity-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.activity-card {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.activity-card h6 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.activity-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.activity-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.activity-name {
+  color: var(--text);
+}
+
+.activity-amount {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.warning-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.warning-flag {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid transparent;
+  background: #2b313f;
+  color: #cfd6e6;
+}
+
+.warning-flag.severity-warning {
+  background: rgba(255, 165, 0, 0.16);
+  border-color: rgba(255, 165, 0, 0.4);
+  color: #ffd39c;
+}
+
+.warning-flag.severity-info {
+  background: rgba(88, 133, 255, 0.16);
+  border-color: rgba(88, 133, 255, 0.4);
+  color: #c2d2ff;
+}
+
+.warning-flag.is-ok {
+  background: rgba(46, 204, 113, 0.16);
+  border-color: rgba(46, 204, 113, 0.4);
+  color: #9cf0c1;
 }

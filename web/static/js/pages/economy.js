@@ -66,24 +66,66 @@ const isDirty = (current, initial) =>
 
 const getMockAnalytics = (period) => {
   // TODO: заменить мок-данные на реальные значения с backend эндпоинта аналитики.
-  const base = period === 7 ? 1 : period === 30 ? 4 : 9;
+  const scale = period === 7 ? 1 : period === 30 ? 1.6 : 2.4;
+  const generated = Math.round(42000 * scale);
+  const removed = Math.round(36000 * scale);
   return {
-    total_currency: 125000 * base,
-    minted: 42000 * base,
-    sunk: 36000 * base,
-    net_flow: 6000 * base,
-    active_users: 180 * base,
-    health_status: base > 4 ? "inflating" : "stable",
-    interpretation:
-      base > 4
-        ? "Рост эмиссии опережает списания. Рассмотрите усиление валютных sink-механик."
-        : "Баланс между начислениями и списаниями выглядит стабильным.",
+    period,
+    is_mocked: true,
+    overview: {
+      total_currency: Math.round(120000 * scale),
+      average_balance: Math.round(750 * scale),
+      median_balance: Math.round(430 * scale),
+      active_users: Math.round(180 * scale),
+    },
+    flow: {
+      generated,
+      removed,
+      net_flow: generated - removed,
+      series: Array.from({ length: period === 7 ? 7 : 8 }).map((_, index) => ({
+        label: period === 7 ? `День ${index + 1}` : `Неделя ${index + 1}`,
+        generated: Math.round(generated / 8),
+        removed: Math.round(removed / 8),
+        net: Math.round((generated - removed) / 8),
+      })),
+    },
+    top_activity: {
+      earners: [
+        { user_id: 1, user_name: "Neo", amount: Math.round(8200 * scale) },
+        { user_id: 2, user_name: "Luna", amount: Math.round(7600 * scale) },
+        { user_id: 3, user_name: "Kira", amount: Math.round(7100 * scale) },
+        { user_id: 4, user_name: "Rin", amount: Math.round(6900 * scale) },
+        { user_id: 5, user_name: "Mira", amount: Math.round(6600 * scale) },
+      ],
+      spenders: [
+        { user_id: 6, user_name: "Dex", amount: Math.round(7900 * scale) },
+        { user_id: 7, user_name: "Aki", amount: Math.round(7400 * scale) },
+        { user_id: 8, user_name: "Zoe", amount: Math.round(7000 * scale) },
+        { user_id: 9, user_name: "Kai", amount: Math.round(6700 * scale) },
+        { user_id: 10, user_name: "Noa", amount: Math.round(6400 * scale) },
+      ],
+    },
+    health: {
+      inflation_indicator: "stable",
+      sink_source_ratio: 0.86,
+      warnings: [],
+      interpretation:
+        "Баланс между начислениями и списаниями выглядит стабильным.",
+    },
   };
 };
 
 const formatNumber = (value) => {
   if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("ru-RU").format(value);
+};
+
+const formatRatio = (value) => {
+  if (value === null || value === undefined) return "—";
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 };
 
 const setActiveTab = (tabButtons, panels, target) => {
@@ -127,10 +169,17 @@ export const initEconomy = async (guildId) => {
   const analyticsError = document.getElementById("economyAnalyticsError");
   const analyticsEmpty = document.getElementById("economyAnalyticsEmpty");
   const analyticsMock = document.getElementById("economyAnalyticsMock");
-  const analyticsKpis = document.getElementById("economyAnalyticsKpis");
+  const analyticsContent = document.getElementById("economyAnalyticsContent");
   const healthStatus = document.getElementById("economyHealthStatus");
   const interpretation = document.getElementById("economyInterpretation");
   const periodButtons = Array.from(document.querySelectorAll("[data-period]"));
+  const overviewGrid = document.getElementById("economyOverview");
+  const flowKpis = document.getElementById("economyFlowKpis");
+  const flowChart = document.getElementById("economyFlowChart");
+  const topEarners = document.getElementById("economyTopEarners");
+  const topSpenders = document.getElementById("economyTopSpenders");
+  const healthMetrics = document.getElementById("economyHealthMetrics");
+  const warningsList = document.getElementById("economyWarnings");
 
   let initialValues = readFormValues(form);
   let isSubmitting = false;
@@ -237,16 +286,95 @@ export const initEconomy = async (guildId) => {
     }
   };
 
-  const renderAnalytics = (data) => {
-    if (!analyticsKpis) return;
-    analyticsKpis.querySelectorAll("[data-kpi]").forEach((card) => {
-      const key = card.dataset.kpi;
-      const valueElement = card.querySelector("[data-kpi-value]");
-      if (!valueElement) return;
-      valueElement.textContent = formatNumber(data?.[key]);
+  const renderCards = (container, data, formatter = formatNumber) => {
+    if (!container) return;
+    container.querySelectorAll("[data-value]").forEach((valueElement) => {
+      const parent = valueElement.closest("[data-overview],[data-flow],[data-health]");
+      if (!parent) return;
+      const key =
+        parent.dataset.overview || parent.dataset.flow || parent.dataset.health;
+      valueElement.textContent = formatter(data?.[key]);
     });
+  };
 
-    const status = data?.health_status || "stable";
+  const renderTopList = (container, entries) => {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!entries?.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "Нет данных";
+      container.appendChild(empty);
+      return;
+    }
+    entries.forEach((entry) => {
+      const item = document.createElement("li");
+      item.innerHTML = `
+        <span class="activity-name">${entry.user_name}</span>
+        <span class="activity-amount">${formatNumber(entry.amount)}</span>
+      `;
+      container.appendChild(item);
+    });
+  };
+
+  const renderFlowChart = (series) => {
+    if (!flowChart) return;
+    flowChart.innerHTML = "";
+    if (!series?.length) {
+      flowChart.textContent = "Нет данных для графика.";
+      return;
+    }
+    const maxValue = Math.max(
+      ...series.flatMap((point) => [point.generated, point.removed])
+    );
+    series.forEach((point) => {
+      const row = document.createElement("div");
+      row.className = "flow-row";
+      const generatedWidth = maxValue
+        ? Math.max(2, Math.round((point.generated / maxValue) * 100))
+        : 0;
+      const removedWidth = maxValue
+        ? Math.max(2, Math.round((point.removed / maxValue) * 100))
+        : 0;
+      row.innerHTML = `
+        <span class="flow-label">${point.label}</span>
+        <div class="flow-bars">
+          <span class="flow-bar flow-generated" style="width: ${generatedWidth}%"></span>
+          <span class="flow-bar flow-removed" style="width: ${removedWidth}%"></span>
+        </div>
+        <span class="flow-value">${formatNumber(point.net)}</span>
+      `;
+      flowChart.appendChild(row);
+    });
+  };
+
+  const renderWarnings = (warnings) => {
+    if (!warningsList) return;
+    warningsList.innerHTML = "";
+    if (!warnings?.length) {
+      const empty = document.createElement("div");
+      empty.className = "warning-flag is-ok";
+      empty.textContent = "Риски не обнаружены";
+      warningsList.appendChild(empty);
+      return;
+    }
+    warnings.forEach((warning) => {
+      const item = document.createElement("div");
+      item.className = `warning-flag severity-${warning.severity || "info"}`;
+      item.textContent = warning.message;
+      warningsList.appendChild(item);
+    });
+  };
+
+  const renderAnalytics = (data) => {
+    renderCards(overviewGrid, data?.overview);
+    renderCards(flowKpis, data?.flow);
+    renderCards(healthMetrics, data?.health, formatRatio);
+    renderFlowChart(data?.flow?.series);
+    renderTopList(topEarners, data?.top_activity?.earners);
+    renderTopList(topSpenders, data?.top_activity?.spenders);
+    renderWarnings(data?.health?.warnings);
+
+    const status = data?.health?.inflation_indicator || "stable";
     const label = healthLabels[status] || healthLabels.stable;
     if (healthStatus) {
       healthStatus.textContent = label;
@@ -254,7 +382,7 @@ export const initEconomy = async (guildId) => {
     }
     if (interpretation) {
       interpretation.textContent =
-        data?.interpretation ||
+        data?.health?.interpretation ||
         "Добавьте анализ поведения валюты и распределения активных пользователей.";
     }
   };
@@ -270,7 +398,7 @@ export const initEconomy = async (guildId) => {
 
     setHidden(analyticsError, true);
     setHidden(analyticsEmpty, true);
-    setHidden(analyticsKpis, true);
+    setHidden(analyticsContent, true);
     setHidden(analyticsMock, true);
     setHidden(analyticsLoading, false);
 
@@ -292,8 +420,8 @@ export const initEconomy = async (guildId) => {
     }
 
     renderAnalytics(data);
-    setHidden(analyticsKpis, false);
-    setHidden(analyticsMock, !isMock);
+    setHidden(analyticsContent, false);
+    setHidden(analyticsMock, !(isMock || data?.is_mocked));
   };
 
   form.addEventListener("input", (event) => {
