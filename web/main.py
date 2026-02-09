@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from starlette.middleware.sessions import SessionMiddleware
 
+from bot.analytics.economy import build_economy_analytics
 from bot.database.db import Database
 from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
@@ -36,7 +37,7 @@ from .config import settings
 from .schemas import (
     BehaviorAnalyticsResponse,
     ChangeHistoryEntry,
-    EconomyAnalyticsResponse,
+    EconomyAnalyticsSummaryResponse,
     EconomySettings,
     EconomySinkSettings,
     FeatureFlagState,
@@ -586,132 +587,25 @@ app.post("/api/guilds/{guild_id}/economy/reset", response_model=EconomySettings)
 )
 
 
-def _mock_economy_analytics(guild_id: int, period: int) -> EconomyAnalyticsResponse:
-    # TODO: заменить мок-генерацию на реальные агрегации из economy_ledger и профилей.
-    period_scale = {7: 1.0, 30: 1.6, 90: 2.4}.get(period, 1.0)
-    guild_modifier = 1 + ((guild_id % 7) * 0.03)
-    scale = period_scale * guild_modifier
-
-    total_currency = int(120000 * scale)
-    average_balance = round(750 * scale, 2)
-    median_balance = int(430 * scale)
-    active_users = int(180 * scale)
-
-    generated = int(42000 * scale)
-    removed = int(36000 * scale)
-    net_flow = generated - removed
-
-    points = 7 if period == 7 else 8 if period == 30 else 12
-    label_prefix = "День" if period == 7 else "Неделя"
-    series = []
-    base_generated = generated / points
-    base_removed = removed / points
-    for index in range(points):
-        generated_point = int(base_generated * (0.9 + (index % 4) * 0.05))
-        removed_point = int(base_removed * (0.85 + (index % 3) * 0.06))
-        series.append(
-            {
-                "label": f"{label_prefix} {index + 1}",
-                "generated": generated_point,
-                "removed": removed_point,
-                "net": generated_point - removed_point,
-            }
-        )
-
-    ratio = round(removed / generated, 2) if generated else 0.0
-    if ratio < 0.85:
-        inflation = "inflating"
-        interpretation = (
-            "Источники валюты доминируют над sink-механиками — риск роста цен."
-        )
-    elif ratio > 1.1:
-        inflation = "deflating"
-        interpretation = "Списания превышают начисления — возможен дефицит валюты."
-    else:
-        inflation = "stable"
-        interpretation = "Соотношение источников и sink-механик выглядит сбалансированным."
-
-    warnings = []
-    if ratio < 0.75:
-        warnings.append(
-            {
-                "code": "source_dominance",
-                "message": "Источники валюты существенно превышают списания.",
-                "severity": "warning",
-            }
-        )
-    if ratio > 1.25:
-        warnings.append(
-            {
-                "code": "sink_pressure",
-                "message": "Списания значительно выше начислений.",
-                "severity": "warning",
-            }
-        )
-    if net_flow > generated * 0.35:
-        warnings.append(
-            {
-                "code": "net_flow_spike",
-                "message": "Чистый приток валюты выше ожидаемого порога.",
-                "severity": "info",
-            }
-        )
-
-    return EconomyAnalyticsResponse(
-        period=period,
-        is_mocked=True,
-        overview={
-            "total_currency": total_currency,
-            "average_balance": average_balance,
-            "median_balance": median_balance,
-            "active_users": active_users,
-        },
-        flow={
-            "generated": generated,
-            "removed": removed,
-            "net_flow": net_flow,
-            "series": series,
-        },
-        top_activity={
-            "earners": [
-                {"user_id": 101, "user_name": "Neo", "amount": int(8200 * scale)},
-                {"user_id": 102, "user_name": "Luna", "amount": int(7600 * scale)},
-                {"user_id": 103, "user_name": "Kira", "amount": int(7100 * scale)},
-                {"user_id": 104, "user_name": "Rin", "amount": int(6900 * scale)},
-                {"user_id": 105, "user_name": "Mira", "amount": int(6600 * scale)},
-            ],
-            "spenders": [
-                {"user_id": 201, "user_name": "Dex", "amount": int(7900 * scale)},
-                {"user_id": 202, "user_name": "Aki", "amount": int(7400 * scale)},
-                {"user_id": 203, "user_name": "Zoe", "amount": int(7000 * scale)},
-                {"user_id": 204, "user_name": "Kai", "amount": int(6700 * scale)},
-                {"user_id": 205, "user_name": "Noa", "amount": int(6400 * scale)},
-            ],
-        },
-        health={
-            "inflation_indicator": inflation,
-            "sink_source_ratio": ratio,
-            "warnings": warnings,
-            "interpretation": interpretation,
-        },
-    )
-
-
 @app.get(
     "/api/guilds/{guild_id}/economy/analytics",
-    response_model=EconomyAnalyticsResponse,
+    response_model=EconomyAnalyticsSummaryResponse,
 )
 async def get_economy_analytics(
     guild_id: int,
     period: int = 7,
     access_token: str = Depends(get_access_token),
-) -> EconomyAnalyticsResponse:
+) -> EconomyAnalyticsSummaryResponse:
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
-    if period not in (7, 30, 90):
-        raise HTTPException(status_code=400, detail="Unsupported analytics period")
-    # TODO: заменить мок-данные на реальные агрегаты по economy_ledger.
-    return _mock_economy_analytics(guild_id, period)
+    try:
+        return await build_economy_analytics(
+            database=database,
+            guild_id=guild_id,
+            period_days=period,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/analytics/behavior", response_model=BehaviorAnalyticsResponse)

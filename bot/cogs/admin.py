@@ -5,6 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
+from bot.analytics.economy import build_economy_analytics
 from bot.cogs.utils import get_or_create_guild
 from bot.database.models import CustomCommand, ModLog, Tag
 from bot.database.operations import apply_balance_change, get_or_create_user_locked
@@ -148,6 +149,79 @@ class AdminCog(commands.Cog):
         )
         embed = discord.Embed(title="Economy log", description=description)
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @economy_group.command(name="analytics", description="Экономическая аналитика")
+    @app_commands.describe(period="Период аналитики в днях")
+    @app_commands.choices(
+        period=[
+            app_commands.Choice(name="7 дней", value=7),
+            app_commands.Choice(name="30 дней", value=30),
+            app_commands.Choice(name="90 дней", value=90),
+        ]
+    )
+    async def economy_analytics(
+        self, interaction: discord.Interaction, period: app_commands.Choice[int]
+    ) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.")
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        analytics = await build_economy_analytics(
+            database=self.bot.db,
+            guild_id=interaction.guild.id,
+            period_days=period.value,
+        )
+
+        distribution = analytics["distribution"]
+        activity = analytics["activity"]
+        health = analytics["health"]
+
+        embed = discord.Embed(
+            title="Экономическая аналитика",
+            description=f"Период: {analytics['period_days']} дней",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="Поток валюты",
+            value=(
+                f"Начислено: {analytics['created']:.0f}\n"
+                f"Списано: {analytics['spent']:.0f}\n"
+                f"Чистый поток: {analytics['net_flow']}\n"
+                "ℹ️ Приток и отток валюты за период."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Распределение",
+            value=(
+                f"Средний баланс: {distribution['average_balance']:.2f}\n"
+                f"Медианный баланс: {distribution['median_balance']:.2f}\n"
+                f"Доля топ-10%: {distribution['top_10_percent_share'] * 100:.1f}%\n"
+                "ℹ️ Показывает концентрацию валюты."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Активность",
+            value=(
+                f"Активные пользователи: {activity['active_users']}\n"
+                f"Доля активных: {activity['active_users_percent'] * 100:.1f}%\n"
+                "ℹ️ Доля участников с операциями."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Здоровье экономики",
+            value=(
+                f"Sink-коэффициент: {health['sink_ratio']:.2f}\n"
+                f"Флаг инфляции: {'Да' if health['inflation_flag'] else 'Нет'}\n"
+                "ℹ️ Баланс начислений и списаний."
+            ),
+            inline=False,
+        )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     cc_group = app_commands.Group(name="cc", description="Кастомные команды")
 

@@ -153,6 +153,32 @@ class EconomyAnalyticsResponse(BaseModel):
     health: EconomyAnalyticsHealth
 
 
+class EconomyAnalyticsDistributionSummary(BaseModel):
+    average_balance: float
+    median_balance: float
+    top_10_percent_share: float
+
+
+class EconomyAnalyticsActivitySummary(BaseModel):
+    active_users: int
+    active_users_percent: float
+
+
+class EconomyAnalyticsHealthSummary(BaseModel):
+    sink_ratio: float
+    inflation_flag: bool
+
+
+class EconomyAnalyticsSummaryResponse(BaseModel):
+    period_days: int
+    created: float
+    spent: float
+    net_flow: int
+    distribution: EconomyAnalyticsDistributionSummary
+    activity: EconomyAnalyticsActivitySummary
+    health: EconomyAnalyticsHealthSummary
+
+
 class BehaviorAnalyticsSegments(BaseModel):
     new_users: Optional[int]
     new_users_active: Optional[int]
