@@ -1,0 +1,65 @@
+<section class="card">
+  <h3>Community Goal</h3>
+  <p class="notice">Ежемесячная цель сообщества на основе активности.</p>
+
+  <form id="communityGoalForm">
+    <div class="grid two-col">
+      <label>
+        Метрика
+        <select name="metric_type" required>
+          <option value="voice_hours">Voice hours</option>
+          <option value="messages">Messages</option>
+        </select>
+      </label>
+      <label>
+        Target value
+        <input type="number" name="target_value" min="1" step="1" required />
+      </label>
+      <label>
+        Starts at
+        <input type="datetime-local" name="starts_at" required />
+      </label>
+      <label>
+        Ends at
+        <input type="datetime-local" name="ends_at" required />
+      </label>
+      <label>
+        Participation threshold
+        <input
+          type="number"
+          name="min_participation_threshold"
+          min="0"
+          step="1"
+          value="0"
+          required
+        />
+      </label>
+      <label>
+        Reward role ID (optional)
+        <input type="number" name="reward_role_id" min="0" step="1" />
+      </label>
+    </div>
+    <div class="actions">
+      <button type="submit">Save</button>
+      <button type="button" class="secondary" id="communityGoalEvaluateBtn">Evaluate now</button>
+    </div>
+  </form>
+
+  <div id="communityGoalStatus" class="notice" style="margin-top: 1rem"></div>
+
+  <div id="communityGoalProgress" class="hidden" style="margin-top: 1rem">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem">
+      <span>Progress</span>
+      <span id="communityGoalBadge" class="badge">active</span>
+    </div>
+    <div style="background: #222; border-radius: 8px; height: 12px; overflow: hidden">
+      <div id="communityGoalProgressBar" style="height: 100%; width: 0%; background: #4f8cff"></div>
+    </div>
+    <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0.75rem">
+      <div>Target: <b id="communityGoalTarget">0</b></div>
+      <div>Current: <b id="communityGoalCurrent">0</b></div>
+      <div>Remaining: <b id="communityGoalRemaining">0</b></div>
+      <div>Days left: <b id="communityGoalDaysLeft">0</b></div>
+    </div>
+  </div>
+</section>

@@ -263,3 +263,35 @@ class ShopItemIn(BaseModel):
 class ShopItemOut(ShopItemIn):
     id: int
     guild_id: int
+
+
+class CommunityGoalBase(BaseModel):
+    metric_type: str = Field(..., pattern="^(voice_hours|messages)$")
+    target_value: int = Field(..., ge=1, le=10_000_000)
+    starts_at: str
+    ends_at: str
+    reward_role_id: Optional[int] = None
+    min_participation_threshold: int = Field(0, ge=0, le=1_000_000)
+
+
+class CommunityGoalIn(CommunityGoalBase):
+    pass
+
+
+class CommunityGoalUpdate(BaseModel):
+    metric_type: str = Field(..., pattern="^(voice_hours|messages)$")
+    target_value: int = Field(..., ge=1, le=10_000_000)
+    starts_at: str
+    ends_at: str
+    reward_role_id: Optional[int] = None
+    min_participation_threshold: int = Field(0, ge=0, le=1_000_000)
+    status: str = Field("active", pattern="^(active|completed|failed)$")
+
+
+class CommunityGoalOut(CommunityGoalBase):
+    id: int
+    guild_id: int
+    current_value: int
+    status: str
+    created_at: str
+    updated_at: str

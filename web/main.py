@@ -7,6 +7,7 @@ env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 import json
+import datetime as dt
 import time
 from pathlib import Path
 from typing import Any, Dict, List
@@ -23,6 +24,7 @@ from bot.analytics.insights import build_economy_insights
 from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
     Base,
+    CommunityGoal,
     FeatureFlag,
     GuildConfig,
     GuildConfigHistory,
@@ -31,6 +33,7 @@ from bot.database.models import (
     UserProfile,
     Warning,
 )
+from bot.community_goals import CommunityGoalService
 
 from .analytics.behavior import build_behavior_analytics
 from .config import settings
@@ -39,6 +42,9 @@ from .betting import router as betting_router
 from .schemas import (
     BehaviorAnalyticsResponse,
     ChangeHistoryEntry,
+    CommunityGoalIn,
+    CommunityGoalOut,
+    CommunityGoalUpdate,
     EconomyAnalyticsSummaryResponse,
     EconomyInsight,
     EconomySettings,
@@ -164,6 +170,30 @@ def _load_settings(config: GuildConfig) -> Dict[str, Any]:
 
 def _save_settings(config: GuildConfig, settings_map: Dict[str, Any]) -> None:
     config.settings = json.dumps(settings_map)
+
+
+def _parse_iso_datetime(value: str) -> dt.datetime:
+    parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _community_goal_to_schema(goal: CommunityGoal) -> CommunityGoalOut:
+    return CommunityGoalOut(
+        id=goal.id,
+        guild_id=int(goal.guild_id),
+        metric_type=goal.metric_type,
+        target_value=goal.target_value,
+        current_value=goal.current_value,
+        starts_at=goal.starts_at.isoformat() + "Z",
+        ends_at=goal.ends_at.isoformat() + "Z",
+        reward_role_id=goal.reward_role_id,
+        min_participation_threshold=goal.min_participation_threshold,
+        status=goal.status,
+        created_at=goal.created_at.isoformat() + "Z",
+        updated_at=goal.updated_at.isoformat() + "Z",
+    )
 
 
 async def _get_or_create_config(guild_id: int) -> GuildConfig:
@@ -630,6 +660,147 @@ async def get_economy_insights(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return build_economy_insights(analytics=analytics, period_days=period)
+
+
+@app.get("/api/guilds/{guild_id}/community-goal", response_model=CommunityGoalOut | None)
+async def get_community_goal(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> CommunityGoalOut | None:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        service = CommunityGoalService(session)
+        goal = await service.get_active_goal(guild_id)
+        if goal is None:
+            result = await session.execute(
+                select(CommunityGoal)
+                .where(CommunityGoal.guild_id == guild_id)
+                .order_by(CommunityGoal.created_at.desc())
+                .limit(1)
+            )
+            goal = result.scalars().first()
+        if goal is None:
+            return None
+        if goal.status == "active":
+            await service.update_goal_progress(guild_id)
+            await session.commit()
+            await session.refresh(goal)
+        return _community_goal_to_schema(goal)
+
+
+@app.post("/api/guilds/{guild_id}/community-goal", response_model=CommunityGoalOut)
+async def create_community_goal(
+    guild_id: int,
+    payload: CommunityGoalIn,
+    access_token: str = Depends(get_access_token),
+) -> CommunityGoalOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    starts_at = _parse_iso_datetime(payload.starts_at)
+    ends_at = _parse_iso_datetime(payload.ends_at)
+    if ends_at <= starts_at:
+        raise HTTPException(status_code=400, detail="Дата окончания должна быть позже даты начала.")
+
+    async with database.session() as session:
+        service = CommunityGoalService(session)
+        try:
+            goal = await service.create_goal(
+                guild_id=guild_id,
+                metric_type=payload.metric_type,
+                target_value=payload.target_value,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                reward_role_id=payload.reward_role_id,
+                min_participation_threshold=payload.min_participation_threshold,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await session.commit()
+        await session.refresh(goal)
+        return _community_goal_to_schema(goal)
+
+
+@app.put("/api/guilds/{guild_id}/community-goal", response_model=CommunityGoalOut)
+async def update_community_goal(
+    guild_id: int,
+    payload: CommunityGoalUpdate,
+    access_token: str = Depends(get_access_token),
+) -> CommunityGoalOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    starts_at = _parse_iso_datetime(payload.starts_at)
+    ends_at = _parse_iso_datetime(payload.ends_at)
+    if ends_at <= starts_at:
+        raise HTTPException(status_code=400, detail="Дата окончания должна быть позже даты начала.")
+
+    async with database.session() as session:
+        result = await session.execute(
+            select(CommunityGoal)
+            .where(CommunityGoal.guild_id == guild_id)
+            .order_by(CommunityGoal.created_at.desc())
+            .limit(1)
+        )
+        goal = result.scalars().first()
+        if goal is None:
+            raise HTTPException(status_code=404, detail="Цель сообщества не найдена.")
+
+        overlap = await session.execute(
+            select(CommunityGoal).where(
+                (CommunityGoal.guild_id == guild_id)
+                & (CommunityGoal.id != goal.id)
+                & (CommunityGoal.starts_at <= ends_at)
+                & (CommunityGoal.ends_at >= starts_at)
+            )
+        )
+        if overlap.scalars().first() is not None:
+            raise HTTPException(status_code=400, detail="Период цели пересекается с существующей целью.")
+
+        if payload.status == "active":
+            active = await session.execute(
+                select(CommunityGoal).where(
+                    (CommunityGoal.guild_id == guild_id)
+                    & (CommunityGoal.status == "active")
+                    & (CommunityGoal.id != goal.id)
+                )
+            )
+            if active.scalars().first() is not None:
+                raise HTTPException(status_code=400, detail="У сервера уже есть активная цель сообщества.")
+
+        goal.metric_type = payload.metric_type
+        goal.target_value = payload.target_value
+        goal.starts_at = starts_at
+        goal.ends_at = ends_at
+        goal.reward_role_id = payload.reward_role_id
+        goal.min_participation_threshold = payload.min_participation_threshold
+        goal.status = payload.status
+
+        service = CommunityGoalService(session)
+        if goal.status == "active":
+            await service.update_goal_progress(guild_id)
+
+        await session.commit()
+        await session.refresh(goal)
+        return _community_goal_to_schema(goal)
+
+
+@app.post("/api/guilds/{guild_id}/community-goal/evaluate", response_model=CommunityGoalOut | None)
+async def evaluate_community_goal(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> CommunityGoalOut | None:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        service = CommunityGoalService(session)
+        goal = await service.evaluate_goal(guild_id)
+        if goal is None:
+            return None
+        await session.commit()
+        await session.refresh(goal)
+        return _community_goal_to_schema(goal)
 
 
 @app.get("/api/analytics/behavior", response_model=BehaviorAnalyticsResponse)
