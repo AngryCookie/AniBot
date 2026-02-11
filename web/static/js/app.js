@@ -3,6 +3,7 @@ import { initOverview } from "./pages/overview.js";
 import { initLeveling } from "./pages/leveling.js";
 import { initEconomy } from "./pages/economy.js";
 import { initEconomyAnalytics } from "./pages/economy_analytics.js";
+import { initCommunityGoal } from "./pages/community_goal.js";
 
 const appState = {
   guildId: null,
@@ -44,6 +45,11 @@ const routes = {
     title: "Logs",
     page: "/static/pages/logs.html",
     init: () => initSettingsPage("logs"),
+  },
+  "community-goal": {
+    title: "Community Goal",
+    page: "/static/pages/community-goal.html",
+    init: () => initCommunityGoal(appState.guildId),
   },
   "feature-flags": {
     title: "Feature Flags",

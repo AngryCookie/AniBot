@@ -8,10 +8,12 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -243,3 +245,35 @@ class ShadowPenaltyLog(Base):
     reason = Column(Text, default="")
     applied_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class CommunityGoal(Base):
+    __tablename__ = "community_goals"
+    __table_args__ = (
+        Index("ix_community_goals_guild_status", "guild_id", "status"),
+        Index(
+            "uq_community_goals_active_guild",
+            "guild_id",
+            unique=True,
+            postgresql_where=text("status = 'active'"),
+            sqlite_where=text("status = 'active'"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    metric_type = Column(String(32), nullable=False)
+    target_value = Column(Integer, nullable=False)
+    current_value = Column(Integer, default=0, nullable=False)
+    starts_at = Column(DateTime, nullable=False, index=True)
+    ends_at = Column(DateTime, nullable=False, index=True)
+    reward_role_id = Column(BigInteger, nullable=True)
+    min_participation_threshold = Column(Integer, default=0, nullable=False)
+    status = Column(String(16), nullable=False, default="active")
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=dt.datetime.utcnow,
+        onupdate=dt.datetime.utcnow,
+        nullable=False,
+    )
