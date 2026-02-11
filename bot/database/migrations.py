@@ -277,6 +277,104 @@ async def migration_create_referrals(conn: AsyncConnection) -> None:
             "ON referral_usages (guild_id, inviter_user_id)"
         )
     )
+
+
+async def migration_create_referral_core(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                referrer_user_id BIGINT NOT NULL,
+                referred_user_id BIGINT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_referral_link_guild_referred UNIQUE (guild_id, referred_user_id),
+                CONSTRAINT ck_referral_link_not_self CHECK (referrer_user_id != referred_user_id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_links_guild_id ON referral_links (guild_id)"))
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_links_referrer_user_id "
+            "ON referral_links (referrer_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_links_referred_user_id "
+            "ON referral_links (referred_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_links_guild_referrer "
+            "ON referral_links (guild_id, referrer_user_id)"
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_rewards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                referrer_user_id BIGINT NOT NULL,
+                referred_user_id BIGINT NOT NULL,
+                source_type VARCHAR(32) NOT NULL,
+                amount INTEGER NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_guild_id ON referral_rewards (guild_id)"))
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_rewards_guild_referrer "
+            "ON referral_rewards (guild_id, referrer_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_rewards_guild_referred "
+            "ON referral_rewards (guild_id, referred_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_rewards_source_type "
+            "ON referral_rewards (source_type)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_rewards_created_at "
+            "ON referral_rewards (created_at)"
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_settings (
+                guild_id BIGINT PRIMARY KEY,
+                enabled BOOLEAN NOT NULL DEFAULT 0,
+                signup_bonus_referrer INTEGER NOT NULL DEFAULT 0,
+                signup_bonus_referred INTEGER NOT NULL DEFAULT 0,
+                activity_percent FLOAT NOT NULL DEFAULT 0,
+                activity_duration_days INTEGER NOT NULL DEFAULT 30,
+                milestone_level INTEGER NOT NULL DEFAULT 0,
+                milestone_bonus INTEGER NOT NULL DEFAULT 0,
+                max_referrals_per_user INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+    )
+
+
 async def migration_create_server_monthly_goals(conn: AsyncConnection) -> None:
     await conn.execute(
         text(
@@ -332,4 +430,5 @@ MIGRATIONS: List[Migration] = [
     migration_add_monthly_analytics_support,
     migration_create_server_monthly_goals,
     migration_create_referrals,
+    migration_create_referral_core,
 ]
