@@ -55,4 +55,4 @@ class Database:
             yield session
         finally:
             await session.close()
-            self.scoped_session.remove()
+            await self.scoped_session.remove()
