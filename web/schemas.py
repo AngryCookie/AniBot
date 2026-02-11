@@ -48,6 +48,21 @@ class PvpSettings(BaseModel):
     level_influence_percent: int = Field(10, ge=0, le=100)
 
 
+class PvpSeasonRewardRoles(BaseModel):
+    top1_role_id: Optional[int] = None
+    top3_role_id: Optional[int] = None
+    top10_role_id: Optional[int] = None
+
+
+class PvpSeasonSettings(BaseModel):
+    enabled: bool = True
+    season_duration_days: int = Field(30, ge=1, le=365)
+    auto_close_enabled: bool = True
+    announce_channel_id: Optional[int] = None
+    reset_mode: str = Field("hard", pattern="^(hard|soft)$")
+    reward_roles: PvpSeasonRewardRoles = Field(default_factory=PvpSeasonRewardRoles)
+
+
 class ShopSettings(BaseModel):
     enabled: bool = True
     show_out_of_stock: bool = True

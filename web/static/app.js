@@ -133,6 +133,66 @@ const handleSettingsPage = async (page, endpoint) => {
   setupRangeOutputs();
 };
 
+
+const setupPvpPage = async () => {
+  const guildId = getGuildId();
+  if (!guildId) {
+    window.location.href = "/servers.html";
+    return;
+  }
+  updateNavLinks(guildId);
+  setActiveNav("pvp");
+  document.getElementById("guildIdLabel").textContent = `Guild: ${guildId}`;
+
+  const pvpForm = document.getElementById("settingsForm");
+  const resetButton = document.getElementById("resetSettings");
+  const pvpData = await apiFetch(`/api/guilds/${guildId}/pvp`);
+  if (pvpData) fillForm(pvpForm, pvpData);
+
+  pvpForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = formToPayload(pvpForm);
+    await apiFetch(`/api/guilds/${guildId}/pvp`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    alert("Настройки PvP сохранены");
+  });
+
+  resetButton.addEventListener("click", async () => {
+    const confirmed = confirm("Сбросить PvP настройки до значений по умолчанию?");
+    if (!confirmed) return;
+    const resetData = await apiFetch(`/api/guilds/${guildId}/pvp/reset`, { method: "POST" });
+    if (resetData) fillForm(pvpForm, resetData);
+  });
+
+  const seasonForm = document.getElementById("seasonSettingsForm");
+  const seasonData = await apiFetch(`/api/guilds/${guildId}/pvp/season`);
+  if (seasonData) {
+    fillForm(seasonForm, seasonData);
+    fillForm(seasonForm, seasonData.reward_roles || {});
+  }
+
+  seasonForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = formToPayload(seasonForm);
+    payload.reward_roles = {
+      top1_role_id: payload.top1_role_id,
+      top3_role_id: payload.top3_role_id,
+      top10_role_id: payload.top10_role_id,
+    };
+    delete payload.top1_role_id;
+    delete payload.top3_role_id;
+    delete payload.top10_role_id;
+
+    await apiFetch(`/api/guilds/${guildId}/pvp/season`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    alert("Сезонные настройки PvP сохранены");
+  });
+};
+
 const setupOverview = async () => {
   const guildId = getGuildId();
   if (!guildId) {
@@ -310,7 +370,7 @@ const init = () => {
   if (page === "leveling") return handleSettingsPage("leveling", "leveling");
   if (page === "economy") return handleSettingsPage("economy", "economy");
   if (page === "gambling") return handleSettingsPage("gambling", "gambling");
-  if (page === "pvp") return handleSettingsPage("pvp", "pvp");
+  if (page === "pvp") return setupPvpPage();
   if (page === "logs") return handleSettingsPage("logs", "logs");
   if (page === "shop") return setupShop();
 };
