@@ -5,6 +5,7 @@ import datetime as dt
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -326,3 +327,33 @@ class CommunityGoalParticipant(Base):
     user_id = Column(BigInteger, nullable=False, index=True)
     contribution_value = Column(Integer, nullable=False, default=0)
     rewarded = Column(Boolean, nullable=False, default=False)
+
+
+class ServerMonthlyGoal(Base):
+    __tablename__ = "server_monthly_goals"
+    __table_args__ = (
+        Index("ix_server_monthly_goals_guild_month", "guild_id", "month"),
+        Index(
+            "uq_server_monthly_goals_active_guild_month",
+            "guild_id",
+            "month",
+            unique=True,
+            postgresql_where=text("is_active = true"),
+            sqlite_where=text("is_active = 1"),
+        ),
+        CheckConstraint(
+            "metric_type IN ('voice_hours', 'messages', 'bets_volume')",
+            name="ck_server_monthly_goals_metric_type",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    month = Column(String(7), nullable=False, index=True)
+    metric_type = Column(String(32), nullable=False)
+    target_value = Column(Float, nullable=False)
+    reward_role_id = Column(BigInteger, nullable=False)
+    min_user_contribution = Column(Float, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)

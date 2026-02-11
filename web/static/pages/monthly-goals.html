@@ -1,0 +1,47 @@
+<section class="card">
+  <h3>Monthly Goals</h3>
+  <p class="notice">Управление месячной целью сервера и мониторинг прогресса.</p>
+
+  <form id="monthlyGoalForm" class="stack gap-md">
+    <label>Месяц (YYYY-MM)
+      <input type="text" name="month" pattern="\d{4}-\d{2}" required />
+    </label>
+
+    <label>Метрика
+      <select name="metric_type" required>
+        <option value="voice_hours">Voice hours</option>
+        <option value="messages">Messages</option>
+        <option value="bets_volume">Bets volume</option>
+      </select>
+    </label>
+
+    <label>Целевое значение
+      <input type="number" step="0.01" min="0.01" name="target_value" required />
+    </label>
+
+    <label>Reward role ID
+      <input type="number" name="reward_role_id" min="1" required />
+    </label>
+
+    <label>Минимальный вклад пользователя
+      <input type="number" step="0.01" min="0" name="min_user_contribution" value="0" required />
+    </label>
+
+    <label>
+      <input type="checkbox" name="is_active" checked /> Активная цель
+    </label>
+
+    <button type="submit">Сохранить цель</button>
+  </form>
+</section>
+
+<section class="card" id="monthlyGoalProgressPanel">
+  <div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+    <h3 style="margin:0;">Прогресс</h3>
+    <span id="monthlyGoalStatusBadge" class="badge">—</span>
+  </div>
+  <p id="monthlyGoalSummary">Нет данных</p>
+  <div style="height: 10px; width: 100%; background: #24304d; border-radius: 999px; overflow: hidden;">
+    <div id="monthlyGoalProgressBar" style="height: 100%; width: 0%; background: #4f8cff;"></div>
+  </div>
+</section>

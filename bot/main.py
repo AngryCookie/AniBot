@@ -27,6 +27,7 @@ COGS = [
     "bot.cogs.roles",
     "bot.cogs.admin",
     "bot.cogs.scheduler",
+    "bot.cogs.monthly_goals",
     "bot.cogs.observability",
 ]
 

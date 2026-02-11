@@ -303,3 +303,33 @@ class CommunityGoalOut(CommunityGoalBase):
     status: str
     created_at: str
     updated_at: str
+
+
+class MonthlyGoalBase(BaseModel):
+    month: str = Field(..., pattern=r"^\d{4}-\d{2}$")
+    metric_type: str = Field(..., pattern="^(voice_hours|messages|bets_volume)$")
+    target_value: float = Field(..., ge=0.01, le=1_000_000_000)
+    reward_role_id: int
+    min_user_contribution: float = Field(0, ge=0, le=1_000_000_000)
+    is_active: bool = True
+
+
+class MonthlyGoalIn(MonthlyGoalBase):
+    pass
+
+
+class MonthlyGoalUpdate(BaseModel):
+    metric_type: str = Field(..., pattern="^(voice_hours|messages|bets_volume)$")
+    target_value: float = Field(..., ge=0.01, le=1_000_000_000)
+    reward_role_id: int
+    min_user_contribution: float = Field(0, ge=0, le=1_000_000_000)
+    is_active: bool = True
+
+
+class MonthlyGoalOut(MonthlyGoalBase):
+    id: int
+    guild_id: int
+    completed_at: Optional[str] = None
+    created_at: str
+    progress: float = 0.0
+    percent_completed: float = 0.0
