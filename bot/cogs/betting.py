@@ -6,11 +6,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from sqlalchemy import select
-
 from bot.betting import BettingService, core
 from bot.betting.models import BettingMatch, BettingTeam
-from bot.database.models import FeatureFlag, GuildFeatureFlag, UserProfile
+from bot.database.models import UserProfile
+from bot.services.feature_flags import is_feature_enabled
 
 
 BETTING_FLAG_NAME = "betting_enabled"
@@ -32,22 +31,6 @@ def _format_timedelta(delta: dt.timedelta) -> str:
         parts.append(f"{seconds}с")
     return " ".join(parts)
 
-
-async def _is_betting_enabled(session, guild_id: int) -> bool:
-    result = await session.execute(
-        select(GuildFeatureFlag.enabled).where(
-            (GuildFeatureFlag.guild_id == guild_id)
-            & (GuildFeatureFlag.flag_name == BETTING_FLAG_NAME)
-        )
-    )
-    guild_flag = result.scalar()
-    if guild_flag is not None:
-        return bool(guild_flag)
-    result = await session.execute(
-        select(FeatureFlag.enabled).where(FeatureFlag.name == BETTING_FLAG_NAME)
-    )
-    global_flag = result.scalar()
-    return bool(global_flag)
 
 
 class BetConfirmView(discord.ui.View):
@@ -125,7 +108,7 @@ class BetConfirmView(discord.ui.View):
     ) -> None:
         self._disable_buttons()
         async with self.bot.db.session() as session:
-            if not await _is_betting_enabled(session, self.guild_id):
+            if not await is_feature_enabled(session, self.guild_id, BETTING_FLAG_NAME):
                 await interaction.response.edit_message(
                     content="Ставки временно недоступны.", embed=None, view=None
                 )
@@ -177,7 +160,7 @@ class BettingCog(commands.Cog):
             )
             return
         async with self.bot.db.session() as session:
-            if not await _is_betting_enabled(session, interaction.guild.id):
+            if not await is_feature_enabled(session, interaction.guild.id, BETTING_FLAG_NAME):
                 await interaction.response.send_message(
                     "Ставки сейчас отключены. Попробуйте позже.", ephemeral=True
                 )
@@ -236,7 +219,7 @@ class BettingCog(commands.Cog):
             )
             return
         async with self.bot.db.session() as session:
-            if not await _is_betting_enabled(session, interaction.guild.id):
+            if not await is_feature_enabled(session, interaction.guild.id, BETTING_FLAG_NAME):
                 await interaction.response.send_message(
                     "Ставки сейчас отключены. Попробуйте позже.", ephemeral=True
                 )

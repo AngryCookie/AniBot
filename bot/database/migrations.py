@@ -141,9 +141,61 @@ async def migration_create_economy_transactions(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_add_monthly_analytics_support(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS monthly_analytics_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                report_payload JSON NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                autoposted_at DATETIME NULL,
+                CONSTRAINT uq_monthly_analytics_guild_period UNIQUE (guild_id, year, month)
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_monthly_analytics_reports_guild_id "
+            "ON monthly_analytics_reports (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "INSERT OR IGNORE INTO feature_flags (name, enabled, description, created_at, updated_at) "
+            "VALUES (:name, :enabled, :description, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+        {
+            "name": "monthly_reports_enabled",
+            "enabled": 0,
+            "description": "Enable monthly analytics report generation.",
+        },
+    )
+    await conn.execute(
+        text(
+            "INSERT OR IGNORE INTO feature_flags (name, enabled, description, created_at, updated_at) "
+            "VALUES (:name, :enabled, :description, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ),
+        {
+            "name": "monthly_reports_autopost",
+            "enabled": 0,
+            "description": "Enable automatic posting of monthly analytics reports.",
+        },
+    )
+    guild_columns = await conn.execute(text("PRAGMA table_info(guilds)"))
+    guild_column_names = {str(row[1]) for row in guild_columns}
+    if "analytics_channel_id" not in guild_column_names:
+        await conn.execute(text("ALTER TABLE guilds ADD COLUMN analytics_channel_id BIGINT"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
     migration_create_community_goal_participants,
     migration_create_economy_transactions,
+    migration_add_monthly_analytics_support,
 ]

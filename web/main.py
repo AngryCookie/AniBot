@@ -41,6 +41,7 @@ from .config import settings
 from .database import database
 from .betting import router as betting_router
 from .schemas import (
+    AnalyticsMonthlySettings,
     BehaviorAnalyticsResponse,
     ChangeHistoryEntry,
     CommunityGoalIn,
@@ -89,6 +90,8 @@ app.middleware("http")(request_logger())
 _readonly_requests: Dict[str, List[float]] = {}
 READONLY_RATE_LIMIT = 60
 ALLOWED_ANALYTICS_PERIODS = {7, 30, 90}
+MONTHLY_REPORTS_ENABLED_FLAG = "monthly_reports_enabled"
+MONTHLY_REPORTS_AUTOPOST_FLAG = "monthly_reports_autopost"
 
 
 @app.on_event("startup")
@@ -246,6 +249,35 @@ async def _record_config_change(
         session.add(change)
         await session.commit()
 
+
+
+
+async def _upsert_guild_feature_flag(
+    session,
+    *,
+    guild_id: int,
+    flag_name: str,
+    enabled: bool,
+) -> None:
+    result = await session.execute(
+        select(GuildFeatureFlag).where(
+            GuildFeatureFlag.guild_id == guild_id,
+            GuildFeatureFlag.flag_name == flag_name,
+        )
+    )
+    entry = result.scalars().first()
+    if entry is None:
+        entry = GuildFeatureFlag(guild_id=guild_id, flag_name=flag_name, enabled=enabled)
+        session.add(entry)
+        return
+    entry.enabled = enabled
+
+
+async def _ensure_feature_flag_exists(session, *, flag_name: str, description: str) -> None:
+    result = await session.execute(select(FeatureFlag).where(FeatureFlag.name == flag_name))
+    flag = result.scalars().first()
+    if flag is None:
+        session.add(FeatureFlag(name=flag_name, enabled=False, description=description))
 
 def _diff_settings(current: Dict[str, Any], updated: Dict[str, Any]) -> List[Dict[str, Any]]:
     changes = []
@@ -1239,6 +1271,81 @@ async def delete_shop_item(
         await session.delete(item)
         await session.commit()
     return {"status": "deleted"}
+
+
+@app.get("/api/guilds/{guild_id}/analytics/monthly-settings", response_model=AnalyticsMonthlySettings)
+async def get_monthly_analytics_settings(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> AnalyticsMonthlySettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        config_result = await session.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
+        config = config_result.scalars().first()
+
+        result = await session.execute(
+            select(GuildFeatureFlag).where(
+                GuildFeatureFlag.guild_id == guild_id,
+                GuildFeatureFlag.flag_name.in_(
+                    [MONTHLY_REPORTS_ENABLED_FLAG, MONTHLY_REPORTS_AUTOPOST_FLAG]
+                ),
+            )
+        )
+        overrides = {entry.flag_name: bool(entry.enabled) for entry in result.scalars().all()}
+
+    return AnalyticsMonthlySettings(
+        monthly_reports_enabled=overrides.get(MONTHLY_REPORTS_ENABLED_FLAG, False),
+        monthly_reports_autopost=overrides.get(MONTHLY_REPORTS_AUTOPOST_FLAG, False),
+        analytics_channel_id=(int(config.analytics_channel_id) if config and config.analytics_channel_id else None),
+    )
+
+
+@app.put("/api/guilds/{guild_id}/analytics/monthly-settings", response_model=AnalyticsMonthlySettings)
+async def update_monthly_analytics_settings(
+    guild_id: int,
+    payload: AnalyticsMonthlySettings,
+    access_token: str = Depends(get_access_token),
+) -> AnalyticsMonthlySettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        await _ensure_feature_flag_exists(
+            session,
+            flag_name=MONTHLY_REPORTS_ENABLED_FLAG,
+            description="Enable monthly analytics report generation.",
+        )
+        await _ensure_feature_flag_exists(
+            session,
+            flag_name=MONTHLY_REPORTS_AUTOPOST_FLAG,
+            description="Enable automatic posting of monthly analytics reports.",
+        )
+
+        await _upsert_guild_feature_flag(
+            session,
+            guild_id=guild_id,
+            flag_name=MONTHLY_REPORTS_ENABLED_FLAG,
+            enabled=payload.monthly_reports_enabled,
+        )
+        await _upsert_guild_feature_flag(
+            session,
+            guild_id=guild_id,
+            flag_name=MONTHLY_REPORTS_AUTOPOST_FLAG,
+            enabled=payload.monthly_reports_autopost,
+        )
+
+        result = await session.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
+        config = result.scalars().first()
+        if config is None:
+            config = GuildConfig(guild_id=guild_id)
+            session.add(config)
+        config.analytics_channel_id = payload.analytics_channel_id
+
+        await session.commit()
+
+    return payload
 
 
 @app.get("/api/feature-flags", response_model=list[FeatureFlagState])
