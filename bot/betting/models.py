@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy import Enum as SAEnum
 
 from bot.betting.enums import BettingBetStatus, BettingMatchStatus
@@ -20,6 +20,9 @@ class BettingTeam(Base):
 
 class BettingMatch(Base):
     __tablename__ = "betting_matches"
+    __table_args__ = (
+        Index("ix_betting_matches_status_close", "status", "betting_close_at"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     team_a_id = Column(Integer, ForeignKey("betting_teams.id"), nullable=False)
@@ -39,6 +42,10 @@ class BettingMatch(Base):
 
 class BettingBet(Base):
     __tablename__ = "betting_bets"
+    __table_args__ = (
+        Index("ix_betting_bets_match_status", "match_id", "status"),
+        Index("ix_betting_bets_user_id", "user_id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)

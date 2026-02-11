@@ -53,6 +53,10 @@ class Database:
         session = self.scoped_session()
         try:
             yield session
+        except Exception:
+            if session.in_transaction():
+                await session.rollback()
+            raise
         finally:
             await session.close()
             await self.scoped_session.remove()

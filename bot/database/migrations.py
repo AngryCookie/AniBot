@@ -671,6 +671,36 @@ async def migration_create_referral_extended(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_users_guild_user ON users (guild_id, user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_guild_user_created "
+            "ON economy_transactions (guild_id, user_id, created_at)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_betting_matches_status_close "
+            "ON betting_matches (status, betting_close_at)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_betting_bets_match_status "
+            "ON betting_bets (match_id, status)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_betting_bets_user_id ON betting_bets (user_id)"
+        )
+    )
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -681,4 +711,5 @@ MIGRATIONS: List[Migration] = [
     migration_create_referrals,
     migration_create_referral_core,
     migration_create_referral_extended,
+    migration_add_operational_indexes,
 ]

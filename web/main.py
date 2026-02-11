@@ -7,6 +7,7 @@ env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 import json
+import secrets
 import datetime as dt
 import time
 from pathlib import Path
@@ -96,6 +97,7 @@ from .security import (
     fetch_user,
     fetch_user_guilds,
     get_access_token,
+    has_guild_permission,
 )
 from .observability import request_logger, setup_logging
 
@@ -128,14 +130,17 @@ async def root() -> RedirectResponse:
 
 
 @app.get("/auth/login")
-async def login() -> RedirectResponse:
+async def login(request: Request) -> RedirectResponse:
     if not settings.discord_client_id or not settings.discord_redirect_uri:
         raise HTTPException(status_code=500, detail="Discord OAuth not configured")
+    state = secrets.token_urlsafe(32)
+    request.session["oauth_state"] = state
     params = {
         "client_id": settings.discord_client_id,
         "redirect_uri": settings.discord_redirect_uri,
         "response_type": "code",
         "scope": "identify guilds",
+        "state": state,
     }
     query = httpx.QueryParams(params)
     return RedirectResponse(
@@ -144,9 +149,12 @@ async def login() -> RedirectResponse:
 
 
 @app.get("/auth/callback")
-async def auth_callback(request: Request, code: str) -> RedirectResponse:
+async def auth_callback(request: Request, code: str, state: str = "") -> RedirectResponse:
     if not settings.discord_client_secret or not settings.discord_redirect_uri:
         raise HTTPException(status_code=500, detail="Discord OAuth not configured")
+    expected_state = request.session.pop("oauth_state", None)
+    if not expected_state or state != expected_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
     data = {
         "client_id": settings.discord_client_id,
         "client_secret": settings.discord_client_secret,
@@ -255,6 +263,13 @@ async def _get_or_create_config(guild_id: int) -> GuildConfig:
         await session.refresh(config)
         return config
 
+
+
+
+async def _ensure_global_admin(access_token: str) -> None:
+    guilds = await fetch_user_guilds(access_token)
+    if not any(has_guild_permission(guild) for guild in guilds):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 async def _get_actor_id(access_token: str) -> int | None:
     try:
@@ -1506,7 +1521,7 @@ async def update_monthly_analytics_settings(
 async def list_feature_flags(
     access_token: str = Depends(get_access_token),
 ) -> list[FeatureFlagState]:
-    await fetch_user(access_token)
+    await _ensure_global_admin(access_token)
     async with database.session() as session:
         result = await session.execute(select(FeatureFlag).order_by(FeatureFlag.name))
         flags = result.scalars().all()
@@ -1522,7 +1537,7 @@ async def upsert_feature_flag(
     payload: FeatureFlagUpdate,
     access_token: str = Depends(get_access_token),
 ) -> FeatureFlagState:
-    await fetch_user(access_token)
+    await _ensure_global_admin(access_token)
     async with database.session() as session:
         result = await session.execute(
             select(FeatureFlag).where(FeatureFlag.name == flag_name)
