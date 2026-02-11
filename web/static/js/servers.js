@@ -20,9 +20,9 @@ const setupServers = async () => {
       item.className = "card";
       item.innerHTML = `
         <strong>${guild.name}</strong>
-        <div>ID: ${guild.id}</div>
         <div class="footer-actions">
-          <a href="/app.html?guild_id=${guild.id}#/overview">Открыть</a>
+          <a href="/app.html?guild_id=${guild.id}#/overview">Открыть панель</a>
+          <a href="/analytics.html?guild_id=${guild.id}">Analytics</a>
         </div>
       `;
       list.appendChild(item);

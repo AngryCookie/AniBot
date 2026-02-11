@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniBot Admin - Analytics</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+    <script src="/static/analytics.js" defer></script>
+  </head>
+  <body data-page="analytics">
+    <header>
+      <h1>AniBot Web Admin</h1>
+    </header>
+    <main>
+      <div class="notice" id="guildTitle">Аналитика сервера</div>
+      <nav>
+        <a href="/overview.html" data-page="overview">Overview</a>
+        <a href="/leveling.html" data-page="leveling">Leveling</a>
+        <a href="/economy.html" data-page="economy">Economy</a>
+        <a href="/gambling.html" data-page="gambling">Gambling</a>
+        <a href="/shop.html" data-page="shop">Shop</a>
+        <a href="/logs.html" data-page="logs">Logs</a>
+        <a href="/analytics.html" data-page="analytics">Analytics</a>
+      </nav>
+
+      <section class="card">
+        <div class="period-switcher" id="periodSwitcher">
+          <button type="button" class="secondary" data-period="7">7 дней</button>
+          <button type="button" class="secondary is-active" data-period="30">30 дней</button>
+          <button type="button" class="secondary" data-period="90">90 дней</button>
+        </div>
+      </section>
+
+      <div class="loading-state hidden" id="analyticsLoading">Загрузка аналитики...</div>
+      <div class="notice hidden" id="analyticsEmpty">Нет данных за выбранный период.</div>
+      <div class="notice hidden" id="analyticsError"></div>
+
+      <section class="grid analytics-kpi" id="kpiGrid">
+        <article class="stat">
+          Валюта в обороте
+          <span id="kpiCirculation">—</span>
+        </article>
+        <article class="stat">
+          Всего заработано
+          <span id="kpiEarned">—</span>
+        </article>
+        <article class="stat">
+          Всего потрачено
+          <span id="kpiSpent">—</span>
+        </article>
+        <article class="stat">
+          Объём ставок
+          <span id="kpiBets">—</span>
+        </article>
+        <article class="stat">
+          Net house
+          <span id="kpiHouse">—</span>
+        </article>
+        <article class="stat">
+          Сообщения
+          <span id="kpiMessages">—</span>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Economy Chart</h2>
+        <div class="chart-wrap"><canvas id="economyChart" aria-label="Economy chart"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>Betting Chart</h2>
+        <div class="chart-wrap"><canvas id="bettingChart" aria-label="Betting chart"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>Activity Chart</h2>
+        <div class="chart-wrap"><canvas id="activityChart" aria-label="Activity chart"></canvas></div>
+      </section>
+
+      <section>
+        <a href="/servers.html"><button class="secondary">Сменить сервер</button></a>
+      </section>
+    </main>
+  </body>
+</html>
