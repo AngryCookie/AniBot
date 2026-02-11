@@ -71,6 +71,7 @@ from .schemas import (
     LevelingSettings,
     LogsSettings,
     OverviewStats,
+    PvpSettings,
     PresetOut,
     ReferralDashboardStats,
     ReferralPromoCodeIn,
@@ -548,6 +549,14 @@ PRESETS: Dict[str, Dict[str, Any]] = {
                 "house_edge_percent": 6.0,
                 "streak_bonus": False,
             },
+            "pvp": {
+                "enabled": True,
+                "min_bet": 50,
+                "max_bet": 2500,
+                "fee_percent": 5.0,
+                "cooldown_seconds": 30,
+                "influence_level_weight": 1.0,
+            },
             "shop": {
                 "enabled": True,
                 "show_out_of_stock": True,
@@ -707,6 +716,7 @@ gambling_get, gambling_put, gambling_reset = _category_routes(
 )
 shop_get, shop_put, shop_reset = _category_routes("shop", ShopSettings)
 logs_get, logs_put, logs_reset = _category_routes("logs", LogsSettings)
+pvp_get, pvp_put, pvp_reset = _category_routes("pvp", PvpSettings)
 feature_get, feature_put, feature_reset = _category_routes(
     "feature_toggles", FeatureToggles
 )
@@ -1114,6 +1124,10 @@ app.post("/api/guilds/{guild_id}/shop/reset", response_model=ShopSettings)(shop_
 app.get("/api/guilds/{guild_id}/logs", response_model=LogsSettings)(logs_get)
 app.put("/api/guilds/{guild_id}/logs", response_model=LogsSettings)(logs_put)
 app.post("/api/guilds/{guild_id}/logs/reset", response_model=LogsSettings)(logs_reset)
+
+app.get("/api/guilds/{guild_id}/pvp", response_model=PvpSettings)(pvp_get)
+app.put("/api/guilds/{guild_id}/pvp", response_model=PvpSettings)(pvp_put)
+app.post("/api/guilds/{guild_id}/pvp/reset", response_model=PvpSettings)(pvp_reset)
 
 app.get("/api/guilds/{guild_id}/feature-toggles", response_model=FeatureToggles)(
     feature_get

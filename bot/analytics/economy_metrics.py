@@ -6,7 +6,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
-from bot.database.models import EconomyLedger, EconomyTransaction, UserProfile
+from bot.database.models import EconomyLedger, EconomyTransaction, PvpDuel, UserProfile
 
 SUPPORTED_PERIODS = {7, 30, 90}
 
@@ -72,6 +72,49 @@ async def get_economy_metrics(session: AsyncSession, guild_id: int, period_days:
     )
     balances = [int(balance or 0) for (balance,) in balances_result.all()]
 
+    pvp_result = await session.execute(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (EconomyTransaction.source == "pvp_duel_lock")
+                            & (EconomyTransaction.amount < 0),
+                            -EconomyTransaction.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("lock_volume"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (EconomyTransaction.source == "pvp_duel_payout")
+                            & (EconomyTransaction.amount > 0),
+                            EconomyTransaction.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("payout_volume"),
+        ).where(
+            (EconomyTransaction.guild_id == guild_id)
+            & (EconomyTransaction.created_at >= cutoff)
+        )
+    )
+    pvp_row = pvp_result.one()
+
+    duel_count_result = await session.execute(
+        select(func.count(PvpDuel.id)).where(
+            (PvpDuel.guild_id == guild_id)
+            & (PvpDuel.created_at >= cutoff)
+        )
+    )
+    pvp_duel_count = int(duel_count_result.scalar() or 0)
+
     top_result = await session.execute(
         select(UserProfile.user_id, UserProfile.balance)
         .where(UserProfile.guild_id == guild_id)
@@ -83,12 +126,19 @@ async def get_economy_metrics(session: AsyncSession, guild_id: int, period_days:
         for user_id, balance in top_result.all()
     ]
 
+    total_pvp_volume = int((pvp_row.lock_volume or 0) // 2)
+    total_pvp_payout = int(pvp_row.payout_volume or 0)
+    total_pvp_fees_burned = max(int((pvp_row.lock_volume or 0) - total_pvp_payout), 0)
+
     return {
         "total_currency_in_circulation": total_currency_in_circulation,
         "total_earned": int(flow_row.total_earned or 0),
         "total_spent": int(flow_row.total_spent or 0),
         "median_balance": _median(balances),
         "top_balances": top_balances,
+        "total_pvp_volume": total_pvp_volume,
+        "total_pvp_fees_burned": total_pvp_fees_burned,
+        "pvp_duel_count": pvp_duel_count,
     }
 
 

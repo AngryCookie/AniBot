@@ -310,6 +310,7 @@ const init = () => {
   if (page === "leveling") return handleSettingsPage("leveling", "leveling");
   if (page === "economy") return handleSettingsPage("economy", "economy");
   if (page === "gambling") return handleSettingsPage("gambling", "gambling");
+  if (page === "pvp") return handleSettingsPage("pvp", "pvp");
   if (page === "logs") return handleSettingsPage("logs", "logs");
   if (page === "shop") return setupShop();
 };

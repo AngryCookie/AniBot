@@ -442,3 +442,23 @@ class ReferralSettings(Base):
     milestone_level = Column(Integer, nullable=False, default=0)
     milestone_bonus = Column(Integer, nullable=False, default=0)
     max_referrals_per_user = Column(Integer, nullable=False, default=0)
+
+
+class PvpDuel(Base):
+    __tablename__ = "pvp_duels"
+    __table_args__ = (
+        Index("ix_pvp_duels_guild_status", "guild_id", "status"),
+        Index("ix_pvp_duels_challenger_status", "challenger_id", "status"),
+        Index("ix_pvp_duels_opponent_status", "opponent_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    challenger_id = Column(BigInteger, nullable=False, index=True)
+    opponent_id = Column(BigInteger, nullable=False, index=True)
+    amount = Column(Integer, nullable=False)
+    fee_percent = Column(Float, nullable=False, default=0.0)
+    winner_id = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    status = Column(String(16), nullable=False, default="pending")

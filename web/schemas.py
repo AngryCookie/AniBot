@@ -39,6 +39,15 @@ class GamblingSettings(BaseModel):
     streak_bonus: bool = False
 
 
+class PvpSettings(BaseModel):
+    enabled: bool = True
+    min_bet: int = Field(10, ge=1, le=100000)
+    max_bet: int = Field(5000, ge=1, le=1000000)
+    fee_percent: float = Field(5.0, ge=0, le=50)
+    cooldown_seconds: int = Field(30, ge=0, le=3600)
+    influence_level_weight: float = Field(1.0, ge=0, le=10)
+
+
 class ShopSettings(BaseModel):
     enabled: bool = True
     show_out_of_stock: bool = True
