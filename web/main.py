@@ -21,6 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from bot.analytics.economy import build_economy_analytics
 from bot.analytics.insights import build_economy_insights
+from bot.analytics.service import AnalyticsService
 from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
     Base,
@@ -87,6 +88,7 @@ app.middleware("http")(request_logger())
 
 _readonly_requests: Dict[str, List[float]] = {}
 READONLY_RATE_LIMIT = 60
+ALLOWED_ANALYTICS_PERIODS = {7, 30, 90}
 
 
 @app.on_event("startup")
@@ -660,6 +662,55 @@ async def get_economy_insights(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return build_economy_insights(analytics=analytics, period_days=period)
+
+
+def _validate_analytics_period(period: int) -> int:
+    if period not in ALLOWED_ANALYTICS_PERIODS:
+        raise HTTPException(
+            status_code=400,
+            detail="Допустимые значения period: 7, 30, 90.",
+        )
+    return period
+
+
+@app.get("/api/guilds/{guild_id}/analytics/overview")
+async def get_guild_analytics_overview(
+    guild_id: int,
+    period: int = 30,
+    access_token: str = Depends(get_access_token),
+) -> Dict[str, Any]:
+    period_days = _validate_analytics_period(period)
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    analytics_service = AnalyticsService(database)
+    analytics = await analytics_service.get_full_analytics(
+        guild_id=guild_id,
+        period_days=period_days,
+    )
+    return {
+        "economy": analytics["economy"],
+        "betting": analytics["betting"],
+        "activity": analytics["activity"],
+    }
+
+
+@app.get("/api/guilds/{guild_id}/analytics/timeseries")
+async def get_guild_analytics_timeseries(
+    guild_id: int,
+    period: int = 30,
+    access_token: str = Depends(get_access_token),
+) -> Dict[str, Any]:
+    period_days = _validate_analytics_period(period)
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    analytics_service = AnalyticsService(database)
+    analytics = await analytics_service.get_full_analytics(
+        guild_id=guild_id,
+        period_days=period_days,
+    )
+    return analytics["timeseries"]
 
 
 @app.get("/api/guilds/{guild_id}/community-goal", response_model=CommunityGoalOut | None)
