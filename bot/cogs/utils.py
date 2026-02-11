@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from typing import Any, Dict, Optional
 
 import discord
@@ -106,24 +107,88 @@ async def get_or_create_log_settings(session, guild_id: int) -> GuildLogSettings
     return settings
 
 
+class HelpView(discord.ui.View):
+    def __init__(self, cog: "UtilityCog", *, admin: bool, web_url: str | None = None):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.admin = admin
+        self.web_url = web_url
+        if admin and web_url:
+            self.add_item(discord.ui.Button(label="Открыть панель", style=discord.ButtonStyle.link, url=web_url))
+
+    async def _send_section(self, interaction: discord.Interaction, section: str) -> None:
+        await self.cog._send_help_section(interaction, section, as_followup=True)
+
+    @discord.ui.button(label="Модерация", style=discord.ButtonStyle.secondary)
+    async def moderation(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        embed = discord.Embed(title="🛡️ Модерация", description="/warn /mute /kick /ban /purge", color=discord.Color.orange())
+        embed.set_footer(text="Срок действия кнопок: 60с")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="Экономика", style=discord.ButtonStyle.secondary)
+    async def economy(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self._send_section(interaction, "economy")
+
+    @discord.ui.button(label="PvP", style=discord.ButtonStyle.secondary)
+    async def pvp(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self._send_section(interaction, "pvp")
+
+    @discord.ui.button(label="Ставки", style=discord.ButtonStyle.secondary)
+    async def bets(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self._send_section(interaction, "bets")
+
+
 class UtilityCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @app_commands.command(name="help", description="Список команд бота")
-    async def help_command(self, interaction: discord.Interaction) -> None:
+    async def help_command(self, interaction: discord.Interaction, section: str | None = None) -> None:
+        section = (section or "").lower().strip()
+        if section in {"economy", "pvp", "bets", "shop", "leveling"}:
+            await self._send_help_section(interaction, section)
+            return
+        is_admin = isinstance(interaction.user, discord.Member) and (
+            interaction.user.guild_permissions.administrator
+            or interaction.user.guild_permissions.moderate_members
+        )
         embed = discord.Embed(
-            title="AniBot — помощь",
-            description="Полный список команд доступен по категориям в README.",
+            title="📘 AniBot — помощь",
+            description="Выберите раздел кнопками ниже или используйте `/help <раздел>`.",
             color=discord.Color.blurple(),
         )
-        embed.add_field(name="Базовые", value="/help /ping /about /settings", inline=False)
-        embed.add_field(name="Модерация", value="/warn /mute /kick /ban /purge и др.", inline=False)
-        embed.add_field(name="Экономика", value="/balance /daily /transfer /economy", inline=False)
-        embed.add_field(name="Левелинг", value="/rank /leaderboard /level", inline=False)
-        embed.add_field(name="Магазин", value="/shop", inline=False)
-        embed.add_field(name="Гемблинг", value="/coinflip /dice /roulette", inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        if is_admin:
+            web_url = os.getenv("WEB_BASE_URL", "https://example.com/admin")
+            embed.add_field(name="🛡️ Админ-команды", value="/warn /mute /kick /ban /purge /settings", inline=False)
+            embed.add_field(name="⚙️ Системные", value="/help /ping /about /announce /topic", inline=False)
+            embed.add_field(name="🌐 Веб-панель", value=web_url, inline=False)
+            view = HelpView(self, admin=True, web_url=web_url)
+            embed.set_footer(text="Срок действия кнопок: 60с")
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            return
+        embed.add_field(name="👤 Пользователь", value="/balance /daily /transfer /shop /bets /pvp /rank", inline=False)
+        embed.add_field(name="💡 Быстрые действия", value="Получить daily, проверить магазин, поставить ставку, дуэль PvP", inline=False)
+        embed.set_footer(text="Срок действия кнопок: 60с")
+        view = HelpView(self, admin=False)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _send_help_section(self, interaction: discord.Interaction, section: str, as_followup: bool = False) -> None:
+        mapping = {
+            "economy": ("💰 Экономика", "/balance /daily /transfer", "Начните с /balance, затем /daily и /shop list."),
+            "pvp": ("⚔️ PvP", "/pvp /pvp-top /pvp-stats /pvp_season", "Вызовите игрока через /pvp и дождитесь подтверждения."),
+            "bets": ("🎯 Ставки", "/bets /bet", "Выберите матч, команду и подтвердите ставку."),
+            "shop": ("🛒 Магазин", "/shop list /shop info /shop buy", "Используйте кнопки в /shop list для покупки."),
+            "leveling": ("📈 Левелинг", "/rank /leaderboard /level", "Общайтесь в чате, чтобы получать опыт."),
+        }
+        title, cmds, hint = mapping[section]
+        embed = discord.Embed(title=title, color=discord.Color.blurple())
+        embed.add_field(name="Команды", value=cmds, inline=False)
+        embed.add_field(name="Что дальше", value=hint, inline=False)
+        embed.set_footer(text="Срок действия кнопок: 60с")
+        if as_followup:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="ping", description="Проверка задержки")
     async def ping(self, interaction: discord.Interaction) -> None:
@@ -154,7 +219,6 @@ class UtilityCog(commands.Cog):
             value="Включен" if settings.get("leveling_enabled", True) else "Выключен",
             inline=False,
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="announce", description="Отправить объявление")
     @app_commands.checks.has_permissions(manage_guild=True)
