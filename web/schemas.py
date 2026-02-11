@@ -231,6 +231,14 @@ class ChangeHistoryEntry(BaseModel):
     created_at: str
 
 
+
+
+class AnalyticsMonthlySettings(BaseModel):
+    monthly_reports_enabled: bool = False
+    monthly_reports_autopost: bool = False
+    analytics_channel_id: Optional[int] = None
+
+
 class FeatureFlagState(BaseModel):
     name: str
     enabled: bool

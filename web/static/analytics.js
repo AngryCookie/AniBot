@@ -15,6 +15,7 @@ const state = {
     betting: null,
     activity: null,
   },
+  monthlySettingsSaveTimer: null,
 };
 
 const apiFetch = async (url, options = {}) => {
@@ -268,6 +269,67 @@ const renderActivityChart = (timeseries) => {
   });
 };
 
+
+
+const getMonthlySettingsPayload = () => {
+  const enabledNode = document.getElementById("monthlyReportsEnabled");
+  const autopostNode = document.getElementById("monthlyReportsAutopost");
+  const channelNode = document.getElementById("analyticsChannelId");
+  const rawChannel = channelNode?.value?.trim?.() ?? "";
+
+  return {
+    monthly_reports_enabled: Boolean(enabledNode?.checked),
+    monthly_reports_autopost: Boolean(autopostNode?.checked),
+    analytics_channel_id: rawChannel === "" ? null : Number(rawChannel),
+  };
+};
+
+const showMonthlySaved = () => {
+  const node = document.getElementById("monthlySettingsSaved");
+  if (!node) return;
+  setVisibility(node, true);
+  window.setTimeout(() => setVisibility(node, false), 1200);
+};
+
+const saveMonthlySettings = async () => {
+  try {
+    await apiFetch(`/api/guilds/${state.guildId}/analytics/monthly-settings`, {
+      method: "PUT",
+      body: JSON.stringify(getMonthlySettingsPayload()),
+    });
+    showMonthlySaved();
+  } catch (error) {
+    showError(error.message || "Не удалось сохранить monthly-настройки");
+  }
+};
+
+const queueMonthlySettingsSave = () => {
+  if (state.monthlySettingsSaveTimer) {
+    window.clearTimeout(state.monthlySettingsSaveTimer);
+  }
+  state.monthlySettingsSaveTimer = window.setTimeout(saveMonthlySettings, 250);
+};
+
+const initMonthlySettings = async () => {
+  const enabledNode = document.getElementById("monthlyReportsEnabled");
+  const autopostNode = document.getElementById("monthlyReportsAutopost");
+  const channelNode = document.getElementById("analyticsChannelId");
+  if (!enabledNode || !autopostNode || !channelNode) return;
+
+  try {
+    const settings = await apiFetch(`/api/guilds/${state.guildId}/analytics/monthly-settings`);
+    enabledNode.checked = Boolean(settings?.monthly_reports_enabled);
+    autopostNode.checked = Boolean(settings?.monthly_reports_autopost);
+    channelNode.value = settings?.analytics_channel_id ?? "";
+  } catch (error) {
+    showError(error.message || "Не удалось загрузить monthly-настройки");
+  }
+
+  enabledNode.addEventListener("change", queueMonthlySettingsSave);
+  autopostNode.addEventListener("change", queueMonthlySettingsSave);
+  channelNode.addEventListener("input", queueMonthlySettingsSave);
+};
+
 const hasTimeseriesData = (timeseries) => {
   const sources = [
     timeseries?.economy?.daily_earned,
@@ -337,6 +399,7 @@ const init = async () => {
   updatePeriodTitle();
 
   setupPeriodButtons();
+  await initMonthlySettings();
   await loadAnalytics();
 };
 

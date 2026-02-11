@@ -28,6 +28,7 @@ class GuildConfig(Base):
     guild_id = Column(BigInteger, primary_key=True)
     server_rate = Column(Float, default=1.0)
     currency_name = Column(String(64), default="Coins")
+    analytics_channel_id = Column(BigInteger, nullable=True)
     settings = Column(Text, default="{}")
 
 
@@ -234,6 +235,21 @@ class GuildFeatureFlag(Base):
     flag_name = Column(String(64), nullable=False)
     enabled = Column(Boolean, default=False)
     updated_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class MonthlyAnalyticsReport(Base):
+    __tablename__ = "monthly_analytics_reports"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "year", "month", name="uq_monthly_analytics_guild_period"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    report_payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    autoposted_at = Column(DateTime, nullable=True)
 
 
 class UserTrustProfile(Base):

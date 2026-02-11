@@ -32,6 +32,26 @@
         </div>
       </section>
 
+
+      <section class="card">
+        <h2>Monthly Reports</h2>
+        <div class="form-grid">
+          <label class="field-inline">
+            <input type="checkbox" id="monthlyReportsEnabled" />
+            <span>Enable Monthly Reports</span>
+          </label>
+          <label class="field-inline">
+            <input type="checkbox" id="monthlyReportsAutopost" />
+            <span>Enable Autopost</span>
+          </label>
+          <label>
+            Analytics Channel ID
+            <input type="number" id="analyticsChannelId" placeholder="Например, 123456789012345678" />
+          </label>
+        </div>
+        <div class="notice hidden" id="monthlySettingsSaved">Настройки сохранены.</div>
+      </section>
+
       <div class="loading-state hidden" id="analyticsLoading">Загрузка аналитики...</div>
       <div class="notice hidden" id="analyticsEmpty">Нет данных за выбранный период.</div>
       <div class="notice hidden" id="analyticsError"></div>
