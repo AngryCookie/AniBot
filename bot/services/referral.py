@@ -10,10 +10,25 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import ReferralCode, ReferralUsage
+from bot.database.models import (
+    ReferralCode,
+    ReferralLink,
+    ReferralReward,
+    ReferralSettings,
+    ReferralUsage,
+)
 from bot.services.economy import EconomyService
 
 logger = logging.getLogger(__name__)
+
+
+
+
+@dataclass
+class ReferralCreateResult:
+    link_id: int
+    signup_referrer_amount: int
+    signup_referred_amount: int
 
 
 @dataclass
@@ -37,6 +52,203 @@ class ReferralService:
         self.session = session
         self.inviter_reward_multiplier = inviter_reward_multiplier
         self.invited_reward_multiplier = invited_reward_multiplier
+
+    async def create_referral(
+        self,
+        guild_id: int,
+        referrer_user_id: int,
+        referred_user_id: int,
+    ) -> ReferralCreateResult:
+        if referrer_user_id == referred_user_id:
+            raise ValueError("Self-referral is not allowed.")
+
+        async def operation() -> ReferralCreateResult:
+            settings = await self._get_or_create_settings_locked(guild_id)
+            if not settings.enabled:
+                raise ValueError("Referral system is disabled for this guild.")
+
+            existing_referral = await self.session.execute(
+                select(ReferralLink)
+                .where(
+                    ReferralLink.guild_id == guild_id,
+                    ReferralLink.referred_user_id == referred_user_id,
+                )
+                .with_for_update()
+            )
+            if existing_referral.scalars().first() is not None:
+                raise ValueError("User has already been referred in this guild.")
+
+            if settings.max_referrals_per_user > 0:
+                referrer_count = await self.session.scalar(
+                    select(func.count())
+                    .select_from(ReferralLink)
+                    .where(
+                        ReferralLink.guild_id == guild_id,
+                        ReferralLink.referrer_user_id == referrer_user_id,
+                    )
+                )
+                if int(referrer_count or 0) >= settings.max_referrals_per_user:
+                    raise ValueError("Referrer reached max_referrals_per_user limit.")
+
+            link = ReferralLink(
+                guild_id=guild_id,
+                referrer_user_id=referrer_user_id,
+                referred_user_id=referred_user_id,
+            )
+            self.session.add(link)
+            try:
+                await self.session.flush()
+            except IntegrityError as exc:
+                raise ValueError("Referral already exists for this referred user.") from exc
+
+            referrer_amount, referred_amount = await self.handle_signup_bonus(
+                guild_id=guild_id,
+                referrer_user_id=referrer_user_id,
+                referred_user_id=referred_user_id,
+                settings=settings,
+            )
+
+            logger.info(
+                "Создана реферальная связь guild_id=%s referrer=%s referred=%s signup_referrer=%s signup_referred=%s",
+                guild_id,
+                referrer_user_id,
+                referred_user_id,
+                referrer_amount,
+                referred_amount,
+            )
+
+            return ReferralCreateResult(
+                link_id=int(link.id),
+                signup_referrer_amount=referrer_amount,
+                signup_referred_amount=referred_amount,
+            )
+
+        if self.session.in_transaction():
+            return await operation()
+        async with self.session.begin():
+            return await operation()
+
+    async def handle_signup_bonus(
+        self,
+        *,
+        guild_id: int,
+        referrer_user_id: int,
+        referred_user_id: int,
+        settings: ReferralSettings | None = None,
+    ) -> tuple[int, int]:
+        resolved_settings = settings or await self._get_or_create_settings_locked(guild_id)
+        if not resolved_settings.enabled:
+            return 0, 0
+
+        economy = EconomyService(self.session)
+        referrer_amount = max(0, int(resolved_settings.signup_bonus_referrer or 0))
+        referred_amount = max(0, int(resolved_settings.signup_bonus_referred or 0))
+
+        if referrer_amount > 0:
+            await economy.credit(
+                guild_id=guild_id,
+                user_id=referrer_user_id,
+                amount=referrer_amount,
+                source="referral_signup_referrer",
+                metadata={"referred_user_id": referred_user_id},
+                ledger_type="referral_reward",
+            )
+            self.session.add(
+                ReferralReward(
+                    guild_id=guild_id,
+                    referrer_user_id=referrer_user_id,
+                    referred_user_id=referred_user_id,
+                    source_type="signup_referrer",
+                    amount=referrer_amount,
+                )
+            )
+
+        if referred_amount > 0:
+            await economy.credit(
+                guild_id=guild_id,
+                user_id=referred_user_id,
+                amount=referred_amount,
+                source="referral_signup_referred",
+                metadata={"referrer_user_id": referrer_user_id},
+                ledger_type="referral_reward",
+            )
+            self.session.add(
+                ReferralReward(
+                    guild_id=guild_id,
+                    referrer_user_id=referrer_user_id,
+                    referred_user_id=referred_user_id,
+                    source_type="signup_referred",
+                    amount=referred_amount,
+                )
+            )
+
+        return referrer_amount, referred_amount
+
+    async def handle_activity_bonus(
+        self,
+        *,
+        guild_id: int,
+        referrer_user_id: int,
+        referred_user_id: int,
+        activity_amount: int,
+    ) -> int:
+        if activity_amount <= 0:
+            return 0
+
+        settings = await self._get_or_create_settings_locked(guild_id)
+        if not settings.enabled:
+            return 0
+
+        percent = float(settings.activity_percent or 0.0)
+        if percent <= 0:
+            return 0
+
+        bonus = int(activity_amount * percent)
+        if bonus <= 0:
+            return 0
+
+        economy = EconomyService(self.session)
+        await economy.credit(
+            guild_id=guild_id,
+            user_id=referrer_user_id,
+            amount=bonus,
+            source="referral_activity_referrer",
+            metadata={
+                "referred_user_id": referred_user_id,
+                "activity_amount": activity_amount,
+                "activity_percent": percent,
+            },
+            ledger_type="referral_reward",
+        )
+        self.session.add(
+            ReferralReward(
+                guild_id=guild_id,
+                referrer_user_id=referrer_user_id,
+                referred_user_id=referred_user_id,
+                source_type="activity_referrer",
+                amount=bonus,
+            )
+        )
+        return bonus
+
+    async def _get_or_create_settings_locked(self, guild_id: int) -> ReferralSettings:
+        result = await self.session.execute(
+            select(ReferralSettings).where(ReferralSettings.guild_id == guild_id).with_for_update()
+        )
+        settings = result.scalars().first()
+        if settings is not None:
+            return settings
+
+        settings = ReferralSettings(guild_id=guild_id)
+        self.session.add(settings)
+        await self.session.flush()
+        result = await self.session.execute(
+            select(ReferralSettings).where(ReferralSettings.guild_id == guild_id).with_for_update()
+        )
+        resolved = result.scalars().first()
+        if resolved is None:
+            raise RuntimeError("Failed to initialize referral settings.")
+        return resolved
 
     async def create_referral_code(
         self,

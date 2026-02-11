@@ -390,3 +390,49 @@ class ReferralUsage(Base):
     invited_user_id = Column(BigInteger, nullable=False)
     reward_amount = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+
+
+class ReferralLink(Base):
+    __tablename__ = "referral_links"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "referred_user_id", name="uq_referral_link_guild_referred"),
+        CheckConstraint("referrer_user_id != referred_user_id", name="ck_referral_link_not_self"),
+        Index("ix_referral_links_guild_referrer", "guild_id", "referrer_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    referrer_user_id = Column(BigInteger, nullable=False, index=True)
+    referred_user_id = Column(BigInteger, nullable=False, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class ReferralReward(Base):
+    __tablename__ = "referral_rewards"
+    __table_args__ = (
+        Index("ix_referral_rewards_guild_referrer", "guild_id", "referrer_user_id"),
+        Index("ix_referral_rewards_guild_referred", "guild_id", "referred_user_id"),
+        Index("ix_referral_rewards_source_type", "source_type"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    referrer_user_id = Column(BigInteger, nullable=False)
+    referred_user_id = Column(BigInteger, nullable=False)
+    source_type = Column(String(32), nullable=False)
+    amount = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+
+
+class ReferralSettings(Base):
+    __tablename__ = "referral_settings"
+
+    guild_id = Column(BigInteger, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    signup_bonus_referrer = Column(Integer, nullable=False, default=0)
+    signup_bonus_referred = Column(Integer, nullable=False, default=0)
+    activity_percent = Column(Float, nullable=False, default=0.0)
+    activity_duration_days = Column(Integer, nullable=False, default=30)
+    milestone_level = Column(Integer, nullable=False, default=0)
+    milestone_bonus = Column(Integer, nullable=False, default=0)
+    max_referrals_per_user = Column(Integer, nullable=False, default=0)
