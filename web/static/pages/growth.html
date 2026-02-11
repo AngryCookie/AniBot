@@ -5,10 +5,22 @@
 
 <section class="card">
   <div class="card-header">
-    <h4>Growth Management</h4>
+    <h4>Overview</h4>
+    <div class="period-switcher" id="growthRangeSwitch">
+      <button type="button" class="secondary is-active" data-growth-range="7d">7d</button>
+      <button type="button" class="secondary" data-growth-range="30d">30d</button>
+      <button type="button" class="secondary" data-growth-range="90d">90d</button>
+    </div>
+  </div>
+  <div class="grid" id="growthKpi"></div>
+  <div class="grid two-columns" id="growthOverview"></div>
+</section>
+
+<section class="card">
+  <div class="card-header">
+    <h4>Referrals</h4>
   </div>
 
-  <h5>Настройки реферальной кампании</h5>
   <form id="growthReferralForm" class="settings-form">
     <div class="grid two-columns">
       <label class="setting">
@@ -40,16 +52,30 @@
         Макс. наград на пользователя
         <input class="input-field" type="number" name="max_rewards_per_user" min="0" step="1" />
       </label>
+      <label>
+        Мин. возраст аккаунта (дней)
+        <input class="input-field" type="number" name="referral_min_account_age_days" min="0" step="1" />
+      </label>
+      <label>
+        Мин. сообщений до награды
+        <input class="input-field" type="number" name="referral_min_messages" min="0" step="1" />
+      </label>
+      <label>
+        Кулдаун промо (часы)
+        <input class="input-field" type="number" name="promo_cooldown_hours" min="0" step="1" />
+      </label>
     </div>
     <div class="footer-actions">
       <button type="submit">Сохранить настройки</button>
     </div>
   </form>
 
-  <hr />
+  <div class="card" id="growthReferralsStats"></div>
+</section>
 
+<section class="card">
   <div class="card-header">
-    <h5>Промо-коды</h5>
+    <h4>Promos</h4>
     <button type="button" id="growthOpenPromoModal">Создать промо-код</button>
   </div>
   <table class="data-table">
@@ -67,21 +93,21 @@
     </thead>
     <tbody id="growthPromoBody"></tbody>
   </table>
+  <div class="card" id="growthPromoStats"></div>
+</section>
 
-  <hr />
-
+<section class="card">
   <div class="card-header">
-    <h5>Growth Overview</h5>
-    <div class="period-switcher" id="growthRangeSwitch">
-      <button type="button" class="secondary is-active" data-growth-range="7d">7d</button>
-      <button type="button" class="secondary" data-growth-range="30d">30d</button>
-      <button type="button" class="secondary" data-growth-range="90d">90d</button>
-    </div>
+    <h4>Leaderboard</h4>
   </div>
+  <div class="card" id="growthTopReferrers"></div>
+  <div class="card" id="growthMostUsedPromo"></div>
+</section>
 
-  <div class="grid" id="growthKpi"></div>
-  <div class="grid two-columns" id="growthOverview"></div>
-
+<section class="card">
+  <div class="card-header">
+    <h4>Динамика</h4>
+  </div>
   <div class="grid two-columns">
     <div class="chart-card">
       <h6>Регистрации (по дням)</h6>
@@ -100,10 +126,7 @@
       <div class="bar-chart" id="growthRewardsChart"></div>
     </div>
   </div>
-
   <div class="card" id="growthRecommendations"></div>
-  <div class="card" id="growthTopReferrers"></div>
-  <div class="card" id="growthMostUsedPromo"></div>
 </section>
 
 <div class="modal-backdrop hidden" id="growthPromoModal" role="dialog" aria-modal="true" aria-labelledby="growthPromoTitle">
