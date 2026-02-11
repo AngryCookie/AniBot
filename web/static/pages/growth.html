@@ -1,0 +1,121 @@
+<section class="page-header">
+  <h3>Growth</h3>
+  <p class="notice">Управление реферальной кампанией, промо-кодами и аналитикой роста.</p>
+</section>
+
+<section class="card">
+  <div class="card-header">
+    <h4>Growth Management</h4>
+  </div>
+
+  <h5>Настройки реферальной кампании</h5>
+  <form id="growthReferralForm" class="settings-form">
+    <div class="grid two-columns">
+      <label class="setting">
+        <div class="setting-row">
+          <span class="setting-title">Кампания включена</span>
+          <span class="toggle">
+            <input type="checkbox" name="enabled" />
+            <span class="toggle-track" aria-hidden="true"></span>
+          </span>
+        </div>
+      </label>
+      <label>
+        Процент награды рефереру
+        <input class="input-field" type="number" name="reward_percent_referrer" min="0" max="100" step="0.1" />
+      </label>
+      <label>
+        Процент награды приглашённому
+        <input class="input-field" type="number" name="reward_percent_invited" min="0" max="100" step="0.1" />
+      </label>
+      <label>
+        Порог активности (сообщений)
+        <input class="input-field" type="number" name="active_threshold_messages" min="0" step="1" />
+      </label>
+      <label>
+        Длительность сезона (дней)
+        <input class="input-field" type="number" name="season_duration_days" min="1" step="1" />
+      </label>
+      <label>
+        Макс. наград на пользователя
+        <input class="input-field" type="number" name="max_rewards_per_user" min="0" step="1" />
+      </label>
+    </div>
+    <div class="footer-actions">
+      <button type="submit">Сохранить настройки</button>
+    </div>
+  </form>
+
+  <hr />
+
+  <div class="card-header">
+    <h5>Промо-коды</h5>
+    <button type="button" id="growthOpenPromoModal">Создать промо-код</button>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Код</th>
+        <th>Тип награды</th>
+        <th>Значение</th>
+        <th>Лимит</th>
+        <th>Лимит на пользователя</th>
+        <th>Использований</th>
+        <th>Статус</th>
+        <th>Действия</th>
+      </tr>
+    </thead>
+    <tbody id="growthPromoBody"></tbody>
+  </table>
+
+  <hr />
+
+  <h5>Growth Overview</h5>
+  <div class="grid two-columns" id="growthOverview"></div>
+  <div class="card" id="growthTopReferrers"></div>
+  <div class="card" id="growthMostUsedPromo"></div>
+</section>
+
+<div class="modal-backdrop hidden" id="growthPromoModal" role="dialog" aria-modal="true" aria-labelledby="growthPromoTitle">
+  <div class="modal-card">
+    <h4 id="growthPromoTitle">Создать промо-код</h4>
+    <form id="growthPromoForm" class="settings-form">
+      <label>
+        Код
+        <input name="code" type="text" minlength="3" maxlength="64" required />
+      </label>
+      <label>
+        Тип награды
+        <select name="reward_type" class="input-field">
+          <option value="fixed">fixed</option>
+          <option value="percent">percent</option>
+          <option value="multiplier">multiplier</option>
+        </select>
+      </label>
+      <label>
+        Значение награды
+        <input name="reward_value" type="number" min="0.0001" max="1000000" step="0.01" required />
+      </label>
+      <label>
+        Макс. использований
+        <input name="max_uses" type="number" min="1" />
+      </label>
+      <label>
+        Лимит на пользователя
+        <input name="per_user_limit" type="number" min="1" />
+      </label>
+      <label>
+        Истекает (ISO)
+        <input name="expires_at" type="text" placeholder="2026-12-31T23:59:59Z" />
+      </label>
+      <label class="checkbox-inline">
+        <input name="enabled" type="checkbox" checked />
+        Включён
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="growthPromoCancel">Отмена</button>
+        <button type="submit">Создать</button>
+      </div>
+    </form>
+  </div>
+</div>
