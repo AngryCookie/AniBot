@@ -4,10 +4,231 @@ from datetime import datetime, timedelta
 import math
 
 from sqlalchemy import case, distinct, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import EconomyLedger, UserProfile
+from bot.database.models import EconomyLedger, EconomyTransaction, UserProfile
 
 SUPPORTED_PERIOD_DAYS = {7, 30, 90}
+
+
+class EconomyAnalyticsService:
+    """Read-only analytics service powered by economy_transactions."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    @staticmethod
+    def _get_cutoff(days: int | None) -> datetime | None:
+        if days is None:
+            return None
+        return datetime.utcnow() - timedelta(days=days)
+
+    @staticmethod
+    def _with_period(stmt, cutoff: datetime | None):
+        if cutoff is None:
+            return stmt
+        return stmt.where(EconomyTransaction.created_at >= cutoff)
+
+    async def get_guild_overview(self, guild_id: int, days: int | None = None) -> dict:
+        cutoff = self._get_cutoff(days)
+
+        overview_stmt = (
+            select(
+                func.coalesce(
+                    func.sum(
+                        case((EconomyTransaction.amount > 0, EconomyTransaction.amount), else_=0)
+                    ),
+                    0,
+                ).label("total_earned"),
+                func.coalesce(
+                    func.sum(
+                        case((EconomyTransaction.amount < 0, -EconomyTransaction.amount), else_=0)
+                    ),
+                    0,
+                ).label("total_spent"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                (EconomyTransaction.type == "bet_placement")
+                                & (EconomyTransaction.amount < 0),
+                                -EconomyTransaction.amount,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("total_bets_volume"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                (EconomyTransaction.type == "bet_win")
+                                & (EconomyTransaction.amount > 0),
+                                EconomyTransaction.amount,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("total_bets_won"),
+                func.coalesce(func.count(distinct(EconomyTransaction.user_id)), 0).label(
+                    "active_users_count"
+                ),
+            )
+            .where(EconomyTransaction.guild_id == guild_id)
+        )
+        overview_stmt = self._with_period(overview_stmt, cutoff)
+
+        result = await self.session.execute(overview_stmt)
+        row = result.one()
+
+        total_earned = int(row.total_earned or 0)
+        total_spent = int(row.total_spent or 0)
+        total_bets_volume = int(row.total_bets_volume or 0)
+        total_bets_won = int(row.total_bets_won or 0)
+        total_bets_lost = max(total_bets_volume - total_bets_won, 0)
+        house_profit = total_bets_lost
+        net_flow = total_earned - total_spent
+        active_users_count = int(row.active_users_count or 0)
+
+        return {
+            "total_earned": total_earned,
+            "total_spent": total_spent,
+            "total_bets_volume": total_bets_volume,
+            "total_bets_won": total_bets_won,
+            "total_bets_lost": total_bets_lost,
+            "house_profit": house_profit,
+            "net_flow": net_flow,
+            "active_users_count": active_users_count,
+        }
+
+    async def get_betting_stats(self, guild_id: int, days: int | None = None) -> dict:
+        cutoff = self._get_cutoff(days)
+
+        stats_stmt = (
+            select(
+                func.coalesce(
+                    func.count(
+                        case((EconomyTransaction.type == "bet_placement", EconomyTransaction.id))
+                    ),
+                    0,
+                ).label("bets_count"),
+                func.coalesce(
+                    func.count(case((EconomyTransaction.type == "bet_win", EconomyTransaction.id))),
+                    0,
+                ).label("wins_count"),
+                func.coalesce(
+                    func.avg(
+                        case(
+                            (
+                                (EconomyTransaction.type == "bet_placement")
+                                & (EconomyTransaction.amount < 0),
+                                -EconomyTransaction.amount,
+                            ),
+                            else_=None,
+                        )
+                    ),
+                    0,
+                ).label("average_bet_size"),
+                func.coalesce(
+                    func.max(
+                        case(
+                            (
+                                (EconomyTransaction.type == "bet_win")
+                                & (EconomyTransaction.amount > 0),
+                                EconomyTransaction.amount,
+                            ),
+                            else_=None,
+                        )
+                    ),
+                    0,
+                ).label("biggest_win"),
+                func.coalesce(
+                    func.max(
+                        case(
+                            (
+                                (EconomyTransaction.type == "bet_placement")
+                                & (EconomyTransaction.amount < 0),
+                                -EconomyTransaction.amount,
+                            ),
+                            else_=None,
+                        )
+                    ),
+                    0,
+                ).label("biggest_loss"),
+            )
+            .where(EconomyTransaction.guild_id == guild_id)
+        )
+        stats_stmt = self._with_period(stats_stmt, cutoff)
+
+        result = await self.session.execute(stats_stmt)
+        row = result.one()
+
+        bets_count = int(row.bets_count or 0)
+        wins_count = int(row.wins_count or 0)
+        winrate_percent = (wins_count / bets_count * 100) if bets_count else 0.0
+
+        return {
+            "winrate_percent": round(winrate_percent, 2),
+            "average_bet_size": float(row.average_bet_size or 0),
+            "biggest_win": int(row.biggest_win or 0),
+            "biggest_loss": int(row.biggest_loss or 0),
+        }
+
+    async def get_user_top_earners(
+        self,
+        guild_id: int,
+        days: int | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        cutoff = self._get_cutoff(days)
+
+        stmt = (
+            select(
+                EconomyTransaction.user_id.label("user_id"),
+                func.coalesce(func.sum(EconomyTransaction.amount), 0).label("net_amount"),
+            )
+            .where(EconomyTransaction.guild_id == guild_id)
+            .group_by(EconomyTransaction.user_id)
+            .having(func.sum(EconomyTransaction.amount) > 0)
+            .order_by(func.sum(EconomyTransaction.amount).desc(), EconomyTransaction.user_id.asc())
+            .limit(limit)
+        )
+        stmt = self._with_period(stmt, cutoff)
+
+        result = await self.session.execute(stmt)
+        return [
+            {"user_id": int(row.user_id), "net_earned": int(row.net_amount)}
+            for row in result.all()
+        ]
+
+    async def get_user_top_losers(
+        self,
+        guild_id: int,
+        days: int | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        cutoff = self._get_cutoff(days)
+
+        stmt = (
+            select(
+                EconomyTransaction.user_id.label("user_id"),
+                func.coalesce(func.sum(EconomyTransaction.amount), 0).label("net_amount"),
+            )
+            .where(EconomyTransaction.guild_id == guild_id)
+            .group_by(EconomyTransaction.user_id)
+            .having(func.sum(EconomyTransaction.amount) < 0)
+            .order_by(func.sum(EconomyTransaction.amount).asc(), EconomyTransaction.user_id.asc())
+            .limit(limit)
+        )
+        stmt = self._with_period(stmt, cutoff)
+
+        result = await self.session.execute(stmt)
+        return [
+            {"user_id": int(row.user_id), "net_lost": abs(int(row.net_amount))}
+            for row in result.all()
+        ]
 
 
 def _median(values: list[int]) -> float:
