@@ -671,6 +671,48 @@ async def migration_create_referral_extended(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_create_pvp_duels(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS pvp_duels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                challenger_id BIGINT NOT NULL,
+                opponent_id BIGINT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee_percent FLOAT NOT NULL DEFAULT 0,
+                winner_id BIGINT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                resolved_at DATETIME NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending'
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_pvp_duels_guild_id ON pvp_duels (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_pvp_duels_guild_status ON pvp_duels (guild_id, status)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_pvp_duels_challenger_status ON pvp_duels (challenger_id, status)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_pvp_duels_opponent_status ON pvp_duels (opponent_id, status)"
+        )
+    )
+
+
+
 async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
     await conn.execute(
         text(
@@ -711,5 +753,6 @@ MIGRATIONS: List[Migration] = [
     migration_create_referrals,
     migration_create_referral_core,
     migration_create_referral_extended,
+    migration_create_pvp_duels,
     migration_add_operational_indexes,
 ]

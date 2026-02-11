@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AniBot Admin - Gambling</title>
+    <title>AniBot Admin - PvP</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body data-page="gambling">
+  <body data-page="pvp">
     <header>
       <h1>AniBot Web Admin</h1>
     </header>
@@ -22,10 +22,10 @@
         <a href="/logs.html" data-page="logs">Logs</a>
       </nav>
       <section class="card">
-        <h2>Настройки азартных игр</h2>
+        <h2>Настройки PvP-дуэлей</h2>
         <form id="settingsForm">
           <label>
-            <span>Включить азартные игры</span>
+            <span>Включить PvP</span>
             <input type="checkbox" name="enabled" />
           </label>
           <label>
@@ -37,12 +37,16 @@
             <input type="number" name="max_bet" min="1" max="1000000" />
           </label>
           <label>
-            <span>Комиссия дома (%)</span>
-            <input type="number" name="house_edge_percent" min="0" max="25" step="0.5" />
+            <span>Комиссия (%)</span>
+            <input type="number" name="fee_percent" min="0" max="50" step="0.1" />
           </label>
           <label>
-            <span>Бонус за серию побед</span>
-            <input type="checkbox" name="streak_bonus" />
+            <span>Кулдаун (сек)</span>
+            <input type="number" name="cooldown_seconds" min="0" max="3600" />
+          </label>
+          <label>
+            <span>Влияние уровня (weight)</span>
+            <input type="number" name="influence_level_weight" min="0" max="10" step="0.1" />
           </label>
           <div class="footer-actions">
             <button type="submit">Сохранить</button>
