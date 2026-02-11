@@ -1,0 +1,45 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <div>
+      <h1>AniBot Web Admin</h1>
+      <p class="notice">Управление настройками Discord-бота.</p>
+    </div>
+    <nav aria-label="Основная навигация">
+      <a href="#/overview" data-route="overview">Overview</a>
+      <a href="#/economy" data-route="economy">Economy</a>
+      <a href="#/shop" data-route="shop">Shop</a>
+      <a href="#/betting" data-route="betting">Betting</a>
+      <a href="#/pvp" data-route="pvp">PvP</a>
+      <a href="#/growth" data-route="growth">Growth</a>
+      <a href="#/logs" data-route="logs">Logs</a>
+      <a href="#/feature-flags" data-route="feature-flags">Feature Flags</a>
+      <a href="#/history" data-route="history">History</a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/servers.html"><button class="secondary">Сменить сервер</button></a>
+      <a href="/auth/logout"><button class="secondary">Выйти</button></a>
+    </div>
+  </aside>
+  <div class="app-main">
+    <header class="app-header">
+      <div>
+        <h2 id="pageTitle">Обзор</h2>
+        <div class="loading hidden" id="pageLoading">Загрузка...</div>
+      </div>
+      <div class="header-tools">
+        <label class="guild-selector-wrap">
+          <span class="field-hint">Сервер</span>
+          <select id="guildSelector" disabled>
+            <option value="">—</option>
+          </select>
+        </label>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="alert error hidden" id="pageError" role="alert"></div>
+      <div id="pageContent"></div>
+    </div>
+  </div>
+</div>
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
+<div id="confirmModalRoot"></div>

@@ -68,6 +68,47 @@ const renderSimpleBarChart = (container, points, label) => {
   }
 };
 
+
+let growthTrendChart = null;
+
+const renderGrowthTrendChart = (canvas, fallbackTable, promoPoints, referralPoints) => {
+  const promoMap = new Map((promoPoints || []).map((p) => [p.day, Number(p.value) || 0]));
+  const referralMap = new Map((referralPoints || []).map((p) => [p.day, Number(p.value) || 0]));
+  const labels = [...new Set([...promoMap.keys(), ...referralMap.keys()])].sort();
+  const promoValues = labels.map((d) => promoMap.get(d) || 0);
+  const referralValues = labels.map((d) => referralMap.get(d) || 0);
+
+  const body = fallbackTable?.querySelector("tbody");
+  const renderFallback = () => {
+    if (!body) return;
+    body.innerHTML = labels.map((d, i) => `<tr><td>${d}</td><td>${promoValues[i]}</td><td>${referralValues[i]}</td></tr>`).join("");
+    fallbackTable?.classList.remove("hidden");
+  };
+
+  if (!canvas || !window.Chart) {
+    renderFallback();
+    return;
+  }
+
+  try {
+    fallbackTable?.classList.add("hidden");
+    growthTrendChart?.destroy();
+    growthTrendChart = new window.Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { label: "Промо активации", data: promoValues, borderColor: "#4c7ef3", tension: 0.25 },
+          { label: "Активные рефералы", data: referralValues, borderColor: "#2ecc71", tension: 0.25 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false },
+    });
+  } catch {
+    renderFallback();
+  }
+};
+
 const setActiveRange = (buttons, value) => {
   buttons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.growthRange === value);
@@ -91,6 +132,8 @@ export const initGrowth = async (guildId) => {
   const activeReferralsChart = document.getElementById("growthActiveReferralsChart");
   const promoChart = document.getElementById("growthPromoChart");
   const rewardsChart = document.getElementById("growthRewardsChart");
+  const growthTrendCanvas = document.getElementById("growthTrendChart");
+  const growthTrendFallback = document.getElementById("growthTrendFallback");
   const rangeButtons = Array.from(document.querySelectorAll("[data-growth-range]"));
 
   const promoModal = document.getElementById("growthPromoModal");
@@ -219,6 +262,7 @@ export const initGrowth = async (guildId) => {
     renderSimpleBarChart(activeReferralsChart, overview.active_referrals_per_day);
     renderSimpleBarChart(promoChart, overview.promo_redemptions_per_day);
     renderSimpleBarChart(rewardsChart, overview.rewards_paid_per_day);
+    renderGrowthTrendChart(growthTrendCanvas, growthTrendFallback, overview.promo_redemptions_per_day, overview.active_referrals_per_day);
 
     recommendationsRoot.innerHTML = `
       <h5>Рекомендации</h5>

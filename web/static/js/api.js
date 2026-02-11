@@ -1,3 +1,9 @@
+let apiErrorHandler = null;
+
+export const setApiErrorHandler = (handler) => {
+  apiErrorHandler = typeof handler === "function" ? handler : null;
+};
+
 export const apiFetch = async (url, options = {}) => {
   const response = await fetch(url, {
     credentials: "include",
@@ -14,10 +20,12 @@ export const apiFetch = async (url, options = {}) => {
   }
 
   if (!response.ok) {
-    const detail = await response
-      .json()
-      .catch(() => ({ detail: "Request failed" }));
-    throw new Error(detail.detail || "Request failed");
+    const detail = await response.json().catch(() => ({ detail: "Request failed" }));
+    const message = detail.detail || "Request failed";
+    if (apiErrorHandler) {
+      apiErrorHandler(message, response.status);
+    }
+    throw new Error(message);
   }
 
   if (response.status === 204) {
