@@ -82,6 +82,8 @@ export const initGrowth = async (guildId) => {
   const kpiRoot = document.getElementById("growthKpi");
   const overviewRoot = document.getElementById("growthOverview");
   const recommendationsRoot = document.getElementById("growthRecommendations");
+  const referralStatsRoot = document.getElementById("growthReferralsStats");
+  const promoStatsRoot = document.getElementById("growthPromoStats");
   const topReferrersRoot = document.getElementById("growthTopReferrers");
   const mostUsedPromoRoot = document.getElementById("growthMostUsedPromo");
 
@@ -164,6 +166,31 @@ export const initGrowth = async (guildId) => {
 
       promoBody.appendChild(row);
     });
+
+    if (items.length > 0) {
+      const topPromo = items.slice().sort((a, b) => (b.total_uses || 0) - (a.total_uses || 0))[0];
+      const stats = await apiFetch(`/api/guilds/${guildId}/growth/promos/${topPromo.id}/stats`);
+      if (stats && promoStatsRoot) {
+        promoStatsRoot.innerHTML = `
+          <h5>Promo Analytics (${topPromo.code})</h5>
+          <p>Использований: <strong>${formatNumber(stats.total_uses, 0)}</strong>, уникальных: <strong>${formatNumber(stats.unique_users, 0)}</strong></p>
+          <p>Выдано: <strong>${formatNumber(stats.total_currency_issued, 0)}</strong>, средняя награда: <strong>${formatNumber(stats.average_reward)}</strong></p>
+          <p>ROI: <strong>${stats.roi.roi_indicator}</strong> — ${stats.roi.suggestion}</p>
+        `;
+      }
+    } else if (promoStatsRoot) {
+      promoStatsRoot.innerHTML = "<h5>Promo Analytics</h5><p>Нет данных</p>";
+    }
+  };
+
+  const loadReferralStats = async () => {
+    const stats = await apiFetch(`/api/guilds/${guildId}/growth/referrals/stats`);
+    if (!stats || !referralStatsRoot) return;
+    referralStatsRoot.innerHTML = `
+      <h5>Referral Analytics</h5>
+      <p>Всего: <strong>${formatNumber(stats.total_referrals, 0)}</strong>, успешных: <strong>${formatNumber(stats.successful_referrals, 0)}</strong>, pending: <strong>${formatNumber(stats.pending_referrals, 0)}</strong></p>
+      <p>Выплачено: <strong>${formatNumber(stats.total_currency_paid, 0)}</strong>, средняя награда: <strong>${formatNumber(stats.average_reward)}</strong></p>
+    `;
   };
 
   const loadOverview = async () => {
@@ -264,5 +291,6 @@ export const initGrowth = async (guildId) => {
 
   await loadReferralSettings();
   await loadPromoCodes();
+  await loadReferralStats();
   await loadOverview();
 };

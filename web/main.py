@@ -79,9 +79,14 @@ from .schemas import (
     GrowthDailyMetricPoint,
     GrowthMostUsedPromo,
     GrowthOverviewResponse,
+    GrowthPromoRoi,
+    GrowthPromoStats,
+    GrowthPromoUserReward,
     GrowthRecommendation,
+    GrowthReferralStats,
     GrowthPromoCodeIn,
     GrowthPromoCodeOut,
+    GrowthReferrerStatsRow,
     GrowthReferralCampaignSettings,
     GrowthTopReferrer,
     ShopItemIn,
@@ -115,6 +120,7 @@ READONLY_RATE_LIMIT = 60
 ALLOWED_ANALYTICS_PERIODS = {7, 30, 90}
 MONTHLY_REPORTS_ENABLED_FLAG = "monthly_reports_enabled"
 MONTHLY_REPORTS_AUTOPOST_FLAG = "monthly_reports_autopost"
+GROWTH_ENABLED_FLAG = "growth_enabled"
 
 
 @app.on_event("startup")
@@ -333,6 +339,29 @@ async def _ensure_feature_flag_exists(session, *, flag_name: str, description: s
     flag = result.scalars().first()
     if flag is None:
         session.add(FeatureFlag(name=flag_name, enabled=False, description=description))
+
+
+async def _is_growth_enabled(guild_id: int) -> bool:
+    async with database.session() as session:
+        override = await session.scalar(
+            select(GuildFeatureFlag.enabled).where(
+                GuildFeatureFlag.guild_id == guild_id,
+                GuildFeatureFlag.flag_name == GROWTH_ENABLED_FLAG,
+            )
+        )
+        if override is not None:
+            return bool(override)
+        global_flag = await session.scalar(
+            select(FeatureFlag.enabled).where(FeatureFlag.name == GROWTH_ENABLED_FLAG)
+        )
+    if global_flag is None:
+        return True
+    return bool(global_flag)
+
+
+async def _require_growth_enabled(guild_id: int) -> None:
+    if not await _is_growth_enabled(guild_id):
+        raise HTTPException(status_code=403, detail="Growth system is disabled for this guild")
 
 def _diff_settings(current: Dict[str, Any], updated: Dict[str, Any]) -> List[Dict[str, Any]]:
     changes = []
@@ -1772,6 +1801,9 @@ def _build_growth_referral_settings(settings_map: Dict[str, Any]) -> GrowthRefer
         active_threshold_messages=int(raw.get("active_threshold_messages", 20)),
         season_duration_days=int(raw.get("season_duration_days", 30)),
         max_rewards_per_user=int(raw.get("max_rewards_per_user", 0)),
+        referral_min_account_age_days=int(raw.get("referral_min_account_age_days", 0)),
+        referral_min_messages=int(raw.get("referral_min_messages", 0)),
+        promo_cooldown_hours=int(raw.get("promo_cooldown_hours", 0)),
     )
 
 
@@ -1783,6 +1815,7 @@ async def get_growth_referral_settings(
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
 
+    await _require_growth_enabled(guild_id)
     config = await _get_or_create_config(guild_id)
     settings_map = _load_settings(config)
     return _build_growth_referral_settings(settings_map)
@@ -1798,6 +1831,7 @@ async def update_growth_referral_settings(
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
 
+    await _require_growth_enabled(guild_id)
     config = await _get_or_create_config(guild_id)
     settings_map = _load_settings(config)
     previous_settings = dict(settings_map)
@@ -1827,6 +1861,7 @@ async def list_growth_promo_codes(
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
 
+    await _require_growth_enabled(guild_id)
     async with database.session() as session:
         result = await session.execute(
             select(PromoCodeExtended)
@@ -1862,6 +1897,7 @@ async def create_growth_promo_code(
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
 
+    await _require_growth_enabled(guild_id)
     actor_id = await _get_actor_id(access_token)
     expires_at = _parse_iso_datetime(payload.expires_at) if payload.expires_at else None
 
@@ -1906,6 +1942,8 @@ async def update_growth_promo_code(
 ) -> GrowthPromoCodeOut:
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
+
+    await _require_growth_enabled(guild_id)
 
     expires_at = _parse_iso_datetime(payload.expires_at) if payload.expires_at else None
 
@@ -1955,6 +1993,7 @@ async def delete_growth_promo_code(
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
 
+    await _require_growth_enabled(guild_id)
     async with database.session() as session:
         result = await session.execute(
             select(PromoCodeExtended).where(
@@ -1970,6 +2009,148 @@ async def delete_growth_promo_code(
         await session.commit()
 
     return {"status": "deleted"}
+
+
+@app.get("/api/guilds/{guild_id}/growth/promos/{promo_id}/stats", response_model=GrowthPromoStats)
+async def get_growth_promo_stats(
+    guild_id: int,
+    promo_id: int,
+    access_token: str = Depends(get_access_token),
+) -> GrowthPromoStats:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    await _require_growth_enabled(guild_id)
+
+    async with database.session() as session:
+        promo = await session.scalar(
+            select(PromoCodeExtended).where(
+                PromoCodeExtended.guild_id == guild_id,
+                PromoCodeExtended.id == promo_id,
+            )
+        )
+        if promo is None:
+            raise HTTPException(status_code=404, detail="Промо-код не найден")
+
+        usage = (
+            await session.execute(
+                select(
+                    func.count(PromoCodeUsage.id).label("total_uses"),
+                    func.count(func.distinct(PromoCodeUsage.user_id)).label("unique_users"),
+                    func.coalesce(func.sum(PromoCodeUsage.reward_amount), 0).label("total_currency_issued"),
+                    func.coalesce(func.avg(PromoCodeUsage.reward_amount), 0).label("average_reward"),
+                ).where(
+                    PromoCodeUsage.guild_id == guild_id,
+                    PromoCodeUsage.promo_code_id == promo_id,
+                )
+            )
+        ).one()
+
+        top_users_rows = await session.execute(
+            select(
+                PromoCodeUsage.user_id,
+                func.coalesce(func.sum(PromoCodeUsage.reward_amount), 0).label("total_reward"),
+            )
+            .where(
+                PromoCodeUsage.guild_id == guild_id,
+                PromoCodeUsage.promo_code_id == promo_id,
+            )
+            .group_by(PromoCodeUsage.user_id)
+            .order_by(func.sum(PromoCodeUsage.reward_amount).desc(), PromoCodeUsage.user_id.asc())
+            .limit(5)
+        )
+
+        net_new_users = await session.scalar(
+            select(func.count(func.distinct(ReferralRelationship.invited_user_id))).where(
+                ReferralRelationship.guild_id == guild_id,
+                ReferralRelationship.activated_at.is_not(None),
+                ReferralRelationship.invited_at >= promo.created_at,
+            )
+        )
+
+    total_issued = int(usage.total_currency_issued or 0)
+    net_new = int(net_new_users or 0)
+    per_user_cost = (total_issued / net_new) if net_new > 0 else float(total_issued)
+    if per_user_cost > 1500:
+        roi_indicator = "aggressive"
+        suggestion = "Награда распределяется слишком щедро — рекомендуется снизить reward_value."
+    elif per_user_cost < 300:
+        roi_indicator = "low"
+        suggestion = "Распределение консервативное — можно аккуратно повысить reward_value для роста."
+    else:
+        roi_indicator = "balanced"
+        suggestion = "Текущие параметры промо выглядят сбалансированными."
+
+    return GrowthPromoStats(
+        total_uses=int(usage.total_uses or 0),
+        unique_users=int(usage.unique_users or 0),
+        total_currency_issued=total_issued,
+        average_reward=float(usage.average_reward or 0.0),
+        top_5_users_by_reward=[
+            GrowthPromoUserReward(user_id=int(row.user_id), total_reward=int(row.total_reward or 0))
+            for row in top_users_rows
+        ],
+        roi=GrowthPromoRoi(
+            promo_id=promo_id,
+            total_issued_currency=total_issued,
+            net_new_users=net_new,
+            roi_indicator=roi_indicator,
+            suggestion=suggestion,
+        ),
+    )
+
+
+@app.get("/api/guilds/{guild_id}/growth/referrals/stats", response_model=GrowthReferralStats)
+async def get_growth_referral_stats(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> GrowthReferralStats:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    await _require_growth_enabled(guild_id)
+
+    async with database.session() as session:
+        total_referrals = await session.scalar(
+            select(func.count()).select_from(ReferralRelationship).where(ReferralRelationship.guild_id == guild_id)
+        )
+        successful_referrals = await session.scalar(
+            select(func.count()).select_from(ReferralRelationship).where(
+                ReferralRelationship.guild_id == guild_id,
+                ReferralRelationship.activated_at.is_not(None),
+            )
+        )
+        total_currency_paid = await session.scalar(
+            select(func.coalesce(func.sum(ReferralReward.amount), 0)).where(ReferralReward.guild_id == guild_id)
+        )
+        top_rows = await session.execute(
+            select(
+                ReferralRelationship.inviter_user_id,
+                func.count(ReferralRelationship.id).label("total_referrals"),
+                func.coalesce(func.sum(ReferralRelationship.total_reward_paid), 0).label("total_currency_paid"),
+            )
+            .where(ReferralRelationship.guild_id == guild_id)
+            .group_by(ReferralRelationship.inviter_user_id)
+            .order_by(func.count(ReferralRelationship.id).desc(), ReferralRelationship.inviter_user_id.asc())
+            .limit(10)
+        )
+
+    total = int(total_referrals or 0)
+    success = int(successful_referrals or 0)
+    paid = int(total_currency_paid or 0)
+    return GrowthReferralStats(
+        total_referrals=total,
+        successful_referrals=success,
+        pending_referrals=max(0, total - success),
+        total_currency_paid=paid,
+        average_reward=float((paid / success) if success > 0 else 0.0),
+        top_10_referrers=[
+            GrowthReferrerStatsRow(
+                user_id=int(row.inviter_user_id),
+                total_referrals=int(row.total_referrals or 0),
+                total_currency_paid=int(row.total_currency_paid or 0),
+            )
+            for row in top_rows
+        ],
+    )
 
 
 def _parse_growth_range(value: str | None) -> tuple[str, int]:
@@ -2043,6 +2224,8 @@ async def get_growth_overview(
 ) -> GrowthOverviewResponse:
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
+
+    await _require_growth_enabled(guild_id)
 
     range_label, period_days = _parse_growth_range(range)
     now = dt.datetime.now(dt.timezone.utc)

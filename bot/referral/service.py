@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import EconomyTransaction, UserProfile
+from bot.database.models import EconomyTransaction, FeatureFlag, GuildConfig, GuildFeatureFlag, UserProfile
 from bot.referral.core import (
     PromoValidationResult,
     calculate_account_age_days,
@@ -28,6 +30,21 @@ from bot.referral.models import (
     ReferralRewardType,
 )
 from bot.services.economy import EconomyService
+
+GROWTH_ENABLED_FLAG = "growth_enabled"
+
+
+def _load_guild_growth_settings(config: GuildConfig | None) -> dict[str, int | float | bool]:
+    if config is None or not config.settings:
+        return {}
+    try:
+        payload = json.loads(config.settings)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    campaign = payload.get("referral_campaign", {})
+    return campaign if isinstance(campaign, dict) else {}
 
 
 class ReferralService:
@@ -52,8 +69,55 @@ class ReferralService:
             raise ValueError("Реферальная кампания не активна.")
         return campaign
 
+    async def _is_growth_enabled(self, guild_id: int) -> bool:
+        guild_flag = await self.session.scalar(
+            select(GuildFeatureFlag.enabled).where(
+                GuildFeatureFlag.guild_id == guild_id,
+                GuildFeatureFlag.flag_name == GROWTH_ENABLED_FLAG,
+            )
+        )
+        if guild_flag is not None:
+            return bool(guild_flag)
+        global_flag = await self.session.scalar(
+            select(FeatureFlag.enabled).where(FeatureFlag.name == GROWTH_ENABLED_FLAG)
+        )
+        if global_flag is None:
+            return True
+        return bool(global_flag)
+
+    async def _require_growth_enabled(self, guild_id: int) -> None:
+        if not await self._is_growth_enabled(guild_id):
+            raise ValueError("Growth-система отключена для этого сервера.")
+
+    async def _load_guard_settings(self, guild_id: int) -> dict[str, int | float | bool]:
+        config_result = await self.session.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
+        return _load_guild_growth_settings(config_result.scalars().first())
+
+    async def _resolve_user_account_age_days(self, guild_id: int, user_id: int) -> int | None:
+        first_activity_result = await self.session.execute(
+            select(func.min(EconomyTransaction.created_at)).where(
+                EconomyTransaction.guild_id == guild_id,
+                EconomyTransaction.user_id == user_id,
+            )
+        )
+        created_at = first_activity_result.scalar_one_or_none()
+        return calculate_account_age_days(now=utcnow(), created_at=created_at)
+
+    async def _resolve_user_activity_messages(self, guild_id: int, user_id: int) -> int:
+        profile_result = await self.session.execute(
+            select(UserProfile).where(
+                UserProfile.guild_id == guild_id,
+                UserProfile.user_id == user_id,
+            )
+        )
+        profile = profile_result.scalars().first()
+        if profile is None:
+            return 0
+        return max(0, int(profile.xp or 0))
+
     async def create_referral_link(self, guild_id: int, owner_user_id: int, campaign_id: int) -> str:
         async def operation() -> str:
+            await self._require_growth_enabled(guild_id)
             campaign = await self._get_campaign_locked(campaign_id)
 
             existing_result = await self.session.execute(
@@ -91,6 +155,7 @@ class ReferralService:
 
     async def register_referral(self, guild_id: int, invited_user_id: int, referral_code: str) -> int:
         async def operation() -> int:
+            await self._require_growth_enabled(guild_id)
             code = normalize_promo_code(referral_code)
             link_result = await self.session.execute(
                 select(ReferralLinkExtended)
@@ -108,6 +173,17 @@ class ReferralService:
 
             if not campaign.allow_self_referral and int(link.owner_user_id) == invited_user_id:
                 raise ValueError("Самореферал запрещен настройками кампании.")
+
+            inviter_exists = await self.session.scalar(
+                select(func.count())
+                .select_from(UserProfile)
+                .where(
+                    UserProfile.guild_id == guild_id,
+                    UserProfile.user_id == int(link.owner_user_id),
+                )
+            )
+            if int(inviter_exists or 0) == 0:
+                raise ValueError("Инвайтер должен состоять на сервере для активации реферала.")
 
             existing_relation_result = await self.session.execute(
                 select(ReferralRelationship)
@@ -149,6 +225,7 @@ class ReferralService:
 
     async def activate_referral(self, guild_id: int, invited_user_id: int) -> int:
         async def operation() -> int:
+            await self._require_growth_enabled(guild_id)
             relation_result = await self.session.execute(
                 select(ReferralRelationship)
                 .where(
@@ -173,6 +250,19 @@ class ReferralService:
                 raise ValueError("Реферальная ссылка не найдена.")
 
             campaign = await self._get_campaign_locked(int(relation.campaign_id))
+            guard_settings = await self._load_guard_settings(guild_id)
+
+            min_account_age_days = int(guard_settings.get("referral_min_account_age_days") or 0)
+            if min_account_age_days > 0:
+                account_age_days = await self._resolve_user_account_age_days(guild_id, invited_user_id)
+                if account_age_days is None or account_age_days < min_account_age_days:
+                    raise ValueError("Аккаунт приглашённого слишком новый для начисления реферальной награды.")
+
+            min_messages = int(guard_settings.get("referral_min_messages") or 0)
+            if min_messages > 0:
+                activity_messages = await self._resolve_user_activity_messages(guild_id, invited_user_id)
+                if activity_messages < min_messages:
+                    raise ValueError("Недостаточная активность приглашённого для разблокировки награды.")
 
             relation.activated_at = utcnow()
             link.total_active_invited = int(link.total_active_invited or 0) + 1
@@ -323,6 +413,30 @@ class PromoService:
         async with self.session.begin():
             return await operation()
 
+    async def _is_growth_enabled(self, guild_id: int) -> bool:
+        guild_flag = await self.session.scalar(
+            select(GuildFeatureFlag.enabled).where(
+                GuildFeatureFlag.guild_id == guild_id,
+                GuildFeatureFlag.flag_name == GROWTH_ENABLED_FLAG,
+            )
+        )
+        if guild_flag is not None:
+            return bool(guild_flag)
+        global_flag = await self.session.scalar(
+            select(FeatureFlag.enabled).where(FeatureFlag.name == GROWTH_ENABLED_FLAG)
+        )
+        if global_flag is None:
+            return True
+        return bool(global_flag)
+
+    async def _require_growth_enabled(self, guild_id: int) -> None:
+        if not await self._is_growth_enabled(guild_id):
+            raise ValueError("Growth-система отключена для этого сервера.")
+
+    async def _load_guard_settings(self, guild_id: int) -> dict[str, int | float | bool]:
+        config_result = await self.session.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
+        return _load_guild_growth_settings(config_result.scalars().first())
+
     async def _resolve_user_account_age_days(self, guild_id: int, user_id: int) -> int | None:
         first_activity_result = await self.session.execute(
             select(func.min(EconomyTransaction.created_at)).where(
@@ -388,6 +502,7 @@ class PromoService:
         )
 
     async def validate_promo(self, guild_id: int, user_id: int, code: str) -> PromoValidationResult:
+        await self._require_growth_enabled(guild_id)
         normalized_code = normalize_promo_code(code)
 
         promo_result = await self.session.execute(
@@ -413,6 +528,8 @@ class PromoService:
 
     async def redeem_promo(self, guild_id: int, user_id: int, code: str) -> int:
         async def operation() -> int:
+            await self._require_growth_enabled(guild_id)
+            guard_settings = await self._load_guard_settings(guild_id)
             normalized_code = normalize_promo_code(code)
             promo_result = await self.session.execute(
                 select(PromoCodeExtended)
@@ -437,6 +554,21 @@ class PromoService:
             )
             if not validation.is_valid:
                 raise ValueError(validation.reason or "Промокод невалиден.")
+
+            cooldown_hours = int(guard_settings.get("promo_cooldown_hours") or 0)
+            if cooldown_hours > 0:
+                cooldown_since = utcnow() - timedelta(hours=cooldown_hours)
+                recent_usage_count = await self.session.scalar(
+                    select(func.count())
+                    .select_from(PromoCodeUsage)
+                    .where(
+                        PromoCodeUsage.guild_id == guild_id,
+                        PromoCodeUsage.user_id == user_id,
+                        PromoCodeUsage.used_at >= cooldown_since,
+                    )
+                )
+                if int(recent_usage_count or 0) > 0:
+                    raise ValueError("Слишком частая активация промокодов. Попробуйте позже.")
 
             reward_amount = int(validation.reward_preview)
 

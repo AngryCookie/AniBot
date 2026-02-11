@@ -369,6 +369,46 @@ class GrowthReferralCampaignSettings(BaseModel):
     active_threshold_messages: int = Field(20, ge=0, le=1_000_000)
     season_duration_days: int = Field(30, ge=1, le=3650)
     max_rewards_per_user: int = Field(0, ge=0, le=1_000_000)
+    referral_min_account_age_days: int = Field(0, ge=0, le=36500)
+    referral_min_messages: int = Field(0, ge=0, le=1_000_000)
+    promo_cooldown_hours: int = Field(0, ge=0, le=8760)
+
+
+class GrowthPromoUserReward(BaseModel):
+    user_id: int
+    total_reward: int
+
+
+class GrowthPromoRoi(BaseModel):
+    promo_id: int
+    total_issued_currency: int
+    net_new_users: int
+    roi_indicator: str = Field(..., pattern="^(low|balanced|aggressive)$")
+    suggestion: str
+
+
+class GrowthPromoStats(BaseModel):
+    total_uses: int
+    unique_users: int
+    total_currency_issued: int
+    average_reward: float
+    top_5_users_by_reward: list[GrowthPromoUserReward]
+    roi: GrowthPromoRoi
+
+
+class GrowthReferrerStatsRow(BaseModel):
+    user_id: int
+    total_referrals: int
+    total_currency_paid: int
+
+
+class GrowthReferralStats(BaseModel):
+    total_referrals: int
+    successful_referrals: int
+    pending_referrals: int
+    total_currency_paid: int
+    average_reward: float
+    top_10_referrers: list[GrowthReferrerStatsRow]
 
 
 class GrowthPromoCodeIn(BaseModel):
