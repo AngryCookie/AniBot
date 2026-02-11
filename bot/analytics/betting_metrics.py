@@ -15,6 +15,12 @@ def _validate_period(period_days: int) -> None:
         raise ValueError("period_days must be one of: 7, 30, 90")
 
 
+def _date_to_iso(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    return str(value)
+
+
 async def get_betting_metrics(session: AsyncSession, guild_id: int, period_days: int) -> dict:
     """Build betting-related metrics using immutable economy transactions.
 
@@ -93,4 +99,76 @@ async def get_betting_metrics(session: AsyncSession, guild_id: int, period_days:
         "bets_count": bets_count,
         "avg_bet": avg_bet,
         "win_rate": win_rate,
+    }
+
+
+async def get_betting_daily_stats(session: AsyncSession, guild_id: int, period_days: int) -> dict:
+    """Return betting daily volume and house net for the selected period."""
+    _validate_period(period_days)
+    cutoff = datetime.utcnow() - timedelta(days=period_days)
+
+    date_col = func.date(EconomyTransaction.created_at).label("date")
+    result = await session.execute(
+        select(
+            date_col,
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (EconomyTransaction.type == "bet_placement")
+                            & (EconomyTransaction.amount < 0),
+                            -EconomyTransaction.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("volume"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (EconomyTransaction.type == "bet_placement")
+                            & (EconomyTransaction.amount < 0),
+                            -EconomyTransaction.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("total_lost"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (EconomyTransaction.type == "bet_win")
+                            & (EconomyTransaction.amount > 0),
+                            EconomyTransaction.amount,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("total_won"),
+        )
+        .where(
+            (EconomyTransaction.guild_id == guild_id)
+            & (EconomyTransaction.created_at >= cutoff)
+        )
+        .group_by(date_col)
+        .order_by(date_col.asc())
+    )
+    rows = result.all()
+
+    return {
+        "daily_volume": [
+            {"date": _date_to_iso(row.date), "amount": int(row.volume or 0)} for row in rows
+        ],
+        "daily_house_net": [
+            {
+                "date": _date_to_iso(row.date),
+                "amount": int((row.total_lost or 0) - (row.total_won or 0)),
+            }
+            for row in rows
+        ],
     }
