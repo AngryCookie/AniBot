@@ -72,13 +72,11 @@ class EconomyTransaction(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     guild_id = Column(BigInteger, nullable=False, index=True)
     user_id = Column(BigInteger, nullable=False, index=True)
-    type = Column(String(64), nullable=False, index=True)
     amount = Column(Integer, nullable=False)
     balance_before = Column(Integer, nullable=False)
     balance_after = Column(Integer, nullable=False)
-    source = Column(String(128), nullable=True)
-    reference_id = Column(Integer, nullable=True)
-    metadata_json = Column("metadata", JSON, nullable=True)
+    source = Column(String(128), nullable=False, index=True)
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
 
 

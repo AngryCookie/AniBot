@@ -37,7 +37,7 @@ async def get_betting_metrics(session: AsyncSession, guild_id: int, period_days:
                 func.sum(
                     case(
                         (
-                            (EconomyTransaction.type == "bet_placement")
+                            (EconomyTransaction.source == "bet_placement")
                             & (EconomyTransaction.amount < 0),
                             -EconomyTransaction.amount,
                         ),
@@ -50,7 +50,7 @@ async def get_betting_metrics(session: AsyncSession, guild_id: int, period_days:
                 func.sum(
                     case(
                         (
-                            (EconomyTransaction.type == "bet_win")
+                            (EconomyTransaction.source == "bet_win")
                             & (EconomyTransaction.amount > 0),
                             EconomyTransaction.amount,
                         ),
@@ -62,7 +62,7 @@ async def get_betting_metrics(session: AsyncSession, guild_id: int, period_days:
             func.coalesce(
                 func.count(
                     case(
-                        (EconomyTransaction.type == "bet_placement", EconomyTransaction.id),
+                        (EconomyTransaction.source == "bet_placement", EconomyTransaction.id),
                         else_=None,
                     )
                 ),
@@ -70,7 +70,7 @@ async def get_betting_metrics(session: AsyncSession, guild_id: int, period_days:
             ).label("bets_count"),
             func.coalesce(
                 func.count(
-                    case((EconomyTransaction.type == "bet_win", EconomyTransaction.id), else_=None)
+                    case((EconomyTransaction.source == "bet_win", EconomyTransaction.id), else_=None)
                 ),
                 0,
             ).label("won_bets_count"),
@@ -115,7 +115,7 @@ async def get_betting_daily_stats(session: AsyncSession, guild_id: int, period_d
                 func.sum(
                     case(
                         (
-                            (EconomyTransaction.type == "bet_placement")
+                            (EconomyTransaction.source == "bet_placement")
                             & (EconomyTransaction.amount < 0),
                             -EconomyTransaction.amount,
                         ),
@@ -128,7 +128,7 @@ async def get_betting_daily_stats(session: AsyncSession, guild_id: int, period_d
                 func.sum(
                     case(
                         (
-                            (EconomyTransaction.type == "bet_placement")
+                            (EconomyTransaction.source == "bet_placement")
                             & (EconomyTransaction.amount < 0),
                             -EconomyTransaction.amount,
                         ),
@@ -141,7 +141,7 @@ async def get_betting_daily_stats(session: AsyncSession, guild_id: int, period_d
                 func.sum(
                     case(
                         (
-                            (EconomyTransaction.type == "bet_win")
+                            (EconomyTransaction.source == "bet_win")
                             & (EconomyTransaction.amount > 0),
                             EconomyTransaction.amount,
                         ),

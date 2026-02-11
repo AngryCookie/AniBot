@@ -38,12 +38,22 @@ async def apply_balance_change(
     source: str,
 ) -> int:
     service = EconomyService(session)
-    return await service.change_balance(
-        guild_id=guild_id,
-        user_id=user_id,
-        amount=amount,
-        transaction_type=ledger_type,
-        source=source,
+    if amount >= 0:
+        return await service.credit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            {"transaction_type": ledger_type},
+            ledger_type=ledger_type,
+        )
+    return await service.debit(
+        guild_id,
+        user_id,
+        -amount,
+        source,
+        {"transaction_type": ledger_type},
+        ledger_type=ledger_type,
     )
 
 
