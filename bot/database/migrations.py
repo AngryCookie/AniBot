@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from bot.database.models import Base
 import bot.betting.models  # noqa: F401
+import bot.referral.models  # noqa: F401
 
 Migration = Callable[[AsyncConnection], Awaitable[None]]
 
@@ -422,6 +423,254 @@ async def migration_create_server_monthly_goals(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_create_referral_extended(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(128) NOT NULL,
+                description TEXT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                start_at DATETIME NULL,
+                end_at DATETIME NULL,
+                signup_bonus_type VARCHAR(16) NOT NULL,
+                signup_bonus_value FLOAT NOT NULL,
+                revenue_share_percent FLOAT NOT NULL,
+                min_user_lifetime_revenue INTEGER NOT NULL DEFAULT 0,
+                allow_self_referral BOOLEAN NOT NULL DEFAULT 0,
+                max_referrals_per_user INTEGER NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ck_referral_campaigns_signup_bonus_type
+                    CHECK (signup_bonus_type IN ('fixed', 'percent'))
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_seasons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(128) NOT NULL,
+                start_at DATETIME NOT NULL,
+                end_at DATETIME NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 0,
+                reset_scores BOOLEAN NOT NULL DEFAULT 0
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_links_extended (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                owner_user_id BIGINT NOT NULL,
+                code VARCHAR(64) NOT NULL,
+                campaign_id INTEGER NOT NULL,
+                season_id INTEGER NULL,
+                total_invited INTEGER NOT NULL DEFAULT 0,
+                total_active_invited INTEGER NOT NULL DEFAULT 0,
+                total_revenue_generated INTEGER NOT NULL DEFAULT 0,
+                total_reward_paid INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_referral_links_extended_code UNIQUE (code),
+                CONSTRAINT uq_referral_links_extended_owner_campaign
+                    UNIQUE (guild_id, owner_user_id, campaign_id),
+                CONSTRAINT fk_referral_links_extended_campaign
+                    FOREIGN KEY (campaign_id) REFERENCES referral_campaigns (id),
+                CONSTRAINT fk_referral_links_extended_season
+                    FOREIGN KEY (season_id) REFERENCES referral_seasons (id)
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_relationships (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                invited_user_id BIGINT NOT NULL,
+                inviter_user_id BIGINT NOT NULL,
+                referral_link_id INTEGER NOT NULL,
+                campaign_id INTEGER NOT NULL,
+                season_id INTEGER NULL,
+                invited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                activated_at DATETIME NULL,
+                lifetime_revenue_generated INTEGER NOT NULL DEFAULT 0,
+                total_reward_paid INTEGER NOT NULL DEFAULT 0,
+                CONSTRAINT uq_referral_relationships_invited UNIQUE (guild_id, invited_user_id),
+                CONSTRAINT fk_referral_relationships_link
+                    FOREIGN KEY (referral_link_id) REFERENCES referral_links_extended (id),
+                CONSTRAINT fk_referral_relationships_campaign
+                    FOREIGN KEY (campaign_id) REFERENCES referral_campaigns (id),
+                CONSTRAINT fk_referral_relationships_season
+                    FOREIGN KEY (season_id) REFERENCES referral_seasons (id)
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_reward_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                inviter_user_id BIGINT NOT NULL,
+                invited_user_id BIGINT NULL,
+                campaign_id INTEGER NOT NULL,
+                season_id INTEGER NULL,
+                reward_type VARCHAR(32) NOT NULL,
+                reward_amount INTEGER NOT NULL,
+                source_amount INTEGER NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ck_referral_reward_log_reward_type
+                    CHECK (reward_type IN ('signup', 'revenue_share', 'seasonal_bonus')),
+                CONSTRAINT fk_referral_reward_log_campaign
+                    FOREIGN KEY (campaign_id) REFERENCES referral_campaigns (id),
+                CONSTRAINT fk_referral_reward_log_season
+                    FOREIGN KEY (season_id) REFERENCES referral_seasons (id)
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS promo_codes_extended (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                campaign_id INTEGER NULL,
+                code VARCHAR(64) NOT NULL,
+                reward_type VARCHAR(16) NOT NULL,
+                reward_value FLOAT NOT NULL,
+                max_total_uses INTEGER NULL,
+                max_uses_per_user INTEGER NULL,
+                min_balance_required INTEGER NULL,
+                min_account_age_days INTEGER NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                start_at DATETIME NULL,
+                end_at DATETIME NULL,
+                total_uses INTEGER NOT NULL DEFAULT 0,
+                created_by_admin_id BIGINT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_promo_codes_extended_code UNIQUE (code),
+                CONSTRAINT ck_promo_codes_extended_reward_type
+                    CHECK (reward_type IN ('fixed', 'percent', 'multiplier')),
+                CONSTRAINT fk_promo_codes_extended_campaign
+                    FOREIGN KEY (campaign_id) REFERENCES referral_campaigns (id)
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS promo_code_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                promo_code_id INTEGER NOT NULL,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                reward_amount INTEGER NOT NULL,
+                CONSTRAINT uq_promo_code_usage_per_user UNIQUE (promo_code_id, user_id),
+                CONSTRAINT fk_promo_code_usage_code
+                    FOREIGN KEY (promo_code_id) REFERENCES promo_codes_extended (id)
+            )
+            """
+        )
+    )
+
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_links_extended_guild_id "
+            "ON referral_links_extended (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_links_extended_owner_user_id "
+            "ON referral_links_extended (owner_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_links_extended_code "
+            "ON referral_links_extended (code)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_relationships_guild_id "
+            "ON referral_relationships (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_relationships_inviter_user_id "
+            "ON referral_relationships (inviter_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_relationships_invited_user_id "
+            "ON referral_relationships (invited_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_reward_log_guild_id "
+            "ON referral_reward_log (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_reward_log_inviter_user_id "
+            "ON referral_reward_log (inviter_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_referral_reward_log_invited_user_id "
+            "ON referral_reward_log (invited_user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_promo_codes_extended_guild_id "
+            "ON promo_codes_extended (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_promo_codes_extended_code "
+            "ON promo_codes_extended (code)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_promo_code_usage_guild_id "
+            "ON promo_code_usage (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_promo_code_usage_user_id "
+            "ON promo_code_usage (user_id)"
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -431,4 +680,5 @@ MIGRATIONS: List[Migration] = [
     migration_create_server_monthly_goals,
     migration_create_referrals,
     migration_create_referral_core,
+    migration_create_referral_extended,
 ]
