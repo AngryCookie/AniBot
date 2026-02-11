@@ -26,6 +26,7 @@ from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
     Base,
     CommunityGoal,
+    ServerMonthlyGoal,
     FeatureFlag,
     GuildConfig,
     GuildConfigHistory,
@@ -35,6 +36,7 @@ from bot.database.models import (
     Warning,
 )
 from bot.community_goals import CommunityGoalService
+from bot.monthly_goals import MonthlyGoalService
 
 from .analytics.behavior import build_behavior_analytics
 from .config import settings
@@ -47,6 +49,9 @@ from .schemas import (
     CommunityGoalIn,
     CommunityGoalOut,
     CommunityGoalUpdate,
+    MonthlyGoalIn,
+    MonthlyGoalOut,
+    MonthlyGoalUpdate,
     EconomyAnalyticsSummaryResponse,
     EconomyInsight,
     EconomySettings,
@@ -200,6 +205,25 @@ def _community_goal_to_schema(goal: CommunityGoal) -> CommunityGoalOut:
         updated_at=goal.updated_at.isoformat() + "Z",
     )
 
+
+
+
+def _monthly_goal_to_schema(goal: ServerMonthlyGoal, progress: float = 0.0) -> MonthlyGoalOut:
+    percent = (progress / float(goal.target_value) * 100.0) if goal.target_value > 0 else 0.0
+    return MonthlyGoalOut(
+        id=goal.id,
+        guild_id=int(goal.guild_id),
+        month=goal.month,
+        metric_type=goal.metric_type,
+        target_value=float(goal.target_value),
+        reward_role_id=int(goal.reward_role_id),
+        min_user_contribution=float(goal.min_user_contribution),
+        is_active=bool(goal.is_active),
+        completed_at=goal.completed_at.isoformat() + "Z" if goal.completed_at else None,
+        created_at=goal.created_at.isoformat() + "Z",
+        progress=progress,
+        percent_completed=max(0.0, min(100.0, percent)),
+    )
 
 async def _get_or_create_config(guild_id: int) -> GuildConfig:
     async with database.session() as session:
@@ -884,6 +908,120 @@ async def evaluate_community_goal(
         await session.commit()
         await session.refresh(goal)
         return _community_goal_to_schema(goal)
+
+
+@app.get("/api/guilds/{guild_id}/monthly-goal", response_model=MonthlyGoalOut | None)
+async def get_monthly_goal(
+    guild_id: int,
+    month: str | None = None,
+    access_token: str = Depends(get_access_token),
+) -> MonthlyGoalOut | None:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    month_value = month or dt.datetime.utcnow().strftime("%Y-%m")
+
+    async with database.session() as session:
+        service = MonthlyGoalService(session)
+        goal = await service.get_active_goal(guild_id, month_value)
+        if goal is None:
+            result = await session.execute(
+                select(ServerMonthlyGoal)
+                .where((ServerMonthlyGoal.guild_id == guild_id) & (ServerMonthlyGoal.month == month_value))
+                .order_by(ServerMonthlyGoal.created_at.desc())
+                .limit(1)
+            )
+            goal = result.scalars().first()
+        if goal is None:
+            return None
+        progress = await service.calculate_progress(guild_id, goal.metric_type, goal.month)
+        return _monthly_goal_to_schema(goal, progress)
+
+
+@app.post("/api/guilds/{guild_id}/monthly-goal", response_model=MonthlyGoalOut)
+async def create_monthly_goal(
+    guild_id: int,
+    payload: MonthlyGoalIn,
+    access_token: str = Depends(get_access_token),
+) -> MonthlyGoalOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        async with session.begin():
+            if payload.is_active:
+                existing = await session.execute(
+                    select(ServerMonthlyGoal).where(
+                        (ServerMonthlyGoal.guild_id == guild_id)
+                        & (ServerMonthlyGoal.month == payload.month)
+                        & (ServerMonthlyGoal.is_active.is_(True))
+                    )
+                )
+                if existing.scalars().first() is not None:
+                    raise HTTPException(status_code=400, detail="На этот месяц уже есть активная цель.")
+
+            goal = ServerMonthlyGoal(
+                guild_id=guild_id,
+                month=payload.month,
+                metric_type=payload.metric_type,
+                target_value=payload.target_value,
+                reward_role_id=payload.reward_role_id,
+                min_user_contribution=payload.min_user_contribution,
+                is_active=payload.is_active,
+            )
+            session.add(goal)
+            await session.flush()
+
+            service = MonthlyGoalService(session)
+            progress = await service.calculate_progress(guild_id, goal.metric_type, goal.month)
+
+        await session.refresh(goal)
+        return _monthly_goal_to_schema(goal, progress)
+
+
+@app.put("/api/guilds/{guild_id}/monthly-goal/{goal_id}", response_model=MonthlyGoalOut)
+async def update_monthly_goal(
+    guild_id: int,
+    goal_id: int,
+    payload: MonthlyGoalUpdate,
+    access_token: str = Depends(get_access_token),
+) -> MonthlyGoalOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(ServerMonthlyGoal).where(
+                    (ServerMonthlyGoal.id == goal_id) & (ServerMonthlyGoal.guild_id == guild_id)
+                )
+            )
+            goal = result.scalars().first()
+            if goal is None:
+                raise HTTPException(status_code=404, detail="Месячная цель не найдена.")
+
+            if payload.is_active:
+                dup = await session.execute(
+                    select(ServerMonthlyGoal).where(
+                        (ServerMonthlyGoal.guild_id == guild_id)
+                        & (ServerMonthlyGoal.month == goal.month)
+                        & (ServerMonthlyGoal.id != goal.id)
+                        & (ServerMonthlyGoal.is_active.is_(True))
+                    )
+                )
+                if dup.scalars().first() is not None:
+                    raise HTTPException(status_code=400, detail="На этот месяц уже есть активная цель.")
+
+            goal.metric_type = payload.metric_type
+            goal.target_value = payload.target_value
+            goal.reward_role_id = payload.reward_role_id
+            goal.min_user_contribution = payload.min_user_contribution
+            goal.is_active = payload.is_active
+
+            service = MonthlyGoalService(session)
+            progress = await service.calculate_progress(guild_id, goal.metric_type, goal.month)
+
+        await session.refresh(goal)
+        return _monthly_goal_to_schema(goal, progress)
 
 
 @app.get("/api/analytics/behavior", response_model=BehaviorAnalyticsResponse)

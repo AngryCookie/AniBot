@@ -192,10 +192,58 @@ async def migration_add_monthly_analytics_support(conn: AsyncConnection) -> None
         await conn.execute(text("ALTER TABLE guilds ADD COLUMN analytics_channel_id BIGINT"))
 
 
+async def migration_create_server_monthly_goals(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS server_monthly_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                month VARCHAR(7) NOT NULL,
+                metric_type VARCHAR(32) NOT NULL,
+                target_value FLOAT NOT NULL,
+                reward_role_id BIGINT NOT NULL,
+                min_user_contribution FLOAT NOT NULL DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                completed_at DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ck_server_monthly_goals_metric_type
+                    CHECK (metric_type IN ('voice_hours', 'messages', 'bets_volume'))
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_server_monthly_goals_guild_id "
+            "ON server_monthly_goals (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_server_monthly_goals_month "
+            "ON server_monthly_goals (month)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_server_monthly_goals_guild_month "
+            "ON server_monthly_goals (guild_id, month)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_server_monthly_goals_active_guild_month "
+            "ON server_monthly_goals (guild_id, month) WHERE is_active = 1"
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
     migration_create_community_goal_participants,
     migration_create_economy_transactions,
     migration_add_monthly_analytics_support,
+    migration_create_server_monthly_goals,
 ]

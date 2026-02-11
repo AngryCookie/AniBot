@@ -4,11 +4,12 @@ import datetime as dt
 import logging
 
 from discord.ext import commands, tasks
-from sqlalchemy import delete, update
+from sqlalchemy import and_, delete, select, update
 
 from bot.analytics.monthly_reports import MonthlyAnalyticsReportService
 from bot.community_goals import CommunityGoalService
-from bot.database.models import EconomyLedger, ModLog, UserProfile
+from bot.database.models import EconomyLedger, ModLog, ServerMonthlyGoal, UserProfile
+from bot.monthly_goals import MonthlyGoalService
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,14 @@ class SchedulerCog(commands.Cog):
         self.daily_reset_task.start()
         self.cleanup_task.start()
         self.community_goals_task.start()
+        self.monthly_goals_task.start()
         self.monthly_reports_task.start()
 
     def cog_unload(self) -> None:
         self.daily_reset_task.cancel()
         self.cleanup_task.cancel()
         self.community_goals_task.cancel()
+        self.monthly_goals_task.cancel()
         self.monthly_reports_task.cancel()
 
     @tasks.loop(hours=24)
@@ -84,6 +87,100 @@ class SchedulerCog(commands.Cog):
                     extra={"guild_id": guild.id},
                 )
 
+    @tasks.loop(hours=24)
+    async def monthly_goals_task(self) -> None:
+        current_month = dt.datetime.utcnow().strftime("%Y-%m")
+        previous_month_date = dt.datetime.utcnow().replace(day=1) - dt.timedelta(days=1)
+        previous_month = previous_month_date.strftime("%Y-%m")
+
+        async with self.bot.db.session() as session:
+            async with session.begin():
+                service = MonthlyGoalService(session)
+
+                # Auto-deactivate previous month goals on month rollover.
+                await session.execute(
+                    update(ServerMonthlyGoal)
+                    .where(
+                        and_(
+                            ServerMonthlyGoal.month == previous_month,
+                            ServerMonthlyGoal.is_active.is_(True),
+                        )
+                    )
+                    .values(is_active=False)
+                )
+
+                result = await session.execute(
+                    select(ServerMonthlyGoal).where(ServerMonthlyGoal.is_active.is_(True))
+                )
+                active_goals = result.scalars().all()
+
+                for goal in active_goals:
+                    completion = await service.check_and_complete_goal(goal.guild_id, goal.month)
+                    if completion is None or not completion.completed:
+                        continue
+
+                    eligible_users = await service.get_eligible_users(
+                        goal.guild_id,
+                        goal.metric_type,
+                        goal.month,
+                        goal.min_user_contribution,
+                    )
+
+                    assigned_count = await service.assign_reward_role(
+                        bot=self.bot,
+                        guild_id=goal.guild_id,
+                        reward_role_id=goal.reward_role_id,
+                        user_ids=eligible_users,
+                        reason=f"Monthly goal reward {goal.month}",
+                    )
+
+                    logger.info(
+                        "Monthly goal completed and rewards assigned",
+                        extra={
+                            "guild_id": goal.guild_id,
+                            "goal_id": goal.id,
+                            "month": goal.month,
+                            "metric_type": goal.metric_type,
+                            "progress": completion.progress,
+                            "target": goal.target_value,
+                            "eligible_count": len(eligible_users),
+                            "assigned_count": assigned_count,
+                        },
+                    )
+
+                previous_result = await session.execute(
+                    select(ServerMonthlyGoal).where(
+                        and_(
+                            ServerMonthlyGoal.month == previous_month,
+                            ServerMonthlyGoal.completed_at.is_not(None),
+                            ServerMonthlyGoal.reward_role_id.is_not(None),
+                        )
+                    )
+                )
+                for old_goal in previous_result.scalars().all():
+                    old_users = await service.get_eligible_users(
+                        old_goal.guild_id,
+                        old_goal.metric_type,
+                        old_goal.month,
+                        old_goal.min_user_contribution,
+                    )
+                    removed_count = await service.remove_reward_role(
+                        bot=self.bot,
+                        guild_id=old_goal.guild_id,
+                        reward_role_id=old_goal.reward_role_id,
+                        user_ids=old_users,
+                        reason=f"Monthly goal cleanup {old_goal.month}",
+                    )
+                    if removed_count:
+                        logger.info(
+                            "Monthly goal previous month role cleanup completed",
+                            extra={
+                                "guild_id": old_goal.guild_id,
+                                "goal_id": old_goal.id,
+                                "month": old_goal.month,
+                                "removed_count": removed_count,
+                            },
+                        )
 
     @tasks.loop(time=dt.time(hour=0, minute=10, tzinfo=dt.timezone.utc))
     async def monthly_reports_task(self) -> None:
@@ -95,6 +192,7 @@ class SchedulerCog(commands.Cog):
     @daily_reset_task.before_loop
     @cleanup_task.before_loop
     @community_goals_task.before_loop
+    @monthly_goals_task.before_loop
     @monthly_reports_task.before_loop
     async def before_tasks(self) -> None:
         await self.bot.wait_until_ready()
