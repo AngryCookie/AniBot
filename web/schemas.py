@@ -333,3 +333,30 @@ class MonthlyGoalOut(MonthlyGoalBase):
     created_at: str
     progress: float = 0.0
     percent_completed: float = 0.0
+
+
+class ReferralPromoCodeIn(BaseModel):
+    code: str = Field(..., min_length=3, max_length=64)
+    reward_amount: int = Field(..., ge=1, le=1_000_000)
+    max_uses: Optional[int] = Field(None, ge=1, le=10_000_000)
+    expires_at: Optional[str] = None
+    is_active: bool = True
+
+
+class ReferralPromoCodeOut(ReferralPromoCodeIn):
+    id: int
+    guild_id: int
+    current_uses: int
+    created_at: str
+
+
+class ReferralDashboardStats(BaseModel):
+    total_uses: int
+    total_currency_distributed: int
+    top_inviters: list[dict]
+
+
+class ReferralRedeemSummary(BaseModel):
+    monthly_referral_volume: int
+    total_referral_payout: int
+    top_inviters: list[dict]

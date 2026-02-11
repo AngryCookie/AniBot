@@ -28,6 +28,7 @@ COGS = [
     "bot.cogs.admin",
     "bot.cogs.scheduler",
     "bot.cogs.monthly_goals",
+    "bot.cogs.referral",
     "bot.cogs.observability",
 ]
 
