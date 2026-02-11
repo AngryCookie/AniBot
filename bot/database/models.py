@@ -8,6 +8,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -277,3 +278,18 @@ class CommunityGoal(Base):
         onupdate=dt.datetime.utcnow,
         nullable=False,
     )
+
+
+class CommunityGoalParticipant(Base):
+    __tablename__ = "community_goal_participants"
+    __table_args__ = (
+        UniqueConstraint("goal_id", "user_id", name="uq_goal_participant"),
+        Index("ix_goal_participants_goal_id", "goal_id"),
+        Index("ix_goal_participants_user_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id = Column(Integer, ForeignKey("community_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    contribution_value = Column(Integer, nullable=False, default=0)
+    rewarded = Column(Boolean, nullable=False, default=False)

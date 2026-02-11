@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
+import discord
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import CommunityGoal, EconomyLedger, UserProfile
+from bot.database.models import (
+    CommunityGoal,
+    CommunityGoalParticipant,
+    EconomyLedger,
+    UserProfile,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class CommunityGoalService:
@@ -115,3 +124,196 @@ class CommunityGoalService:
         goal.updated_at = now
         await self.session.flush()
         return goal
+
+    async def _calculate_member_contribution(self, goal: CommunityGoal, user_id: int) -> int:
+        if goal.metric_type == "voice_hours":
+            result = await self.session.execute(
+                select(func.coalesce(func.sum(EconomyLedger.amount), 0)).where(
+                    and_(
+                        EconomyLedger.guild_id == goal.guild_id,
+                        EconomyLedger.user_id == user_id,
+                        EconomyLedger.source == "voice_activity",
+                        EconomyLedger.type == "earn",
+                        EconomyLedger.timestamp >= goal.starts_at,
+                        EconomyLedger.timestamp <= goal.ends_at,
+                    )
+                )
+            )
+            total_voice_seconds = int(result.scalar() or 0)
+            return total_voice_seconds // 3600
+
+        if goal.metric_type == "messages":
+            result = await self.session.execute(
+                select(func.count(UserProfile.id)).where(
+                    and_(
+                        UserProfile.guild_id == goal.guild_id,
+                        UserProfile.user_id == user_id,
+                        UserProfile.last_message_ts.is_not(None),
+                        UserProfile.last_message_ts >= goal.starts_at,
+                        UserProfile.last_message_ts <= goal.ends_at,
+                    )
+                )
+            )
+            return int(result.scalar() or 0)
+
+        raise ValueError("Неподдерживаемый тип метрики цели сообщества.")
+
+    async def distribute_rewards(self, bot: discord.Client, guild_id: int) -> int:
+        goal_result = await self.session.execute(
+            select(CommunityGoal)
+            .where(
+                and_(
+                    CommunityGoal.guild_id == guild_id,
+                    CommunityGoal.status == "completed",
+                )
+            )
+            .order_by(CommunityGoal.ends_at.desc())
+        )
+        goal = goal_result.scalars().first()
+        if goal is None:
+            logger.info("No completed community goal found for reward distribution", extra={"guild_id": guild_id})
+            return 0
+
+        existing = await self.session.execute(
+            select(func.count(CommunityGoalParticipant.id)).where(
+                and_(
+                    CommunityGoalParticipant.goal_id == goal.id,
+                    CommunityGoalParticipant.rewarded.is_(True),
+                )
+            )
+        )
+        if int(existing.scalar() or 0) > 0:
+            logger.info(
+                "Rewards already distributed for community goal",
+                extra={"guild_id": guild_id, "goal_id": goal.id},
+            )
+            return 0
+
+        if goal.reward_role_id is None:
+            logger.info(
+                "Community goal has no reward role; skipping reward distribution",
+                extra={"guild_id": guild_id, "goal_id": goal.id},
+            )
+            return 0
+
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            logger.warning("Guild not found in bot cache", extra={"guild_id": guild_id})
+            return 0
+
+        role = guild.get_role(goal.reward_role_id)
+        if role is None:
+            logger.warning(
+                "Reward role not found in guild",
+                extra={"guild_id": guild_id, "goal_id": goal.id, "role_id": goal.reward_role_id},
+            )
+            return 0
+
+        rewarded_count = 0
+        for member in guild.members:
+            contribution = await self._calculate_member_contribution(goal, member.id)
+            if contribution < goal.min_participation_threshold:
+                continue
+
+            existing_participant_result = await self.session.execute(
+                select(CommunityGoalParticipant).where(
+                    and_(
+                        CommunityGoalParticipant.goal_id == goal.id,
+                        CommunityGoalParticipant.user_id == member.id,
+                    )
+                )
+            )
+            participant = existing_participant_result.scalars().first()
+            if participant is None:
+                participant = CommunityGoalParticipant(
+                    goal_id=goal.id,
+                    user_id=member.id,
+                    contribution_value=contribution,
+                    rewarded=False,
+                )
+                self.session.add(participant)
+
+            participant.contribution_value = contribution
+
+            if participant.rewarded:
+                continue
+
+            if role not in member.roles:
+                await member.add_roles(role, reason=f"Community goal reward #{goal.id}")
+
+            participant.rewarded = True
+            rewarded_count += 1
+
+            logger.info(
+                "Community goal reward granted",
+                extra={
+                    "guild_id": guild_id,
+                    "goal_id": goal.id,
+                    "user_id": member.id,
+                    "contribution": contribution,
+                },
+            )
+
+        await self.session.flush()
+        return rewarded_count
+
+    async def remove_previous_goal_roles(self, bot: discord.Client, guild_id: int) -> int:
+        goals_result = await self.session.execute(
+            select(CommunityGoal)
+            .where(
+                and_(
+                    CommunityGoal.guild_id == guild_id,
+                    CommunityGoal.status == "completed",
+                )
+            )
+            .order_by(CommunityGoal.ends_at.desc())
+            .limit(2)
+        )
+        goals = goals_result.scalars().all()
+        if len(goals) < 2:
+            return 0
+
+        previous_goal = goals[1]
+        if previous_goal.reward_role_id is None:
+            return 0
+
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            logger.warning("Guild not found in bot cache", extra={"guild_id": guild_id})
+            return 0
+
+        role = guild.get_role(previous_goal.reward_role_id)
+        if role is None:
+            logger.warning(
+                "Previous goal role not found in guild",
+                extra={
+                    "guild_id": guild_id,
+                    "goal_id": previous_goal.id,
+                    "role_id": previous_goal.reward_role_id,
+                },
+            )
+            return 0
+
+        participants_result = await self.session.execute(
+            select(CommunityGoalParticipant).where(
+                and_(
+                    CommunityGoalParticipant.goal_id == previous_goal.id,
+                    CommunityGoalParticipant.rewarded.is_(True),
+                )
+            )
+        )
+        participants = participants_result.scalars().all()
+
+        removed_count = 0
+        for participant in participants:
+            member = guild.get_member(participant.user_id)
+            if member is None or role not in member.roles:
+                continue
+            await member.remove_roles(role, reason=f"Community goal role cleanup #{previous_goal.id}")
+            removed_count += 1
+
+        logger.info(
+            "Community goal previous role cleanup finished",
+            extra={"guild_id": guild_id, "goal_id": previous_goal.id, "removed_count": removed_count},
+        )
+        return removed_count

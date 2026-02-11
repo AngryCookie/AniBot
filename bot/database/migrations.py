@@ -64,7 +64,39 @@ async def migration_create_community_goals(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_create_community_goal_participants(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS community_goal_participants (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                contribution_value INTEGER NOT NULL DEFAULT 0,
+                rewarded BOOLEAN NOT NULL DEFAULT 0,
+                CONSTRAINT uq_goal_participant UNIQUE (goal_id, user_id),
+                CONSTRAINT fk_goal_participants_goal
+                    FOREIGN KEY (goal_id) REFERENCES community_goals (id) ON DELETE CASCADE
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_goal_participants_goal_id "
+            "ON community_goal_participants (goal_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_goal_participants_user_id "
+            "ON community_goal_participants (user_id)"
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
+    migration_create_community_goal_participants,
 ]

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 from discord.ext import commands, tasks
 from sqlalchemy import delete, update
 
+from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, ModLog, UserProfile
+
+logger = logging.getLogger(__name__)
 
 
 class SchedulerCog(commands.Cog):
@@ -13,10 +17,12 @@ class SchedulerCog(commands.Cog):
         self.bot = bot
         self.daily_reset_task.start()
         self.cleanup_task.start()
+        self.community_goals_task.start()
 
     def cog_unload(self) -> None:
         self.daily_reset_task.cancel()
         self.cleanup_task.cancel()
+        self.community_goals_task.cancel()
 
     @tasks.loop(hours=24)
     async def daily_reset_task(self) -> None:
@@ -32,8 +38,51 @@ class SchedulerCog(commands.Cog):
                 await session.execute(delete(EconomyLedger).where(EconomyLedger.timestamp < cutoff))
                 await session.execute(delete(ModLog).where(ModLog.created_at < cutoff))
 
+    @tasks.loop(minutes=10)
+    async def community_goals_task(self) -> None:
+        for guild in self.bot.guilds:
+            try:
+                async with self.bot.db.session() as session:
+                    async with session.begin():
+                        service = CommunityGoalService(session)
+                        goal = await service.get_active_goal(guild.id)
+                        if goal is None:
+                            continue
+
+                        now = dt.datetime.utcnow()
+                        if goal.status != "active" or now < goal.ends_at:
+                            continue
+
+                        evaluated_goal = await service.evaluate_goal(guild.id)
+                        if evaluated_goal is None:
+                            continue
+
+                        if evaluated_goal.status == "completed":
+                            removed_count = await service.remove_previous_goal_roles(self.bot, guild.id)
+                            rewarded_count = await service.distribute_rewards(self.bot, guild.id)
+                            logger.info(
+                                "Community goal completed and rewards processed",
+                                extra={
+                                    "guild_id": guild.id,
+                                    "goal_id": evaluated_goal.id,
+                                    "removed_previous_roles": removed_count,
+                                    "rewarded_members": rewarded_count,
+                                },
+                            )
+                        else:
+                            logger.info(
+                                "Community goal finished with failed status",
+                                extra={"guild_id": guild.id, "goal_id": evaluated_goal.id},
+                            )
+            except Exception:
+                logger.exception(
+                    "Community goal scheduler iteration failed",
+                    extra={"guild_id": guild.id},
+                )
+
     @daily_reset_task.before_loop
     @cleanup_task.before_loop
+    @community_goals_task.before_loop
     async def before_tasks(self) -> None:
         await self.bot.wait_until_ready()
 
