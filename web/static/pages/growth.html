@@ -70,8 +70,38 @@
 
   <hr />
 
-  <h5>Growth Overview</h5>
+  <div class="card-header">
+    <h5>Growth Overview</h5>
+    <div class="period-switcher" id="growthRangeSwitch">
+      <button type="button" class="secondary" data-growth-range="7d">7d</button>
+      <button type="button" class="secondary is-active" data-growth-range="30d">30d</button>
+      <button type="button" class="secondary" data-growth-range="90d">90d</button>
+    </div>
+  </div>
+
+  <div class="grid" id="growthKpi"></div>
   <div class="grid two-columns" id="growthOverview"></div>
+
+  <div class="grid two-columns">
+    <div class="chart-card">
+      <h6>Регистрации (по дням)</h6>
+      <div class="bar-chart" id="growthRegistrationsChart"></div>
+    </div>
+    <div class="chart-card">
+      <h6>Активные рефералы (по дням)</h6>
+      <div class="bar-chart" id="growthActiveReferralsChart"></div>
+    </div>
+    <div class="chart-card">
+      <h6>Активации промо (по дням)</h6>
+      <div class="bar-chart" id="growthPromoChart"></div>
+    </div>
+    <div class="chart-card">
+      <h6>Выплаченные награды (по дням)</h6>
+      <div class="bar-chart" id="growthRewardsChart"></div>
+    </div>
+  </div>
+
+  <div class="card" id="growthRecommendations"></div>
   <div class="card" id="growthTopReferrers"></div>
   <div class="card" id="growthMostUsedPromo"></div>
 </section>

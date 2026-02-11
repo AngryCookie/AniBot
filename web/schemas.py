@@ -401,10 +401,30 @@ class GrowthMostUsedPromo(BaseModel):
     total_uses: int
 
 
+class GrowthDailyMetricPoint(BaseModel):
+    day: str
+    value: int
+
+
+class GrowthRecommendation(BaseModel):
+    level: str = Field(..., pattern="^(info|warning)$")
+    text: str
+
+
 class GrowthOverviewResponse(BaseModel):
+    range: str
     total_referrals: int
     active_referrals: int
     total_rewards_paid: int
     total_promo_redemptions: int
+    registrations_per_day: list[GrowthDailyMetricPoint]
+    active_referrals_per_day: list[GrowthDailyMetricPoint]
+    promo_redemptions_per_day: list[GrowthDailyMetricPoint]
+    rewards_paid_per_day: list[GrowthDailyMetricPoint]
+    net_growth_value: int
+    referral_conversion_rate: float
+    avg_revenue_per_referral: float
+    roi_ratio: float
+    recommendations: list[GrowthRecommendation]
     top_referrers: list[GrowthTopReferrer]
     most_used_promo: Optional[GrowthMostUsedPromo] = None
