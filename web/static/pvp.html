@@ -54,6 +54,50 @@
           </div>
         </form>
       </section>
+
+      <section class="card">
+        <h2>Сезоны PvP</h2>
+        <form id="seasonSettingsForm">
+          <label>
+            <span>Включить сезоны</span>
+            <input type="checkbox" name="enabled" />
+          </label>
+          <label>
+            <span>Автозакрытие сезонов</span>
+            <input type="checkbox" name="auto_close_enabled" />
+          </label>
+          <label>
+            <span>Длительность сезона (дней)</span>
+            <input type="number" name="season_duration_days" min="1" max="365" />
+          </label>
+          <label>
+            <span>ID канала анонса итогов</span>
+            <input type="number" name="announce_channel_id" min="1" step="1" />
+          </label>
+          <label>
+            <span>Режим сброса</span>
+            <select name="reset_mode">
+              <option value="hard">hard (полный сброс)</option>
+              <option value="soft">soft (сброс только рейтинга)</option>
+            </select>
+          </label>
+          <label>
+            <span>ID роли для топ-1</span>
+            <input type="number" name="top1_role_id" min="1" step="1" />
+          </label>
+          <label>
+            <span>ID роли для топ-3</span>
+            <input type="number" name="top3_role_id" min="1" step="1" />
+          </label>
+          <label>
+            <span>ID роли для топ-10</span>
+            <input type="number" name="top10_role_id" min="1" step="1" />
+          </label>
+          <div class="footer-actions">
+            <button type="submit">Сохранить сезонные настройки</button>
+          </div>
+        </form>
+      </section>
     </main>
     <script src="/static/app.js" defer></script>
   </body>

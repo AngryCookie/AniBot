@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import datetime as dt
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.pvp.seasons import PvpSeasonService
 from bot.services.pvp import PvpService
 
 
@@ -165,6 +168,57 @@ class PvpCog(commands.Cog):
         embed.add_field(name="Текущий стрик", value=str(stats.current_streak), inline=True)
         embed.add_field(name="Лучший стрик", value=str(stats.best_streak), inline=True)
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="pvp_season", description="Текущий PvP сезон и предварительный топ")
+    async def pvp_season(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+
+        async with self.bot.db.session() as session:
+            service = PvpService(session)
+            season_service = PvpSeasonService(session, self.bot)
+            season = await season_service.get_or_create_active_season(interaction.guild.id, dt.datetime.utcnow())
+            top_players = await service.get_top_players(interaction.guild.id, limit=10)
+
+        embed = discord.Embed(title=f"🗓️ PvP сезон #{season.season_number}", color=discord.Color.blurple())
+        embed.add_field(name="Начало", value=season.starts_at.strftime("%d.%m.%Y %H:%M UTC"), inline=True)
+        embed.add_field(name="Окончание", value=season.ends_at.strftime("%d.%m.%Y %H:%M UTC"), inline=True)
+
+        if top_players:
+            lines = [
+                f"**{idx}.** <@{player.user_id}> — R{player.rating} | W/L: {player.wins}/{player.losses}"
+                for idx, player in enumerate(top_players, start=1)
+            ]
+            embed.add_field(name="Топ-10 (предпросмотр)", value="\n".join(lines), inline=False)
+        else:
+            embed.add_field(name="Топ-10", value="Пока нет данных.", inline=False)
+
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="pvp_season_top", description="Топ-10 игроков текущего PvP сезона")
+    async def pvp_season_top(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+
+        async with self.bot.db.session() as session:
+            service = PvpService(session)
+            top_players = await service.get_top_players(interaction.guild.id, limit=10)
+
+        if not top_players:
+            await interaction.response.send_message("За текущий сезон нет статистики.", ephemeral=True)
+            return
+
+        embed = discord.Embed(title="🏆 Топ-10 сезона PvP", color=discord.Color.gold())
+        embed.description = "\n".join(
+            [
+                f"**{index}.** <@{player.user_id}> — R{player.rating} | W/L: {player.wins}/{player.losses} | Профит: {player.total_profit}"
+                for index, player in enumerate(top_players, start=1)
+            ]
+        )
+        await interaction.response.send_message(embed=embed)
+
 
     async def _get_pvp_settings(self, session, guild_id: int) -> dict:
         service = PvpService(session)

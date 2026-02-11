@@ -492,3 +492,38 @@ class PvpStats(Base):
         onupdate=dt.datetime.utcnow,
         nullable=False,
     )
+
+
+class PvpSeason(Base):
+    __tablename__ = "pvp_seasons"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "season_number", name="uq_pvp_seasons_guild_number"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    season_number = Column(Integer, nullable=False)
+    starts_at = Column(DateTime, nullable=False)
+    ends_at = Column(DateTime, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+    status = Column(String(16), nullable=False, default="active")
+    summary_message_id = Column(BigInteger, nullable=True)
+    summary_channel_id = Column(BigInteger, nullable=True)
+
+
+class PvpSeasonResult(Base):
+    __tablename__ = "pvp_season_results"
+    __table_args__ = (
+        Index("ix_pvp_season_results_guild_season_rank", "guild_id", "season_id", "rank"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    season_id = Column(Integer, ForeignKey("pvp_seasons.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    final_rating = Column(Integer, nullable=False, default=1000)
+    wins = Column(Integer, nullable=False, default=0)
+    losses = Column(Integer, nullable=False, default=0)
+    total_profit = Column(Integer, nullable=False, default=0)
+    total_volume = Column(Integer, nullable=False, default=0)
+    rank = Column(Integer, nullable=False)

@@ -71,6 +71,7 @@ from .schemas import (
     LevelingSettings,
     LogsSettings,
     OverviewStats,
+    PvpSeasonSettings,
     PvpSettings,
     PresetOut,
     ReferralDashboardStats,
@@ -717,6 +718,7 @@ gambling_get, gambling_put, gambling_reset = _category_routes(
 shop_get, shop_put, shop_reset = _category_routes("shop", ShopSettings)
 logs_get, logs_put, logs_reset = _category_routes("logs", LogsSettings)
 pvp_get, pvp_put, pvp_reset = _category_routes("pvp", PvpSettings)
+pvp_season_get, pvp_season_put, _ = _category_routes("pvp_season", PvpSeasonSettings)
 feature_get, feature_put, feature_reset = _category_routes(
     "feature_toggles", FeatureToggles
 )
@@ -1129,6 +1131,8 @@ app.post("/api/guilds/{guild_id}/logs/reset", response_model=LogsSettings)(logs_
 app.get("/api/guilds/{guild_id}/pvp", response_model=PvpSettings)(pvp_get)
 app.put("/api/guilds/{guild_id}/pvp", response_model=PvpSettings)(pvp_put)
 app.post("/api/guilds/{guild_id}/pvp/reset", response_model=PvpSettings)(pvp_reset)
+app.get("/api/guilds/{guild_id}/pvp/season", response_model=PvpSeasonSettings)(pvp_season_get)
+app.put("/api/guilds/{guild_id}/pvp/season", response_model=PvpSeasonSettings)(pvp_season_put)
 
 app.get("/api/guilds/{guild_id}/feature-toggles", response_model=FeatureToggles)(
     feature_get

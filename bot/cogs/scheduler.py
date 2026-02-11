@@ -8,8 +8,9 @@ from sqlalchemy import and_, delete, select, update
 
 from bot.analytics.monthly_reports import MonthlyAnalyticsReportService
 from bot.community_goals import CommunityGoalService
-from bot.database.models import EconomyLedger, ModLog, ServerMonthlyGoal, UserProfile
+from bot.database.models import EconomyLedger, GuildConfig, ModLog, ServerMonthlyGoal, UserProfile
 from bot.monthly_goals import MonthlyGoalService
+from bot.pvp.seasons import PvpSeasonService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class SchedulerCog(commands.Cog):
         self.community_goals_task.start()
         self.monthly_goals_task.start()
         self.monthly_reports_task.start()
+        self.pvp_seasons_task.start()
 
     def cog_unload(self) -> None:
         self.daily_reset_task.cancel()
@@ -30,6 +32,7 @@ class SchedulerCog(commands.Cog):
         self.community_goals_task.cancel()
         self.monthly_goals_task.cancel()
         self.monthly_reports_task.cancel()
+        self.pvp_seasons_task.cancel()
 
     @tasks.loop(hours=24)
     async def daily_reset_task(self) -> None:
@@ -182,6 +185,23 @@ class SchedulerCog(commands.Cog):
                             },
                         )
 
+
+    @tasks.loop(minutes=15)
+    async def pvp_seasons_task(self) -> None:
+        now = dt.datetime.utcnow()
+        async with self.bot.db.session() as session:
+            async with session.begin():
+                result = await session.execute(select(GuildConfig))
+                for config in result.scalars().all():
+                    try:
+                        service = PvpSeasonService(session, self.bot)
+                        await service.process_rotation_for_guild(int(config.guild_id), now)
+                    except Exception:
+                        logger.exception(
+                            "PvP season scheduler iteration failed",
+                            extra={"guild_id": int(config.guild_id)},
+                        )
+
     @tasks.loop(time=dt.time(hour=0, minute=10, tzinfo=dt.timezone.utc))
     async def monthly_reports_task(self) -> None:
         try:
@@ -194,6 +214,7 @@ class SchedulerCog(commands.Cog):
     @community_goals_task.before_loop
     @monthly_goals_task.before_loop
     @monthly_reports_task.before_loop
+    @pvp_seasons_task.before_loop
     async def before_tasks(self) -> None:
         await self.bot.wait_until_ready()
 

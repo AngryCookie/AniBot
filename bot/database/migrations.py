@@ -758,6 +758,56 @@ async def migration_add_pvp_user_fields(conn: AsyncConnection) -> None:
         await conn.execute(text("ALTER TABLE users ADD COLUMN total_pvp_volume INTEGER NOT NULL DEFAULT 0"))
 
 
+async def migration_create_pvp_seasons(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS pvp_seasons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                season_number INTEGER NOT NULL,
+                starts_at DATETIME NOT NULL,
+                ends_at DATETIME NOT NULL,
+                closed_at DATETIME NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'active',
+                summary_message_id BIGINT NULL,
+                summary_channel_id BIGINT NULL,
+                CONSTRAINT uq_pvp_seasons_guild_number UNIQUE (guild_id, season_number)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_seasons_guild_id ON pvp_seasons (guild_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS pvp_season_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                season_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                final_rating INTEGER NOT NULL DEFAULT 1000,
+                wins INTEGER NOT NULL DEFAULT 0,
+                losses INTEGER NOT NULL DEFAULT 0,
+                total_profit INTEGER NOT NULL DEFAULT 0,
+                total_volume INTEGER NOT NULL DEFAULT 0,
+                rank INTEGER NOT NULL,
+                FOREIGN KEY(season_id) REFERENCES pvp_seasons(id) ON DELETE CASCADE
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_season_results_guild_id ON pvp_season_results (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_season_results_user_id ON pvp_season_results (user_id)"))
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_pvp_season_results_guild_season_rank "
+            "ON pvp_season_results (guild_id, season_id, rank)"
+        )
+    )
+
+
 async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
     await conn.execute(
         text(
@@ -801,5 +851,6 @@ MIGRATIONS: List[Migration] = [
     migration_create_pvp_duels,
     migration_create_pvp_stats,
     migration_add_pvp_user_fields,
+    migration_create_pvp_seasons,
     migration_add_operational_indexes,
 ]
