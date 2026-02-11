@@ -556,6 +556,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
                 "fee_percent": 5.0,
                 "cooldown_seconds": 30,
                 "influence_level_weight": 1.0,
+                "k_factor": 32,
             },
             "shop": {
                 "enabled": True,
@@ -818,6 +819,7 @@ async def get_guild_analytics_overview(
         "economy": analytics["economy"],
         "betting": analytics["betting"],
         "activity": analytics["activity"],
+        "pvp": analytics.get("pvp", {}),
     }
 
 

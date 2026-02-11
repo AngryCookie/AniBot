@@ -46,6 +46,7 @@ class PvpSettings(BaseModel):
     fee_percent: float = Field(5.0, ge=0, le=50)
     cooldown_seconds: int = Field(30, ge=0, le=3600)
     influence_level_weight: float = Field(1.0, ge=0, le=10)
+    k_factor: int = Field(32, ge=1, le=128)
 
 
 class ShopSettings(BaseModel):

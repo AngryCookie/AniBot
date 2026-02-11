@@ -151,6 +151,7 @@ const renderKpis = (overview) => {
   const economy = overview?.economy || {};
   const betting = overview?.betting || {};
   const activity = overview?.activity || {};
+  const pvp = overview?.pvp || {};
 
   const values = {
     kpiCirculation: economy.total_currency_in_circulation,
@@ -159,12 +160,43 @@ const renderKpis = (overview) => {
     kpiBets: betting.total_bets_amount,
     kpiHouse: betting.house_net,
     kpiMessages: activity.total_messages,
+    pvpTotalDuels: pvp.total_duels,
+    pvpTotalVolume: pvp.total_volume,
+    pvpTotalFees: pvp.total_fees_burned,
+    pvpAvgBet: pvp.avg_bet,
   };
 
   Object.entries(values).forEach(([id, value]) => {
     const node = document.getElementById(id);
     if (node) node.textContent = formatNumber(value);
   });
+
+  const distributionNode = document.getElementById("pvpRatingDistribution");
+  if (distributionNode) {
+    const distribution = pvp.rating_distribution || {};
+    distributionNode.innerHTML = "";
+    [
+      ["< 900", distribution.under_900],
+      ["900-1099", distribution.between_900_1099],
+      ["1100-1299", distribution.between_1100_1299],
+      [">= 1300", distribution.over_1300],
+    ].forEach(([label, value]) => {
+      const item = document.createElement("li");
+      item.textContent = `${label}: ${formatNumber(value)}`;
+      distributionNode.appendChild(item);
+    });
+  }
+
+  const topPlayersNode = document.getElementById("pvpTopPlayers");
+  if (topPlayersNode) {
+    const topPlayers = pvp.top_players || [];
+    topPlayersNode.innerHTML = "";
+    topPlayers.forEach((player, index) => {
+      const item = document.createElement("li");
+      item.textContent = `${index + 1}. User ${player.user_id} · R${player.rating} · W/L ${player.wins}/${player.losses}`;
+      topPlayersNode.appendChild(item);
+    });
+  }
 };
 
 const renderEconomyChart = (timeseries) => {

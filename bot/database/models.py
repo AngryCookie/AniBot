@@ -462,3 +462,29 @@ class PvpDuel(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
     resolved_at = Column(DateTime, nullable=True)
     status = Column(String(16), nullable=False, default="pending")
+
+
+class PvpStats(Base):
+    __tablename__ = "pvp_stats"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "user_id", name="uq_pvp_stats_guild_user"),
+        Index("ix_pvp_stats_guild_rating", "guild_id", "rating"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    wins = Column(Integer, nullable=False, default=0)
+    losses = Column(Integer, nullable=False, default=0)
+    total_volume = Column(Integer, nullable=False, default=0)
+    total_profit = Column(Integer, nullable=False, default=0)
+    total_fees_paid = Column(Integer, nullable=False, default=0)
+    rating = Column(Integer, nullable=False, default=1000)
+    current_streak = Column(Integer, nullable=False, default=0)
+    best_streak = Column(Integer, nullable=False, default=0)
+    updated_at = Column(
+        DateTime,
+        default=dt.datetime.utcnow,
+        onupdate=dt.datetime.utcnow,
+        nullable=False,
+    )

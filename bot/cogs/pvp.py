@@ -32,9 +32,11 @@ class PvpChallengeView(discord.ui.View):
                         duel_id=self.duel_id,
                         actor_user_id=interaction.user.id,
                     )
+                    settings = await self.cog._get_pvp_settings(session, interaction.guild.id)
                     resolved = await service.resolve_duel(
                         guild_id=interaction.guild.id,
                         duel_id=duel.id,
+                        k_factor=int(settings.get("k_factor", 32)),
                     )
             except ValueError as exc:
                 await interaction.response.send_message(str(exc), ephemeral=True)
@@ -124,6 +126,56 @@ class PvpCog(commands.Cog):
         embed.set_footer(text="Нажмите Принять или Отклонить")
         await interaction.response.send_message(embed=embed, view=view)
 
+
+    @app_commands.command(name="pvp-top", description="Топ игроков PvP по рейтингу")
+    async def pvp_top(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+
+        async with self.bot.db.session() as session:
+            service = PvpService(session)
+            top_players = await service.get_top_players(interaction.guild.id, limit=10)
+
+        if not top_players:
+            await interaction.response.send_message("Пока нет PvP-статистики.", ephemeral=True)
+            return
+
+        embed = discord.Embed(title="🏆 PvP рейтинг", color=discord.Color.gold())
+        lines = []
+        for index, player in enumerate(top_players, start=1):
+            lines.append(
+                f"**{index}.** <@{player.user_id}> — R{player.rating} | W/L: {player.wins}/{player.losses}"
+            )
+        embed.description = "\n".join(lines)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="pvp-stats", description="Показать PvP статистику игрока")
+    async def pvp_stats(self, interaction: discord.Interaction, user: discord.Member | None = None) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+
+        target = user or interaction.user
+        async with self.bot.db.session() as session:
+            service = PvpService(session)
+            stats = await service.get_user_stats(interaction.guild.id, target.id)
+
+        total_duels = int(stats.wins or 0) + int(stats.losses or 0)
+        winrate = (int(stats.wins or 0) / total_duels * 100.0) if total_duels > 0 else 0.0
+
+        embed = discord.Embed(title="📊 PvP статистика", color=discord.Color.blurple())
+        embed.description = f"Игрок: {target.mention}"
+        embed.add_field(name="Рейтинг", value=str(stats.rating), inline=True)
+        embed.add_field(name="Победы / Поражения", value=f"{stats.wins}/{stats.losses}", inline=True)
+        embed.add_field(name="Винрейт", value=f"{winrate:.1f}%", inline=True)
+        embed.add_field(name="Общий объём", value=str(stats.total_volume), inline=True)
+        embed.add_field(name="Профит", value=str(stats.total_profit), inline=True)
+        embed.add_field(name="Комиссии", value=str(stats.total_fees_paid), inline=True)
+        embed.add_field(name="Текущий стрик", value=str(stats.current_streak), inline=True)
+        embed.add_field(name="Лучший стрик", value=str(stats.best_streak), inline=True)
+        await interaction.response.send_message(embed=embed)
+
     async def _get_pvp_settings(self, session, guild_id: int) -> dict:
         from bot.database.models import GuildConfig
         from bot.cogs.utils import parse_settings
@@ -137,6 +189,7 @@ class PvpCog(commands.Cog):
                 "fee_percent": 5.0,
                 "cooldown_seconds": 30,
                 "influence_level_weight": 1.0,
+                "k_factor": 32,
             }
         settings_map = parse_settings(config.settings)
         return settings_map.get(
@@ -148,6 +201,7 @@ class PvpCog(commands.Cog):
                 "fee_percent": 5.0,
                 "cooldown_seconds": 30,
                 "influence_level_weight": 1.0,
+                "k_factor": 32,
             },
         )
 
