@@ -16,7 +16,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from starlette.middleware.sessions import SessionMiddleware
 
 from bot.analytics.economy import build_economy_analytics
@@ -31,12 +31,14 @@ from bot.database.models import (
     GuildConfig,
     ReferralCode,
     ReferralUsage,
+    ReferralReward,
     GuildConfigHistory,
     GuildFeatureFlag,
     ShopItem,
     UserProfile,
     Warning,
 )
+from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardType, ReferralRelationship
 from bot.community_goals import CommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 
@@ -73,6 +75,12 @@ from .schemas import (
     ReferralPromoCodeIn,
     ReferralPromoCodeOut,
     ReferralRedeemSummary,
+    GrowthMostUsedPromo,
+    GrowthOverviewResponse,
+    GrowthPromoCodeIn,
+    GrowthPromoCodeOut,
+    GrowthReferralCampaignSettings,
+    GrowthTopReferrer,
     ShopItemIn,
     ShopItemOut,
     ShopSettings,
@@ -1733,6 +1741,295 @@ async def get_referral_analytics(
         monthly_referral_volume=int(monthly_referral_volume or 0),
         total_referral_payout=int(total_referral_payout or 0),
         top_inviters=top_inviters,
+    )
+
+
+
+
+def _build_growth_referral_settings(settings_map: Dict[str, Any]) -> GrowthReferralCampaignSettings:
+    raw = settings_map.get("referral_campaign", {})
+    return GrowthReferralCampaignSettings(
+        enabled=bool(raw.get("enabled", True)),
+        reward_percent_referrer=float(raw.get("reward_percent_referrer", 5.0)),
+        reward_percent_invited=float(raw.get("reward_percent_invited", 2.0)),
+        active_threshold_messages=int(raw.get("active_threshold_messages", 20)),
+        season_duration_days=int(raw.get("season_duration_days", 30)),
+        max_rewards_per_user=int(raw.get("max_rewards_per_user", 0)),
+    )
+
+
+@app.get("/api/growth/referral/settings", response_model=GrowthReferralCampaignSettings)
+async def get_growth_referral_settings(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> GrowthReferralCampaignSettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    config = await _get_or_create_config(guild_id)
+    settings_map = _load_settings(config)
+    return _build_growth_referral_settings(settings_map)
+
+
+@app.put("/api/growth/referral/settings", response_model=GrowthReferralCampaignSettings)
+async def update_growth_referral_settings(
+    guild_id: int,
+    payload: GrowthReferralCampaignSettings,
+    request: Request,
+    access_token: str = Depends(get_access_token),
+) -> GrowthReferralCampaignSettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    config = await _get_or_create_config(guild_id)
+    settings_map = _load_settings(config)
+    previous_settings = dict(settings_map)
+    settings_map["referral_campaign"] = payload.dict()
+    _save_settings(config, settings_map)
+
+    async with database.session() as session:
+        session.add(config)
+        await session.commit()
+
+    await _record_config_change(
+        guild_id=guild_id,
+        category="growth_referral_campaign",
+        previous_settings=previous_settings,
+        new_settings=settings_map,
+        reason=request.headers.get("X-Change-Reason", "Updated growth referral campaign settings"),
+        access_token=access_token,
+    )
+    return payload
+
+
+@app.get("/api/growth/promo", response_model=list[GrowthPromoCodeOut])
+async def list_growth_promo_codes(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> list[GrowthPromoCodeOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        result = await session.execute(
+            select(PromoCodeExtended)
+            .where(PromoCodeExtended.guild_id == guild_id)
+            .order_by(PromoCodeExtended.created_at.desc(), PromoCodeExtended.id.desc())
+        )
+        rows = result.scalars().all()
+
+    return [
+        GrowthPromoCodeOut(
+            id=row.id,
+            guild_id=int(row.guild_id),
+            code=row.code,
+            reward_type=row.reward_type.value,
+            reward_value=float(row.reward_value),
+            max_uses=row.max_total_uses,
+            per_user_limit=row.max_uses_per_user,
+            expires_at=(row.end_at.isoformat() if row.end_at else None),
+            enabled=bool(row.is_active),
+            total_uses=int(row.total_uses or 0),
+            created_at=row.created_at.isoformat(),
+        )
+        for row in rows
+    ]
+
+
+@app.post("/api/growth/promo", response_model=GrowthPromoCodeOut)
+async def create_growth_promo_code(
+    guild_id: int,
+    payload: GrowthPromoCodeIn,
+    access_token: str = Depends(get_access_token),
+) -> GrowthPromoCodeOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    actor_id = await _get_actor_id(access_token)
+    expires_at = _parse_iso_datetime(payload.expires_at) if payload.expires_at else None
+
+    code = PromoCodeExtended(
+        guild_id=guild_id,
+        campaign_id=None,
+        code=payload.code.strip().upper(),
+        reward_type=PromoRewardType(payload.reward_type),
+        reward_value=payload.reward_value,
+        max_total_uses=payload.max_uses,
+        max_uses_per_user=payload.per_user_limit,
+        is_active=payload.enabled,
+        end_at=expires_at,
+        created_by_admin_id=(actor_id or 0),
+    )
+    async with database.session() as session:
+        session.add(code)
+        await session.commit()
+        await session.refresh(code)
+
+    return GrowthPromoCodeOut(
+        id=code.id,
+        guild_id=int(code.guild_id),
+        code=code.code,
+        reward_type=code.reward_type.value,
+        reward_value=float(code.reward_value),
+        max_uses=code.max_total_uses,
+        per_user_limit=code.max_uses_per_user,
+        expires_at=(code.end_at.isoformat() if code.end_at else None),
+        enabled=bool(code.is_active),
+        total_uses=int(code.total_uses or 0),
+        created_at=code.created_at.isoformat(),
+    )
+
+
+@app.put("/api/growth/promo/{promo_id}", response_model=GrowthPromoCodeOut)
+async def update_growth_promo_code(
+    promo_id: int,
+    guild_id: int,
+    payload: GrowthPromoCodeIn,
+    access_token: str = Depends(get_access_token),
+) -> GrowthPromoCodeOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    expires_at = _parse_iso_datetime(payload.expires_at) if payload.expires_at else None
+
+    async with database.session() as session:
+        result = await session.execute(
+            select(PromoCodeExtended).where(
+                PromoCodeExtended.id == promo_id,
+                PromoCodeExtended.guild_id == guild_id,
+            )
+        )
+        code = result.scalars().first()
+        if code is None:
+            raise HTTPException(status_code=404, detail="Промо-код не найден")
+
+        code.code = payload.code.strip().upper()
+        code.reward_type = PromoRewardType(payload.reward_type)
+        code.reward_value = payload.reward_value
+        code.max_total_uses = payload.max_uses
+        code.max_uses_per_user = payload.per_user_limit
+        code.end_at = expires_at
+        code.is_active = payload.enabled
+
+        await session.commit()
+        await session.refresh(code)
+
+    return GrowthPromoCodeOut(
+        id=code.id,
+        guild_id=int(code.guild_id),
+        code=code.code,
+        reward_type=code.reward_type.value,
+        reward_value=float(code.reward_value),
+        max_uses=code.max_total_uses,
+        per_user_limit=code.max_uses_per_user,
+        expires_at=(code.end_at.isoformat() if code.end_at else None),
+        enabled=bool(code.is_active),
+        total_uses=int(code.total_uses or 0),
+        created_at=code.created_at.isoformat(),
+    )
+
+
+@app.delete("/api/growth/promo/{promo_id}")
+async def delete_growth_promo_code(
+    promo_id: int,
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> Dict[str, Any]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        result = await session.execute(
+            select(PromoCodeExtended).where(
+                PromoCodeExtended.id == promo_id,
+                PromoCodeExtended.guild_id == guild_id,
+            )
+        )
+        code = result.scalars().first()
+        if code is None:
+            raise HTTPException(status_code=404, detail="Промо-код не найден")
+
+        await session.delete(code)
+        await session.commit()
+
+    return {"status": "deleted"}
+
+
+@app.get("/api/growth/overview", response_model=GrowthOverviewResponse)
+async def get_growth_overview(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> GrowthOverviewResponse:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        total_referrals = await session.scalar(
+            select(func.count()).select_from(ReferralRelationship).where(
+                ReferralRelationship.guild_id == guild_id
+            )
+        )
+        active_referrals = await session.scalar(
+            select(func.count()).select_from(ReferralRelationship).where(
+                ReferralRelationship.guild_id == guild_id,
+                ReferralRelationship.activated_at.is_not(None),
+            )
+        )
+        total_rewards_paid = await session.scalar(
+            select(func.coalesce(func.sum(ReferralReward.amount), 0)).where(
+                ReferralReward.guild_id == guild_id
+            )
+        )
+        total_promo_redemptions = await session.scalar(
+            select(func.count()).select_from(PromoCodeUsage).where(PromoCodeUsage.guild_id == guild_id)
+        )
+
+        top_referrers_result = await session.execute(
+            select(
+                ReferralRelationship.inviter_user_id,
+                func.count(ReferralRelationship.id).label("total_referrals"),
+                func.coalesce(func.sum(case((ReferralRelationship.activated_at.is_not(None), 1), else_=0)), 0).label("active_referrals"),
+                func.coalesce(func.sum(ReferralRelationship.total_reward_paid), 0).label("total_rewards_paid"),
+            )
+            .where(ReferralRelationship.guild_id == guild_id)
+            .group_by(ReferralRelationship.inviter_user_id)
+            .order_by(func.count(ReferralRelationship.id).desc())
+            .limit(10)
+        )
+
+        top_referrers = [
+            GrowthTopReferrer(
+                user_id=int(row.inviter_user_id),
+                total_referrals=int(row.total_referrals or 0),
+                active_referrals=int(row.active_referrals or 0),
+                total_rewards_paid=int(row.total_rewards_paid or 0),
+            )
+            for row in top_referrers_result
+        ]
+
+        most_used_result = await session.execute(
+            select(PromoCodeExtended)
+            .where(PromoCodeExtended.guild_id == guild_id)
+            .order_by(PromoCodeExtended.total_uses.desc(), PromoCodeExtended.id.asc())
+            .limit(1)
+        )
+        most_used_entity = most_used_result.scalars().first()
+
+    most_used = None
+    if most_used_entity is not None:
+        most_used = GrowthMostUsedPromo(
+            id=most_used_entity.id,
+            code=most_used_entity.code,
+            total_uses=int(most_used_entity.total_uses or 0),
+        )
+
+    return GrowthOverviewResponse(
+        total_referrals=int(total_referrals or 0),
+        active_referrals=int(active_referrals or 0),
+        total_rewards_paid=int(total_rewards_paid or 0),
+        total_promo_redemptions=int(total_promo_redemptions or 0),
+        top_referrers=top_referrers,
+        most_used_promo=most_used,
     )
 
 

@@ -360,3 +360,51 @@ class ReferralRedeemSummary(BaseModel):
     monthly_referral_volume: int
     total_referral_payout: int
     top_inviters: list[dict]
+
+
+class GrowthReferralCampaignSettings(BaseModel):
+    enabled: bool = True
+    reward_percent_referrer: float = Field(5.0, ge=0, le=100)
+    reward_percent_invited: float = Field(2.0, ge=0, le=100)
+    active_threshold_messages: int = Field(20, ge=0, le=1_000_000)
+    season_duration_days: int = Field(30, ge=1, le=3650)
+    max_rewards_per_user: int = Field(0, ge=0, le=1_000_000)
+
+
+class GrowthPromoCodeIn(BaseModel):
+    code: str = Field(..., min_length=3, max_length=64)
+    reward_type: str = Field(..., pattern="^(fixed|percent|multiplier)$")
+    reward_value: float = Field(..., gt=0, le=1_000_000)
+    max_uses: Optional[int] = Field(None, ge=1, le=10_000_000)
+    per_user_limit: Optional[int] = Field(None, ge=1, le=10_000_000)
+    expires_at: Optional[str] = None
+    enabled: bool = True
+
+
+class GrowthPromoCodeOut(GrowthPromoCodeIn):
+    id: int
+    guild_id: int
+    total_uses: int
+    created_at: str
+
+
+class GrowthTopReferrer(BaseModel):
+    user_id: int
+    total_referrals: int
+    active_referrals: int
+    total_rewards_paid: int
+
+
+class GrowthMostUsedPromo(BaseModel):
+    id: int
+    code: str
+    total_uses: int
+
+
+class GrowthOverviewResponse(BaseModel):
+    total_referrals: int
+    active_referrals: int
+    total_rewards_paid: int
+    total_promo_redemptions: int
+    top_referrers: list[GrowthTopReferrer]
+    most_used_promo: Optional[GrowthMostUsedPromo] = None

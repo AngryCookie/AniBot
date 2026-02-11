@@ -6,6 +6,7 @@ import { initEconomyAnalytics } from "./pages/economy_analytics.js";
 import { initCommunityGoal } from "./pages/community_goal.js";
 import { initMonthlyGoals } from "./pages/monthly_goals.js";
 import { initReferralPromo } from "./pages/referral_promo.js";
+import { initGrowth } from "./pages/growth.js";
 
 const appState = {
   guildId: null,
@@ -62,6 +63,11 @@ const routes = {
     title: "Referral & Promo",
     page: "/static/pages/referral-promo.html",
     init: () => initReferralPromo(appState.guildId),
+  },
+  growth: {
+    title: "Growth",
+    page: "/static/pages/growth.html",
+    init: () => initGrowth(appState.guildId),
   },
   "feature-flags": {
     title: "Feature Flags",
