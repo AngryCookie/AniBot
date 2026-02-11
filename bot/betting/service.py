@@ -83,7 +83,7 @@ class BettingService:
     ) -> BettingBet:
         if amount <= 0:
             raise ValueError("Ставка должна быть больше 0.")
-        match, team_a, team_b = await self._get_match_with_teams(match_id)
+        match, team_a, team_b = await self._get_match_with_teams(match_id, lock_match=True)
         now = now or dt.datetime.utcnow()
         expected_status = _match_status_for_window(
             match.betting_open_at, match.betting_close_at, now
@@ -140,7 +140,7 @@ class BettingService:
         match_id: int,
         now: dt.datetime | None = None,
     ) -> BettingMatch:
-        match, team_a, team_b = await self._get_match_with_teams(match_id)
+        match, team_a, team_b = await self._get_match_with_teams(match_id, lock_match=True)
         if match.status == BettingMatchStatus.resolved:
             return match
         now = now or dt.datetime.utcnow()
@@ -195,11 +195,15 @@ class BettingService:
         return team
 
     async def _get_match_with_teams(
-        self, match_id: int
+        self,
+        match_id: int,
+        *,
+        lock_match: bool = False,
     ) -> tuple[BettingMatch, BettingTeam, BettingTeam]:
-        result = await self.session.execute(
-            select(BettingMatch).where(BettingMatch.id == match_id)
-        )
+        statement = select(BettingMatch).where(BettingMatch.id == match_id)
+        if lock_match:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
         match = result.scalars().first()
         if match is None:
             raise ValueError("Матч не найден.")

@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.database.models import EconomyLedger, EconomyTransaction, UserProfile
 
 
+_DB_INT64_MIN = -(2**63)
+_DB_INT64_MAX = 2**63 - 1
+
+
 class EconomyService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -54,6 +58,8 @@ class EconomyService:
         balance_after = balance_before + amount
         if balance_after < 0:
             raise ValueError("Недостаточно средств.")
+        if balance_after < _DB_INT64_MIN or balance_after > _DB_INT64_MAX:
+            raise ValueError("Balance overflow.")
 
         user.balance = balance_after
         timestamp = created_at or dt.datetime.utcnow()
@@ -101,6 +107,8 @@ class EconomyService:
     ) -> int:
         if amount <= 0:
             raise ValueError("Amount must be greater than zero.")
+        if amount > _DB_INT64_MAX:
+            raise ValueError("Amount is too large.")
 
         async def operation() -> int:
             return await self._apply_change(
@@ -126,6 +134,8 @@ class EconomyService:
     ) -> int:
         if amount <= 0:
             raise ValueError("Amount must be greater than zero.")
+        if amount > _DB_INT64_MAX:
+            raise ValueError("Amount is too large.")
 
         async def operation() -> int:
             return await self._apply_change(
@@ -149,6 +159,8 @@ class EconomyService:
     ) -> tuple[int, int]:
         if amount <= 0:
             raise ValueError("Amount must be greater than zero.")
+        if amount > _DB_INT64_MAX:
+            raise ValueError("Amount is too large.")
         if from_user_id == to_user_id:
             raise ValueError("Cannot transfer to the same user.")
 

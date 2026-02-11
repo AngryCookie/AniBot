@@ -35,7 +35,10 @@ class GuildConfig(Base):
 
 class UserProfile(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("user_id", "guild_id", name="uq_user_guild"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "guild_id", name="uq_user_guild"),
+        Index("ix_users_guild_user", "guild_id", "user_id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, nullable=False)
@@ -68,6 +71,9 @@ class EconomyLedger(Base):
 
 class EconomyTransaction(Base):
     __tablename__ = "economy_transactions"
+    __table_args__ = (
+        Index("ix_economy_transactions_guild_user_created", "guild_id", "user_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     guild_id = Column(BigInteger, nullable=False, index=True)
