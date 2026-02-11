@@ -75,8 +75,10 @@ from .schemas import (
     ReferralPromoCodeIn,
     ReferralPromoCodeOut,
     ReferralRedeemSummary,
+    GrowthDailyMetricPoint,
     GrowthMostUsedPromo,
     GrowthOverviewResponse,
+    GrowthRecommendation,
     GrowthPromoCodeIn,
     GrowthPromoCodeOut,
     GrowthReferralCampaignSettings,
@@ -1955,13 +1957,81 @@ async def delete_growth_promo_code(
     return {"status": "deleted"}
 
 
+def _parse_growth_range(value: str | None) -> tuple[str, int]:
+    allowed = {"7d": 7, "30d": 30, "90d": 90}
+    if value is None:
+        return "30d", 30
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        raise HTTPException(status_code=422, detail="range must be one of: 7d, 30d, 90d")
+    return normalized, allowed[normalized]
+
+
+def _build_growth_series(days: int, aggregates: dict[str, int], now: dt.datetime) -> list[GrowthDailyMetricPoint]:
+    start_day = (now - dt.timedelta(days=days - 1)).date()
+    points: list[GrowthDailyMetricPoint] = []
+    for offset in range(days):
+        current_day = start_day + dt.timedelta(days=offset)
+        key = current_day.isoformat()
+        points.append(GrowthDailyMetricPoint(day=key, value=int(aggregates.get(key, 0) or 0)))
+    return points
+
+
+def _to_growth_recommendations(
+    conversion_rate: float,
+    roi_ratio: float,
+    net_growth_value: int,
+    total_referrals: int,
+) -> list[GrowthRecommendation]:
+    recommendations: list[GrowthRecommendation] = []
+
+    if conversion_rate < 0.25:
+        recommendations.append(
+            GrowthRecommendation(
+                level="warning",
+                text="Конверсия рефералов ниже 25%: рекомендуется снизить процент награды приглашённому пользователю.",
+            )
+        )
+
+    if roi_ratio < 1:
+        recommendations.append(
+            GrowthRecommendation(
+                level="warning",
+                text="ROI ниже 1: рекомендуется снизить процент награды рефереру для контроля затрат.",
+            )
+        )
+
+    if conversion_rate >= 0.4 and roi_ratio >= 1 and net_growth_value > 0 and total_referrals >= 10:
+        recommendations.append(
+            GrowthRecommendation(
+                level="info",
+                text="Высокий рост и положительный ROI: можно увеличить лимиты кампании для масштабирования.",
+            )
+        )
+
+    if not recommendations:
+        recommendations.append(
+            GrowthRecommendation(
+                level="info",
+                text="Метрики стабильны: продолжайте мониторинг, текущие настройки выглядят сбалансированными.",
+            )
+        )
+
+    return recommendations
+
+
 @app.get("/api/growth/overview", response_model=GrowthOverviewResponse)
 async def get_growth_overview(
     guild_id: int,
+    range: str = "30d",
     access_token: str = Depends(get_access_token),
 ) -> GrowthOverviewResponse:
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
+
+    range_label, period_days = _parse_growth_range(range)
+    now = dt.datetime.now(dt.timezone.utc)
+    cutoff = now - dt.timedelta(days=period_days)
 
     async with database.session() as session:
         total_referrals = await session.scalar(
@@ -2015,6 +2085,70 @@ async def get_growth_overview(
         )
         most_used_entity = most_used_result.scalars().first()
 
+        registration_rows = await session.execute(
+            select(
+                func.date(ReferralRelationship.invited_at).label("day"),
+                func.count(ReferralRelationship.id).label("value"),
+            )
+            .where(
+                ReferralRelationship.guild_id == guild_id,
+                ReferralRelationship.invited_at >= cutoff,
+            )
+            .group_by(func.date(ReferralRelationship.invited_at))
+            .order_by(func.date(ReferralRelationship.invited_at).asc())
+        )
+        registrations_map = {str(row.day): int(row.value or 0) for row in registration_rows}
+
+        active_referral_rows = await session.execute(
+            select(
+                func.date(ReferralRelationship.activated_at).label("day"),
+                func.count(ReferralRelationship.id).label("value"),
+            )
+            .where(
+                ReferralRelationship.guild_id == guild_id,
+                ReferralRelationship.activated_at.is_not(None),
+                ReferralRelationship.activated_at >= cutoff,
+            )
+            .group_by(func.date(ReferralRelationship.activated_at))
+            .order_by(func.date(ReferralRelationship.activated_at).asc())
+        )
+        active_referrals_map = {str(row.day): int(row.value or 0) for row in active_referral_rows}
+
+        promo_rows = await session.execute(
+            select(
+                func.date(PromoCodeUsage.used_at).label("day"),
+                func.count(PromoCodeUsage.id).label("value"),
+            )
+            .where(
+                PromoCodeUsage.guild_id == guild_id,
+                PromoCodeUsage.used_at >= cutoff,
+            )
+            .group_by(func.date(PromoCodeUsage.used_at))
+            .order_by(func.date(PromoCodeUsage.used_at).asc())
+        )
+        promo_redemptions_map = {str(row.day): int(row.value or 0) for row in promo_rows}
+
+        rewards_rows = await session.execute(
+            select(
+                func.date(ReferralReward.created_at).label("day"),
+                func.coalesce(func.sum(ReferralReward.amount), 0).label("value"),
+            )
+            .where(
+                ReferralReward.guild_id == guild_id,
+                ReferralReward.created_at >= cutoff,
+            )
+            .group_by(func.date(ReferralReward.created_at))
+            .order_by(func.date(ReferralReward.created_at).asc())
+        )
+        rewards_paid_map = {str(row.day): int(row.value or 0) for row in rewards_rows}
+
+        referred_revenue_sum = await session.scalar(
+            select(func.coalesce(func.sum(ReferralRelationship.lifetime_revenue_generated), 0)).where(
+                ReferralRelationship.guild_id == guild_id,
+                ReferralRelationship.invited_at >= cutoff,
+            )
+        )
+
     most_used = None
     if most_used_entity is not None:
         most_used = GrowthMostUsedPromo(
@@ -2023,11 +2157,47 @@ async def get_growth_overview(
             total_uses=int(most_used_entity.total_uses or 0),
         )
 
+    registrations_per_day = _build_growth_series(period_days, registrations_map, now)
+    active_referrals_per_day = _build_growth_series(period_days, active_referrals_map, now)
+    promo_redemptions_per_day = _build_growth_series(period_days, promo_redemptions_map, now)
+    rewards_paid_per_day = _build_growth_series(period_days, rewards_paid_map, now)
+
+    period_registrations = sum(point.value for point in registrations_per_day)
+    period_active_referrals = sum(point.value for point in active_referrals_per_day)
+    period_rewards_paid = sum(point.value for point in rewards_paid_per_day)
+    period_promo_redemptions = sum(point.value for point in promo_redemptions_per_day)
+
+    total_revenue = int(referred_revenue_sum or 0)
+    net_growth_value = int(total_revenue - period_rewards_paid)
+
+    referral_conversion_rate = (
+        (period_active_referrals / period_registrations) if period_registrations > 0 else 0.0
+    )
+    avg_revenue_per_referral = (total_revenue / period_registrations) if period_registrations > 0 else 0.0
+    roi_ratio = (total_revenue / period_rewards_paid) if period_rewards_paid > 0 else 0.0
+
+    recommendations = _to_growth_recommendations(
+        conversion_rate=referral_conversion_rate,
+        roi_ratio=roi_ratio,
+        net_growth_value=net_growth_value,
+        total_referrals=period_registrations,
+    )
+
     return GrowthOverviewResponse(
+        range=range_label,
         total_referrals=int(total_referrals or 0),
         active_referrals=int(active_referrals or 0),
         total_rewards_paid=int(total_rewards_paid or 0),
         total_promo_redemptions=int(total_promo_redemptions or 0),
+        registrations_per_day=registrations_per_day,
+        active_referrals_per_day=active_referrals_per_day,
+        promo_redemptions_per_day=promo_redemptions_per_day,
+        rewards_paid_per_day=rewards_paid_per_day,
+        net_growth_value=net_growth_value,
+        referral_conversion_rate=float(referral_conversion_rate),
+        avg_revenue_per_referral=float(avg_revenue_per_referral),
+        roi_ratio=float(roi_ratio),
+        recommendations=recommendations,
         top_referrers=top_referrers,
         most_used_promo=most_used,
     )
