@@ -112,3 +112,41 @@ def test_no_parallel_active_duels_for_user():
                 raise AssertionError("Expected error for multiple active duels")
 
     _run(scenario())
+
+
+def test_expire_pending_duel_clears_active_status():
+    async def scenario() -> None:
+        session = await _make_session()
+        async with session:
+            await _seed_balance(session, 1, 10, 500)
+            await _seed_balance(session, 1, 20, 500)
+            await _seed_balance(session, 1, 30, 500)
+
+            async with session.begin():
+                service = PvpService(session)
+                duel = await service.create_duel(
+                    guild_id=1,
+                    challenger_id=10,
+                    opponent_id=20,
+                    amount=100,
+                    fee_percent=5.0,
+                )
+
+            async with session.begin():
+                service = PvpService(session)
+                expired = await service.expire_pending_duel(guild_id=1, duel_id=duel.id)
+                assert expired.status == "expired"
+                assert expired.resolved_at is not None
+
+            async with session.begin():
+                service = PvpService(session)
+                next_duel = await service.create_duel(
+                    guild_id=1,
+                    challenger_id=10,
+                    opponent_id=30,
+                    amount=100,
+                    fee_percent=5.0,
+                )
+                assert next_duel.status == "pending"
+
+    _run(scenario())
