@@ -10,7 +10,8 @@ from discord.ext import commands
 
 from bot.cogs.utils import get_or_create_gambling_settings
 from bot.database.models import ModLog
-from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.database.operations import get_or_create_user_locked
+from bot.services.economy import EconomyService
 
 
 class GamblingCog(commands.Cog):
@@ -65,35 +66,39 @@ class GamblingCog(commands.Cog):
         async with self.bot.db.session() as session:
             try:
                 async with session.begin():
+                    economy = EconomyService(session)
                     user, settings = await self._prepare_bet(
                         session, interaction.guild.id, interaction.user.id, amount
                     )
                     result = random.choice(["орел", "решка"])
                     win = result == choice
                     user.daily_bet_amount += amount
+                    await economy.place_bet(
+                        guild_id=interaction.guild.id,
+                        user_id=interaction.user.id,
+                        amount=amount,
+                        source="coinflip_bet",
+                    )
                     house_multiplier = 2.0 * (1 - settings.house_edge)
                     if win:
                         winnings = int(amount * house_multiplier)
                         tax = int(winnings * settings.tax_rate)
                         payout = winnings - tax
-                        await apply_balance_change(
-                            session,
+                        await economy.bet_win(
                             guild_id=interaction.guild.id,
                             user_id=interaction.user.id,
-                            amount=payout,
-                            ledger_type="gamble",
+                            amount=winnings,
                             source="coinflip_win",
                         )
+                        if tax > 0:
+                            await economy.tax(
+                                guild_id=interaction.guild.id,
+                                user_id=interaction.user.id,
+                                amount=tax,
+                                source="coinflip_tax",
+                            )
                     else:
                         payout = -amount
-                        await apply_balance_change(
-                            session,
-                            guild_id=interaction.guild.id,
-                            user_id=interaction.user.id,
-                            amount=-amount,
-                            ledger_type="gamble",
-                            source="coinflip_loss",
-                        )
                     session.add(
                         ModLog(
                             guild_id=interaction.guild.id,
@@ -122,35 +127,39 @@ class GamblingCog(commands.Cog):
         async with self.bot.db.session() as session:
             try:
                 async with session.begin():
+                    economy = EconomyService(session)
                     user, settings = await self._prepare_bet(
                         session, interaction.guild.id, interaction.user.id, amount
                     )
                     roll = random.randint(1, 6)
                     win = roll == guess
                     user.daily_bet_amount += amount
+                    await economy.place_bet(
+                        guild_id=interaction.guild.id,
+                        user_id=interaction.user.id,
+                        amount=amount,
+                        source="dice_bet",
+                    )
                     house_multiplier = 5.0 * (1 - settings.house_edge)
                     if win:
                         winnings = int(amount * house_multiplier)
                         tax = int(winnings * settings.tax_rate)
                         payout = winnings - tax
-                        await apply_balance_change(
-                            session,
+                        await economy.bet_win(
                             guild_id=interaction.guild.id,
                             user_id=interaction.user.id,
-                            amount=payout,
-                            ledger_type="gamble",
+                            amount=winnings,
                             source="dice_win",
                         )
+                        if tax > 0:
+                            await economy.tax(
+                                guild_id=interaction.guild.id,
+                                user_id=interaction.user.id,
+                                amount=tax,
+                                source="dice_tax",
+                            )
                     else:
                         payout = -amount
-                        await apply_balance_change(
-                            session,
-                            guild_id=interaction.guild.id,
-                            user_id=interaction.user.id,
-                            amount=-amount,
-                            ledger_type="gamble",
-                            source="dice_loss",
-                        )
                     session.add(
                         ModLog(
                             guild_id=interaction.guild.id,
@@ -179,35 +188,39 @@ class GamblingCog(commands.Cog):
         async with self.bot.db.session() as session:
             try:
                 async with session.begin():
+                    economy = EconomyService(session)
                     user, settings = await self._prepare_bet(
                         session, interaction.guild.id, interaction.user.id, amount
                     )
                     roll = random.randint(0, 36)
                     win = roll == guess
                     user.daily_bet_amount += amount
+                    await economy.place_bet(
+                        guild_id=interaction.guild.id,
+                        user_id=interaction.user.id,
+                        amount=amount,
+                        source="roulette_bet",
+                    )
                     house_multiplier = 10.0 * (1 - settings.house_edge)
                     if win:
                         winnings = int(amount * house_multiplier)
                         tax = int(winnings * settings.tax_rate)
                         payout = winnings - tax
-                        await apply_balance_change(
-                            session,
+                        await economy.bet_win(
                             guild_id=interaction.guild.id,
                             user_id=interaction.user.id,
-                            amount=payout,
-                            ledger_type="gamble",
+                            amount=winnings,
                             source="roulette_win",
                         )
+                        if tax > 0:
+                            await economy.tax(
+                                guild_id=interaction.guild.id,
+                                user_id=interaction.user.id,
+                                amount=tax,
+                                source="roulette_tax",
+                            )
                     else:
                         payout = -amount
-                        await apply_balance_change(
-                            session,
-                            guild_id=interaction.guild.id,
-                            user_id=interaction.user.id,
-                            amount=-amount,
-                            ledger_type="gamble",
-                            source="roulette_loss",
-                        )
                     session.add(
                         ModLog(
                             guild_id=interaction.guild.id,

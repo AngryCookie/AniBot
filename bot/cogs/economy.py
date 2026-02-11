@@ -10,6 +10,7 @@ from discord.ext import commands
 from bot.cogs.utils import get_or_create_guild, get_or_create_user, get_role_multiplier, parse_settings
 from bot.database.models import ModLog
 from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.services.economy import EconomyService
 
 
 class EconomyCog(commands.Cog):
@@ -58,13 +59,10 @@ class EconomyCog(commands.Cog):
                     final_income = int(final_income * 0.7)
                 user.daily_income = final_income
                 user.last_daily_ts = now
-                await apply_balance_change(
-                    session,
+                await EconomyService(session).daily_reward(
                     guild_id=interaction.guild.id,
                     user_id=interaction.user.id,
                     amount=final_income,
-                    ledger_type="earn",
-                    source="daily",
                 )
                 session.add(
                     ModLog(

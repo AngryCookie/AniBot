@@ -8,7 +8,8 @@ from sqlalchemy import select
 from bot.analytics.economy import build_economy_analytics
 from bot.cogs.utils import get_or_create_guild
 from bot.database.models import CustomCommand, ModLog, Tag
-from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.database.operations import get_or_create_user_locked
+from bot.services.economy import EconomyService
 
 
 class AdminCog(commands.Cog):
@@ -56,13 +57,12 @@ class AdminCog(commands.Cog):
         async with self.bot.db.session() as session:
             async with session.begin():
                 await get_or_create_user_locked(session, interaction.guild.id, member.id)
-                await apply_balance_change(
-                    session,
+                await EconomyService(session).admin_grant(
                     guild_id=interaction.guild.id,
                     user_id=member.id,
                     amount=amount,
-                    ledger_type="admin",
                     source="admin_give",
+                    metadata={"moderator_id": interaction.user.id},
                 )
                 log = ModLog(
                     guild_id=interaction.guild.id,
@@ -84,13 +84,12 @@ class AdminCog(commands.Cog):
                 user = await get_or_create_user_locked(session, interaction.guild.id, member.id)
                 delta = -min(amount, user.balance)
                 if delta:
-                    await apply_balance_change(
-                        session,
+                    await EconomyService(session).admin_remove(
                         guild_id=interaction.guild.id,
                         user_id=member.id,
-                        amount=delta,
-                        ledger_type="admin",
+                        amount=abs(delta),
                         source="admin_take",
+                        metadata={"moderator_id": interaction.user.id},
                     )
                 log = ModLog(
                     guild_id=interaction.guild.id,
@@ -109,13 +108,12 @@ class AdminCog(commands.Cog):
             async with session.begin():
                 user = await get_or_create_user_locked(session, interaction.guild.id, member.id)
                 if user.balance > 0:
-                    await apply_balance_change(
-                        session,
+                    await EconomyService(session).admin_remove(
                         guild_id=interaction.guild.id,
                         user_id=member.id,
-                        amount=-user.balance,
-                        ledger_type="admin",
+                        amount=user.balance,
                         source="admin_reset",
+                        metadata={"moderator_id": interaction.user.id},
                     )
                 user.xp = 0
                 user.level = 1
