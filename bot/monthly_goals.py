@@ -88,7 +88,7 @@ class MonthlyGoalService:
                     func.sum(
                         case(
                             (
-                                (EconomyTransaction.type == "bet_placement")
+                                (EconomyTransaction.source == "bet_placement")
                                 & (EconomyTransaction.amount < 0),
                                 -EconomyTransaction.amount,
                             ),
@@ -173,7 +173,7 @@ class MonthlyGoalService:
                         func.sum(
                             case(
                                 (
-                                    (EconomyTransaction.type == "bet_placement")
+                                    (EconomyTransaction.source == "bet_placement")
                                     & (EconomyTransaction.amount < 0),
                                     -EconomyTransaction.amount,
                                 ),
@@ -196,7 +196,7 @@ class MonthlyGoalService:
                         func.sum(
                             case(
                                 (
-                                    (EconomyTransaction.type == "bet_placement")
+                                    (EconomyTransaction.source == "bet_placement")
                                     & (EconomyTransaction.amount < 0),
                                     -EconomyTransaction.amount,
                                 ),

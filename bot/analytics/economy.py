@@ -50,7 +50,7 @@ class EconomyAnalyticsService:
                     func.sum(
                         case(
                             (
-                                (EconomyTransaction.type == "bet_placement")
+                                (EconomyTransaction.source == "bet_placement")
                                 & (EconomyTransaction.amount < 0),
                                 -EconomyTransaction.amount,
                             ),
@@ -63,7 +63,7 @@ class EconomyAnalyticsService:
                     func.sum(
                         case(
                             (
-                                (EconomyTransaction.type == "bet_win")
+                                (EconomyTransaction.source == "bet_win")
                                 & (EconomyTransaction.amount > 0),
                                 EconomyTransaction.amount,
                             ),
@@ -110,19 +110,19 @@ class EconomyAnalyticsService:
             select(
                 func.coalesce(
                     func.count(
-                        case((EconomyTransaction.type == "bet_placement", EconomyTransaction.id))
+                        case((EconomyTransaction.source == "bet_placement", EconomyTransaction.id))
                     ),
                     0,
                 ).label("bets_count"),
                 func.coalesce(
-                    func.count(case((EconomyTransaction.type == "bet_win", EconomyTransaction.id))),
+                    func.count(case((EconomyTransaction.source == "bet_win", EconomyTransaction.id))),
                     0,
                 ).label("wins_count"),
                 func.coalesce(
                     func.avg(
                         case(
                             (
-                                (EconomyTransaction.type == "bet_placement")
+                                (EconomyTransaction.source == "bet_placement")
                                 & (EconomyTransaction.amount < 0),
                                 -EconomyTransaction.amount,
                             ),
@@ -135,7 +135,7 @@ class EconomyAnalyticsService:
                     func.max(
                         case(
                             (
-                                (EconomyTransaction.type == "bet_win")
+                                (EconomyTransaction.source == "bet_win")
                                 & (EconomyTransaction.amount > 0),
                                 EconomyTransaction.amount,
                             ),
@@ -148,7 +148,7 @@ class EconomyAnalyticsService:
                     func.max(
                         case(
                             (
-                                (EconomyTransaction.type == "bet_placement")
+                                (EconomyTransaction.source == "bet_placement")
                                 & (EconomyTransaction.amount < 0),
                                 -EconomyTransaction.amount,
                             ),

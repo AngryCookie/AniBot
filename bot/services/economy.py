@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,154 @@ class EconomyService:
             user = result.scalars().first()
         return user
 
+    async def _run_in_transaction(self, operation: Callable[[], Awaitable[int]]) -> int:
+        if self.session.in_transaction():
+            return await operation()
+        async with self.session.begin():
+            return await operation()
+
+    async def _apply_change(
+        self,
+        *,
+        guild_id: int,
+        user_id: int,
+        amount: int,
+        source: str,
+        metadata: dict | None = None,
+        ledger_type: str | None = None,
+        created_at: dt.datetime | None = None,
+    ) -> int:
+        user = await self.get_or_create_user_locked(guild_id, user_id)
+        balance_before = int(user.balance or 0)
+        balance_after = balance_before + amount
+        if balance_after < 0:
+            raise ValueError("Недостаточно средств.")
+
+        user.balance = balance_after
+        timestamp = created_at or dt.datetime.utcnow()
+
+        transaction_source = ledger_type or source
+        transaction_metadata = dict(metadata or {})
+        if source != transaction_source:
+            transaction_metadata.setdefault("origin_source", source)
+
+        self.session.add(
+            EconomyTransaction(
+                guild_id=guild_id,
+                user_id=user_id,
+                amount=amount,
+                balance_before=balance_before,
+                balance_after=balance_after,
+                source=transaction_source,
+                metadata_json=transaction_metadata or None,
+                created_at=timestamp,
+            )
+        )
+
+        # Backward-compatible ledger for existing analytics/scheduled jobs.
+        self.session.add(
+            EconomyLedger(
+                user_id=user_id,
+                guild_id=guild_id,
+                amount=amount,
+                type=ledger_type or source,
+                source=source,
+                timestamp=timestamp,
+            )
+        )
+        return balance_after
+
+    async def credit(
+        self,
+        guild_id: int,
+        user_id: int,
+        amount: int,
+        source: str,
+        metadata: dict | None = None,
+        *,
+        ledger_type: str | None = None,
+    ) -> int:
+        if amount <= 0:
+            raise ValueError("Amount must be greater than zero.")
+
+        async def operation() -> int:
+            return await self._apply_change(
+                guild_id=guild_id,
+                user_id=user_id,
+                amount=amount,
+                source=source,
+                metadata=metadata,
+                ledger_type=ledger_type,
+            )
+
+        return await self._run_in_transaction(operation)
+
+    async def debit(
+        self,
+        guild_id: int,
+        user_id: int,
+        amount: int,
+        source: str,
+        metadata: dict | None = None,
+        *,
+        ledger_type: str | None = None,
+    ) -> int:
+        if amount <= 0:
+            raise ValueError("Amount must be greater than zero.")
+
+        async def operation() -> int:
+            return await self._apply_change(
+                guild_id=guild_id,
+                user_id=user_id,
+                amount=-amount,
+                source=source,
+                metadata=metadata,
+                ledger_type=ledger_type,
+            )
+
+        return await self._run_in_transaction(operation)
+
+    async def transfer(
+        self,
+        guild_id: int,
+        from_user_id: int,
+        to_user_id: int,
+        amount: int,
+        source: str,
+    ) -> tuple[int, int]:
+        if amount <= 0:
+            raise ValueError("Amount must be greater than zero.")
+        if from_user_id == to_user_id:
+            raise ValueError("Cannot transfer to the same user.")
+
+        async def operation() -> tuple[int, int]:
+            ordered_user_ids = sorted((from_user_id, to_user_id))
+            for locked_user_id in ordered_user_ids:
+                await self.get_or_create_user_locked(guild_id, locked_user_id)
+
+            sender_balance = await self._apply_change(
+                guild_id=guild_id,
+                user_id=from_user_id,
+                amount=-amount,
+                source=f"{source}_out",
+                metadata={"counterparty_user_id": to_user_id},
+                ledger_type="spend",
+            )
+            recipient_balance = await self._apply_change(
+                guild_id=guild_id,
+                user_id=to_user_id,
+                amount=amount,
+                source=f"{source}_in",
+                metadata={"counterparty_user_id": from_user_id},
+                ledger_type="earn",
+            )
+            return sender_balance, recipient_balance
+
+        if self.session.in_transaction():
+            return await operation()
+        async with self.session.begin():
+            return await operation()
+
     async def change_balance(
         self,
         *,
@@ -43,51 +192,31 @@ class EconomyService:
         metadata: dict | None = None,
         created_at: dt.datetime | None = None,
     ) -> int:
-        user = await self.get_or_create_user_locked(guild_id, user_id)
-        balance_before = int(user.balance or 0)
-        balance_after = balance_before + amount
-        if balance_after < 0:
-            raise ValueError("Недостаточно средств.")
-
-        user.balance = balance_after
-        timestamp = created_at or dt.datetime.utcnow()
-
-        self.session.add(
-            EconomyTransaction(
-                guild_id=guild_id,
-                user_id=user_id,
-                type=transaction_type,
-                amount=amount,
-                balance_before=balance_before,
-                balance_after=balance_after,
-                source=source,
-                reference_id=reference_id,
-                metadata_json=metadata,
-                created_at=timestamp,
+        payload = dict(metadata or {})
+        if reference_id is not None:
+            payload.setdefault("reference_id", reference_id)
+        payload.setdefault("transaction_type", transaction_type)
+        transaction_source = source or transaction_type
+        if amount >= 0:
+            return await self.credit(
+                guild_id,
+                user_id,
+                amount,
+                transaction_source,
+                payload,
+                ledger_type=transaction_type,
             )
+        return await self.debit(
+            guild_id,
+            user_id,
+            -amount,
+            transaction_source,
+            payload,
+            ledger_type=transaction_type,
         )
-
-        # Backward-compatible ledger for existing analytics/scheduled jobs.
-        self.session.add(
-            EconomyLedger(
-                user_id=user_id,
-                guild_id=guild_id,
-                amount=amount,
-                type=transaction_type,
-                source=source or "unknown",
-                timestamp=timestamp,
-            )
-        )
-        return balance_after
 
     async def daily_reward(self, *, guild_id: int, user_id: int, amount: int) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=amount,
-            transaction_type="daily_reward",
-            source="daily",
-        )
+        return await self.credit(guild_id, user_id, amount, "daily", ledger_type="daily_reward")
 
     async def place_bet(
         self,
@@ -99,14 +228,16 @@ class EconomyService:
         reference_id: int | None = None,
         metadata: dict | None = None,
     ) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=-amount,
-            transaction_type="bet_placement",
-            source=source,
-            reference_id=reference_id,
-            metadata=metadata,
+        payload = dict(metadata or {})
+        if reference_id is not None:
+            payload["reference_id"] = reference_id
+        return await self.debit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            payload,
+            ledger_type="bet_placement",
         )
 
     async def bet_win(
@@ -119,14 +250,16 @@ class EconomyService:
         reference_id: int | None = None,
         metadata: dict | None = None,
     ) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=amount,
-            transaction_type="bet_win",
-            source=source,
-            reference_id=reference_id,
-            metadata=metadata,
+        payload = dict(metadata or {})
+        if reference_id is not None:
+            payload["reference_id"] = reference_id
+        return await self.credit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            payload,
+            ledger_type="bet_win",
         )
 
     async def shop_purchase(
@@ -139,14 +272,16 @@ class EconomyService:
         reference_id: int | None = None,
         metadata: dict | None = None,
     ) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=-amount,
-            transaction_type="shop_purchase",
-            source=source,
-            reference_id=reference_id,
-            metadata=metadata,
+        payload = dict(metadata or {})
+        if reference_id is not None:
+            payload["reference_id"] = reference_id
+        return await self.debit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            payload,
+            ledger_type="shop_purchase",
         )
 
     async def admin_grant(
@@ -158,13 +293,13 @@ class EconomyService:
         source: str = "admin_give",
         metadata: dict | None = None,
     ) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=amount,
-            transaction_type="admin_grant",
-            source=source,
-            metadata=metadata,
+        return await self.credit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            metadata,
+            ledger_type="admin_grant",
         )
 
     async def admin_remove(
@@ -176,13 +311,13 @@ class EconomyService:
         source: str = "admin_take",
         metadata: dict | None = None,
     ) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=-amount,
-            transaction_type="admin_remove",
-            source=source,
-            metadata=metadata,
+        return await self.debit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            metadata,
+            ledger_type="admin_remove",
         )
 
     async def tax(
@@ -195,14 +330,16 @@ class EconomyService:
         reference_id: int | None = None,
         metadata: dict | None = None,
     ) -> int:
-        return await self.change_balance(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=-amount,
-            transaction_type="tax",
-            source=source,
-            reference_id=reference_id,
-            metadata=metadata,
+        payload = dict(metadata or {})
+        if reference_id is not None:
+            payload["reference_id"] = reference_id
+        return await self.debit(
+            guild_id,
+            user_id,
+            amount,
+            source,
+            payload,
+            ledger_type="tax",
         )
 
     async def get_user_transactions(

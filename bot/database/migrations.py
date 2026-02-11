@@ -103,18 +103,28 @@ async def migration_create_economy_transactions(conn: AsyncConnection) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guild_id BIGINT NOT NULL,
                 user_id BIGINT NOT NULL,
-                type VARCHAR(64) NOT NULL,
                 amount INTEGER NOT NULL,
                 balance_before INTEGER NOT NULL,
                 balance_after INTEGER NOT NULL,
-                source VARCHAR(128) NULL,
-                reference_id INTEGER NULL,
-                metadata JSON NULL,
+                source VARCHAR(128) NOT NULL,
+                metadata_json JSON NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
     )
+    table_columns = await conn.execute(text("PRAGMA table_info(economy_transactions)"))
+    column_names = {str(row[1]) for row in table_columns}
+    if "metadata_json" not in column_names:
+        await conn.execute(text("ALTER TABLE economy_transactions ADD COLUMN metadata_json JSON"))
+    if "metadata" in column_names:
+        await conn.execute(
+            text(
+                "UPDATE economy_transactions SET metadata_json = metadata "
+                "WHERE metadata_json IS NULL AND metadata IS NOT NULL"
+            )
+        )
+
     await conn.execute(
         text(
             "CREATE INDEX IF NOT EXISTS ix_economy_transactions_guild_id "
@@ -129,8 +139,8 @@ async def migration_create_economy_transactions(conn: AsyncConnection) -> None:
     )
     await conn.execute(
         text(
-            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_type "
-            "ON economy_transactions (type)"
+            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_source "
+            "ON economy_transactions (source)"
         )
     )
     await conn.execute(

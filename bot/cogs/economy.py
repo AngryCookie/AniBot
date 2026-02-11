@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from bot.cogs.utils import get_or_create_guild, get_or_create_user, get_role_multiplier, parse_settings
 from bot.database.models import ModLog
-from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.database.operations import get_or_create_user_locked
 from bot.services.economy import EconomyService
 
 
@@ -92,7 +92,7 @@ class EconomyCog(commands.Cog):
                 sender = await get_or_create_user_locked(
                     session, interaction.guild.id, interaction.user.id
                 )
-                recipient = await get_or_create_user_locked(session, interaction.guild.id, member.id)
+                await get_or_create_user_locked(session, interaction.guild.id, member.id)
                 guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
                 settings = parse_settings(guild.settings)
                 fee_percent = float(settings.get("transfer_fee_percent", 0.02))
@@ -107,22 +107,23 @@ class EconomyCog(commands.Cog):
                 if sender.balance < total:
                     await interaction.response.send_message("Недостаточно средств.", ephemeral=True)
                     return
-                await apply_balance_change(
-                    session,
+                economy = EconomyService(session)
+                await economy.transfer(
                     guild_id=interaction.guild.id,
-                    user_id=interaction.user.id,
-                    amount=-total,
-                    ledger_type="spend",
-                    source="transfer_out",
-                )
-                await apply_balance_change(
-                    session,
-                    guild_id=interaction.guild.id,
-                    user_id=member.id,
+                    from_user_id=interaction.user.id,
+                    to_user_id=member.id,
                     amount=amount,
-                    ledger_type="earn",
-                    source="transfer_in",
+                    source="transfer",
                 )
+                if fee > 0:
+                    await economy.debit(
+                        interaction.guild.id,
+                        interaction.user.id,
+                        fee,
+                        "transfer_fee",
+                        {"recipient_user_id": member.id},
+                        ledger_type="spend",
+                    )
                 session.add(
                     ModLog(
                         guild_id=interaction.guild.id,
