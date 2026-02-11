@@ -55,6 +55,10 @@ class UserProfile(Base):
     daily_bet_amount = Column(Integer, default=0)
     daily_xp = Column(Integer, default=0)
     last_xp_date = Column(DateTime, default=None)
+    last_pvp_at = Column(DateTime, default=None)
+    total_pvp_wins = Column(Integer, default=0)
+    total_pvp_losses = Column(Integer, default=0)
+    total_pvp_volume = Column(Integer, default=0)
 
 
 class EconomyLedger(Base):

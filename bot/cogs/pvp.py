@@ -32,11 +32,9 @@ class PvpChallengeView(discord.ui.View):
                         duel_id=self.duel_id,
                         actor_user_id=interaction.user.id,
                     )
-                    settings = await self.cog._get_pvp_settings(session, interaction.guild.id)
                     resolved = await service.resolve_duel(
                         guild_id=interaction.guild.id,
                         duel_id=duel.id,
-                        k_factor=int(settings.get("k_factor", 32)),
                     )
             except ValueError as exc:
                 await interaction.response.send_message(str(exc), ephemeral=True)
@@ -99,14 +97,6 @@ class PvpCog(commands.Cog):
                 async with session.begin():
                     service = PvpService(session)
                     settings = await self._get_pvp_settings(session, interaction.guild.id)
-                    if not settings.get("enabled", True):
-                        raise ValueError("PvP-дуэли отключены на этом сервере.")
-                    if interaction.user.id == user.id:
-                        raise ValueError("Нельзя вызвать самого себя на дуэль.")
-                    min_bet = int(settings.get("min_bet", 10))
-                    max_bet = int(settings.get("max_bet", 5000))
-                    if amount < min_bet or amount > max_bet:
-                        raise ValueError(f"Ставка должна быть в диапазоне {min_bet}..{max_bet}.")
                     duel = await service.create_duel(
                         guild_id=interaction.guild.id,
                         challenger_id=interaction.user.id,
@@ -177,33 +167,8 @@ class PvpCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     async def _get_pvp_settings(self, session, guild_id: int) -> dict:
-        from bot.database.models import GuildConfig
-        from bot.cogs.utils import parse_settings
-
-        config = await session.get(GuildConfig, guild_id)
-        if config is None:
-            return {
-                "enabled": True,
-                "min_bet": 10,
-                "max_bet": 5000,
-                "fee_percent": 5.0,
-                "cooldown_seconds": 30,
-                "influence_level_weight": 1.0,
-                "k_factor": 32,
-            }
-        settings_map = parse_settings(config.settings)
-        return settings_map.get(
-            "pvp",
-            {
-                "enabled": True,
-                "min_bet": 10,
-                "max_bet": 5000,
-                "fee_percent": 5.0,
-                "cooldown_seconds": 30,
-                "influence_level_weight": 1.0,
-                "k_factor": 32,
-            },
-        )
+        service = PvpService(session)
+        return await service.get_pvp_settings(guild_id)
 
 
 async def setup(bot: commands.Bot) -> None:

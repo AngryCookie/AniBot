@@ -553,10 +553,9 @@ PRESETS: Dict[str, Dict[str, Any]] = {
                 "enabled": True,
                 "min_bet": 50,
                 "max_bet": 2500,
-                "fee_percent": 5.0,
-                "cooldown_seconds": 30,
-                "influence_level_weight": 1.0,
-                "k_factor": 32,
+                "cooldown_seconds": 300,
+                "max_active_duels_per_user": 1,
+                "level_influence_percent": 10,
             },
             "shop": {
                 "enabled": True,
