@@ -41,12 +41,11 @@ class GamblingSettings(BaseModel):
 
 class PvpSettings(BaseModel):
     enabled: bool = True
-    min_bet: int = Field(10, ge=1, le=100000)
+    min_bet: int = Field(50, ge=1, le=100000)
     max_bet: int = Field(5000, ge=1, le=1000000)
-    fee_percent: float = Field(5.0, ge=0, le=50)
-    cooldown_seconds: int = Field(30, ge=0, le=3600)
-    influence_level_weight: float = Field(1.0, ge=0, le=10)
-    k_factor: int = Field(32, ge=1, le=128)
+    cooldown_seconds: int = Field(300, ge=0, le=86400)
+    max_active_duels_per_user: int = Field(1, ge=1, le=10)
+    level_influence_percent: int = Field(10, ge=0, le=100)
 
 
 class ShopSettings(BaseModel):

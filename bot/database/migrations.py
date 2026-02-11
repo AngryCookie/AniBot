@@ -745,6 +745,18 @@ async def migration_create_pvp_stats(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_add_pvp_user_fields(conn: AsyncConnection) -> None:
+    columns_result = await conn.execute(text("PRAGMA table_info(users)"))
+    column_names = {str(row[1]) for row in columns_result}
+    if "last_pvp_at" not in column_names:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN last_pvp_at DATETIME"))
+    if "total_pvp_wins" not in column_names:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN total_pvp_wins INTEGER NOT NULL DEFAULT 0"))
+    if "total_pvp_losses" not in column_names:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN total_pvp_losses INTEGER NOT NULL DEFAULT 0"))
+    if "total_pvp_volume" not in column_names:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN total_pvp_volume INTEGER NOT NULL DEFAULT 0"))
+
 
 async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
     await conn.execute(
@@ -788,5 +800,6 @@ MIGRATIONS: List[Migration] = [
     migration_create_referral_extended,
     migration_create_pvp_duels,
     migration_create_pvp_stats,
+    migration_add_pvp_user_fields,
     migration_add_operational_indexes,
 ]
