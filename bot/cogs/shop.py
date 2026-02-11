@@ -7,7 +7,8 @@ from sqlalchemy import select
 
 from bot.cogs.utils import get_or_create_guild
 from bot.database.models import ModLog, ShopItem, ShopPurchase
-from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.database.operations import get_or_create_user_locked
+from bot.services.economy import EconomyService
 
 
 class ShopGroup(app_commands.Group):
@@ -90,13 +91,13 @@ class ShopGroup(app_commands.Group):
                     return
                 price = int(item.base_price * guild.server_rate)
                 try:
-                    await apply_balance_change(
-                        session,
+                    await EconomyService(session).shop_purchase(
                         guild_id=interaction.guild.id,
                         user_id=interaction.user.id,
-                        amount=-price,
-                        ledger_type="spend",
+                        amount=price,
                         source="shop_purchase",
+                        reference_id=item.id,
+                        metadata={"item_name": item.name},
                     )
                 except ValueError:
                     await interaction.response.send_message("Недостаточно средств.", ephemeral=True)

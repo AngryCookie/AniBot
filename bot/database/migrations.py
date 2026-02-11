@@ -95,8 +95,55 @@ async def migration_create_community_goal_participants(conn: AsyncConnection) ->
     )
 
 
+async def migration_create_economy_transactions(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS economy_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                type VARCHAR(64) NOT NULL,
+                amount INTEGER NOT NULL,
+                balance_before INTEGER NOT NULL,
+                balance_after INTEGER NOT NULL,
+                source VARCHAR(128) NULL,
+                reference_id INTEGER NULL,
+                metadata JSON NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_guild_id "
+            "ON economy_transactions (guild_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_user_id "
+            "ON economy_transactions (user_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_type "
+            "ON economy_transactions (type)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_economy_transactions_created_at "
+            "ON economy_transactions (created_at)"
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
     migration_create_community_goal_participants,
+    migration_create_economy_transactions,
 ]

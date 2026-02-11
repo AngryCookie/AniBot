@@ -4,7 +4,8 @@ import datetime as dt
 
 from sqlalchemy import select
 
-from bot.database.models import EconomyLedger, ShadowPenaltyLog, UserProfile, UserTrustProfile
+from bot.database.models import ShadowPenaltyLog, UserProfile, UserTrustProfile
+from bot.services.economy import EconomyService
 
 
 async def get_or_create_user_locked(session, guild_id: int, user_id: int) -> UserProfile:
@@ -36,21 +37,14 @@ async def apply_balance_change(
     ledger_type: str,
     source: str,
 ) -> int:
-    user = await get_or_create_user_locked(session, guild_id, user_id)
-    new_balance = user.balance + amount
-    if new_balance < 0:
-        raise ValueError("Недостаточно средств.")
-    user.balance = new_balance
-    ledger = EconomyLedger(
-        user_id=user_id,
+    service = EconomyService(session)
+    return await service.change_balance(
         guild_id=guild_id,
+        user_id=user_id,
         amount=amount,
-        type=ledger_type,
+        transaction_type=ledger_type,
         source=source,
-        timestamp=dt.datetime.utcnow(),
     )
-    session.add(ledger)
-    return user.balance
 
 
 async def apply_economy_sink(

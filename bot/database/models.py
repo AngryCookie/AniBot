@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -61,6 +62,22 @@ class EconomyLedger(Base):
     type = Column(String(16), nullable=False)
     source = Column(String(100), nullable=False)
     timestamp = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class EconomyTransaction(Base):
+    __tablename__ = "economy_transactions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    type = Column(String(64), nullable=False, index=True)
+    amount = Column(Integer, nullable=False)
+    balance_before = Column(Integer, nullable=False)
+    balance_after = Column(Integer, nullable=False)
+    source = Column(String(128), nullable=True)
+    reference_id = Column(Integer, nullable=True)
+    metadata_json = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
 
 
 class Warning(Base):

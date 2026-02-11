@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.betting import core
 from bot.betting.enums import BettingBetStatus, BettingMatchStatus
 from bot.betting.models import BettingBet, BettingMatch, BettingTeam
-from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.database.operations import get_or_create_user_locked
+from bot.services.economy import EconomyService
 
 
 class BettingService:
@@ -112,13 +113,13 @@ class BettingService:
         user = await get_or_create_user_locked(self.session, guild_id, user_id)
         if user.balance < amount:
             raise ValueError("Недостаточно средств.")
-        await apply_balance_change(
-            self.session,
+        await EconomyService(self.session).place_bet(
             guild_id=guild_id,
             user_id=user_id,
-            amount=-amount,
-            ledger_type="betting",
+            amount=amount,
             source="betting_bet",
+            reference_id=match.id,
+            metadata={"team_id": team_id},
         )
         bet = BettingBet(
             user_id=user_id,
@@ -222,6 +223,7 @@ class BettingService:
             .with_for_update()
         )
         bets = list(result.scalars().all())
+        economy = EconomyService(self.session)
         for bet in bets:
             payout_value = core.calculate_payout(
                 core.Bet(
@@ -234,13 +236,13 @@ class BettingService:
             )
             payout_int = int(payout_value)
             if payout_int > 0:
-                await apply_balance_change(
-                    self.session,
+                await economy.bet_win(
                     guild_id=guild_id,
                     user_id=bet.user_id,
                     amount=payout_int,
-                    ledger_type="betting",
                     source="betting_win",
+                    reference_id=match.id,
+                    metadata={"bet_id": bet.id},
                 )
                 bet.status = BettingBetStatus.won
             else:
