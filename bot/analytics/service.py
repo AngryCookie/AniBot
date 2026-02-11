@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from bot.analytics.activity_metrics import get_activity_metrics
-from bot.analytics.betting_metrics import get_betting_metrics
-from bot.analytics.economy_metrics import get_economy_metrics
+from bot.analytics.activity_metrics import get_activity_daily_stats, get_activity_metrics
+from bot.analytics.betting_metrics import get_betting_daily_stats, get_betting_metrics
+from bot.analytics.economy_metrics import get_economy_daily_flow, get_economy_metrics
 
 
 class AnalyticsService:
@@ -18,8 +18,17 @@ class AnalyticsService:
             betting = await get_betting_metrics(session, guild_id, period_days)
             activity = await get_activity_metrics(session, guild_id, period_days)
 
+            economy_timeseries = await get_economy_daily_flow(session, guild_id, period_days)
+            betting_timeseries = await get_betting_daily_stats(session, guild_id, period_days)
+            activity_timeseries = await get_activity_daily_stats(session, guild_id, period_days)
+
         return {
             "economy": economy,
             "betting": betting,
             "activity": activity,
+            "timeseries": {
+                "economy": economy_timeseries,
+                "betting": betting_timeseries,
+                "activity": activity_timeseries,
+            },
         }

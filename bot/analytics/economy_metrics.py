@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
-from bot.database.models import EconomyTransaction, UserProfile
+from bot.database.models import EconomyLedger, EconomyTransaction, UserProfile
 
 SUPPORTED_PERIODS = {7, 30, 90}
 
@@ -24,6 +25,12 @@ def _median(values: list[int]) -> float:
     if len(sorted_values) % 2 == 1:
         return float(sorted_values[middle])
     return (sorted_values[middle - 1] + sorted_values[middle]) / 2
+
+
+def _date_to_iso(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    return str(value)
 
 
 async def get_economy_metrics(session: AsyncSession, guild_id: int, period_days: int) -> dict:
@@ -82,4 +89,63 @@ async def get_economy_metrics(session: AsyncSession, guild_id: int, period_days:
         "total_spent": int(flow_row.total_spent or 0),
         "median_balance": _median(balances),
         "top_balances": top_balances,
+    }
+
+
+async def get_economy_daily_flow(session: AsyncSession, guild_id: int, period_days: int) -> dict:
+    """Return earned/spent day-by-day time-series for the selected period."""
+    _validate_period(period_days)
+    cutoff = datetime.utcnow() - timedelta(days=period_days)
+
+    date_col = func.date(EconomyLedger.timestamp).label("date")
+    ledger_stmt = (
+        select(
+            date_col,
+            func.coalesce(
+                func.sum(case((EconomyLedger.amount > 0, EconomyLedger.amount), else_=0)),
+                0,
+            ).label("earned"),
+            func.coalesce(
+                func.sum(case((EconomyLedger.amount < 0, -EconomyLedger.amount), else_=0)),
+                0,
+            ).label("spent"),
+        )
+        .where((EconomyLedger.guild_id == guild_id) & (EconomyLedger.timestamp >= cutoff))
+        .group_by(date_col)
+        .order_by(date_col.asc())
+    )
+
+    try:
+        result = await session.execute(ledger_stmt)
+        rows = result.all()
+    except SQLAlchemyError:
+        tx_date_col = func.date(EconomyTransaction.created_at).label("date")
+        tx_stmt = (
+            select(
+                tx_date_col,
+                func.coalesce(
+                    func.sum(case((EconomyTransaction.amount > 0, EconomyTransaction.amount), else_=0)),
+                    0,
+                ).label("earned"),
+                func.coalesce(
+                    func.sum(case((EconomyTransaction.amount < 0, -EconomyTransaction.amount), else_=0)),
+                    0,
+                ).label("spent"),
+            )
+            .where(
+                (EconomyTransaction.guild_id == guild_id)
+                & (EconomyTransaction.created_at >= cutoff)
+            )
+            .group_by(tx_date_col)
+            .order_by(tx_date_col.asc())
+        )
+        tx_result = await session.execute(tx_stmt)
+        rows = tx_result.all()
+
+    daily_earned = [{"date": _date_to_iso(row.date), "amount": int(row.earned or 0)} for row in rows]
+    daily_spent = [{"date": _date_to_iso(row.date), "amount": int(row.spent or 0)} for row in rows]
+
+    return {
+        "daily_earned": daily_earned,
+        "daily_spent": daily_spent,
     }
