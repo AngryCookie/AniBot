@@ -29,14 +29,67 @@ const fillForm = (form, data) => {
   });
 };
 
+const formatNumber = (value, maxFractionDigits = 2) =>
+  new Intl.NumberFormat("ru-RU", { maximumFractionDigits: maxFractionDigits }).format(value ?? 0);
+
+const formatPercent = (value) => `${formatNumber((value ?? 0) * 100, 1)}%`;
+
+const renderSimpleBarChart = (container, points, label) => {
+  if (!container) return;
+  const safePoints = Array.isArray(points) ? points : [];
+  if (!safePoints.length) {
+    container.innerHTML = "<p>Нет данных</p>";
+    return;
+  }
+
+  const maxValue = Math.max(...safePoints.map((point) => Number(point?.value || 0)), 1);
+  const compact = safePoints.length > 21;
+  const view = compact
+    ? safePoints.filter((_, index) => index % Math.ceil(safePoints.length / 14) === 0)
+    : safePoints;
+
+  container.innerHTML = "";
+  view.forEach((point) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    const width = Math.max(0, (Number(point.value || 0) / maxValue) * 100);
+    row.innerHTML = `
+      <span class="bar-label" title="${point.day}">${point.day.slice(5)}</span>
+      <div class="bar-track">
+        <span class="bar-fill bar-created" style="width:${width}%"></span>
+      </div>
+      <span class="bar-value">${formatNumber(point.value, 0)}</span>
+    `;
+    container.appendChild(row);
+  });
+
+  if (label) {
+    label.textContent = `Период: ${safePoints[0]?.day || "—"} → ${safePoints[safePoints.length - 1]?.day || "—"}`;
+  }
+};
+
+const setActiveRange = (buttons, value) => {
+  buttons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.growthRange === value);
+  });
+};
+
 export const initGrowth = async (guildId) => {
   if (!guildId) return;
 
   const referralForm = document.getElementById("growthReferralForm");
   const promoBody = document.getElementById("growthPromoBody");
+  const kpiRoot = document.getElementById("growthKpi");
   const overviewRoot = document.getElementById("growthOverview");
+  const recommendationsRoot = document.getElementById("growthRecommendations");
   const topReferrersRoot = document.getElementById("growthTopReferrers");
   const mostUsedPromoRoot = document.getElementById("growthMostUsedPromo");
+
+  const registrationsChart = document.getElementById("growthRegistrationsChart");
+  const activeReferralsChart = document.getElementById("growthActiveReferralsChart");
+  const promoChart = document.getElementById("growthPromoChart");
+  const rewardsChart = document.getElementById("growthRewardsChart");
+  const rangeButtons = Array.from(document.querySelectorAll("[data-growth-range]"));
 
   const promoModal = document.getElementById("growthPromoModal");
   const promoForm = document.getElementById("growthPromoForm");
@@ -46,6 +99,8 @@ export const initGrowth = async (guildId) => {
   if (!referralForm || !promoBody || !overviewRoot || !topReferrersRoot || !mostUsedPromoRoot) {
     return;
   }
+
+  let currentRange = "30d";
 
   const openModal = () => promoModal?.classList.remove("hidden");
   const closeModal = () => promoModal?.classList.add("hidden");
@@ -86,7 +141,7 @@ export const initGrowth = async (guildId) => {
           per_user_limit:
             prompt("Лимит на пользователя (пусто = без лимита)", item.per_user_limit ?? "") || null,
           expires_at: prompt("Expires ISO (пусто = нет)", item.expires_at ?? "") || null,
-          enabled: confirm("Промо-код должен быть включён?")
+          enabled: confirm("Промо-код должен быть включён?"),
         };
         await apiFetch(`/api/growth/promo/${item.id}?guild_id=${guildId}`, {
           method: "PUT",
@@ -112,14 +167,39 @@ export const initGrowth = async (guildId) => {
   };
 
   const loadOverview = async () => {
-    const overview = await apiFetch(`/api/growth/overview?guild_id=${guildId}`);
+    const overview = await apiFetch(`/api/growth/overview?guild_id=${guildId}&range=${currentRange}`);
     if (!overview) return;
+
+    setActiveRange(rangeButtons, overview.range || currentRange);
+
+    if (kpiRoot) {
+      kpiRoot.innerHTML = `
+        <div class="stat"><strong>${formatPercent(overview.referral_conversion_rate)}</strong><span>Конверсия рефералов</span></div>
+        <div class="stat"><strong>${formatNumber(overview.avg_revenue_per_referral)}</strong><span>Средний доход на реферал</span></div>
+        <div class="stat"><strong>${formatNumber(overview.roi_ratio)}</strong><span>ROI</span></div>
+        <div class="stat"><strong>${formatNumber(overview.net_growth_value, 0)}</strong><span>Net Growth Value</span></div>
+      `;
+    }
 
     overviewRoot.innerHTML = `
       <div class="stat"><strong>${overview.total_referrals}</strong><span>Всего рефералов</span></div>
       <div class="stat"><strong>${overview.active_referrals}</strong><span>Активных рефералов</span></div>
       <div class="stat"><strong>${overview.total_rewards_paid}</strong><span>Всего наград выплачено</span></div>
       <div class="stat"><strong>${overview.total_promo_redemptions}</strong><span>Активаций промо</span></div>
+    `;
+
+    renderSimpleBarChart(registrationsChart, overview.registrations_per_day);
+    renderSimpleBarChart(activeReferralsChart, overview.active_referrals_per_day);
+    renderSimpleBarChart(promoChart, overview.promo_redemptions_per_day);
+    renderSimpleBarChart(rewardsChart, overview.rewards_paid_per_day);
+
+    recommendationsRoot.innerHTML = `
+      <h5>Рекомендации</h5>
+      <ul class="insights-list">
+        ${(overview.recommendations || [])
+          .map((rec) => `<li class="insight-item insight-${rec.level}">${rec.text}</li>`)
+          .join("") || "<li class='insight-item insight-info'>Рекомендаций пока нет.</li>"}
+      </ul>
     `;
 
     topReferrersRoot.innerHTML = `
@@ -167,6 +247,13 @@ export const initGrowth = async (guildId) => {
     closeModal();
     await loadPromoCodes();
     await loadOverview();
+  });
+
+  rangeButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      currentRange = button.dataset.growthRange || "30d";
+      await loadOverview();
+    });
   });
 
   openPromoModalButton?.addEventListener("click", openModal);
