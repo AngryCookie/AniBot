@@ -1,0 +1,45 @@
+<section class="panel">
+  <h3>Referral & Promo</h3>
+  <p class="notice">Управление глобальными промо-кодами и статистикой рефералов.</p>
+
+  <form id="referralPromoForm" class="settings-form">
+    <div class="grid two-columns">
+      <label>
+        Код
+        <input name="code" type="text" maxlength="64" required />
+      </label>
+      <label>
+        Награда
+        <input name="reward_amount" type="number" min="1" max="1000000" required />
+      </label>
+      <label>
+        Макс. использований
+        <input name="max_uses" type="number" min="1" />
+      </label>
+      <label>
+        Истекает (ISO)
+        <input name="expires_at" type="text" placeholder="2026-12-31T23:59:59Z" />
+      </label>
+      <label class="checkbox-inline">
+        <input name="is_active" type="checkbox" checked />
+        Активен
+      </label>
+    </div>
+    <button type="submit">Создать промо-код</button>
+  </form>
+
+  <div id="referralPromoStats" class="card"></div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Код</th>
+        <th>Награда</th>
+        <th>Исп.</th>
+        <th>Лимит</th>
+        <th>Статус</th>
+      </tr>
+    </thead>
+    <tbody id="referralPromoCodesBody"></tbody>
+  </table>
+</section>

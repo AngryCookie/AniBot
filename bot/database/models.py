@@ -357,3 +357,38 @@ class ServerMonthlyGoal(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class ReferralCode(Base):
+    __tablename__ = "referral_codes"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "code", name="uq_referral_code_guild_code"),
+        Index("ix_referral_codes_guild_active", "guild_id", "is_active"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    creator_user_id = Column(BigInteger, nullable=True, index=True)
+    code = Column(String(64), nullable=False)
+    reward_amount = Column(Integer, nullable=False)
+    max_uses = Column(Integer, nullable=True)
+    current_uses = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class ReferralUsage(Base):
+    __tablename__ = "referral_usages"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "invited_user_id", name="uq_referral_usage_invited_guild"),
+        CheckConstraint("inviter_user_id != invited_user_id", name="ck_referral_not_self"),
+        Index("ix_referral_usages_guild_inviter", "guild_id", "inviter_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    inviter_user_id = Column(BigInteger, nullable=False)
+    invited_user_id = Column(BigInteger, nullable=False)
+    reward_amount = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)

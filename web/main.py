@@ -29,6 +29,8 @@ from bot.database.models import (
     ServerMonthlyGoal,
     FeatureFlag,
     GuildConfig,
+    ReferralCode,
+    ReferralUsage,
     GuildConfigHistory,
     GuildFeatureFlag,
     ShopItem,
@@ -67,6 +69,10 @@ from .schemas import (
     LogsSettings,
     OverviewStats,
     PresetOut,
+    ReferralDashboardStats,
+    ReferralPromoCodeIn,
+    ReferralPromoCodeOut,
+    ReferralRedeemSummary,
     ShopItemIn,
     ShopItemOut,
     ShopSettings,
@@ -1567,6 +1573,167 @@ async def update_guild_feature_flag(
         flag.updated_at = func.now()
         await session.commit()
     return GuildFeatureFlagState(name=flag_name, enabled=payload.enabled)
+
+
+@app.get("/api/guilds/{guild_id}/referral-promo/codes", response_model=list[ReferralPromoCodeOut])
+async def list_referral_promo_codes(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> list[ReferralPromoCodeOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        result = await session.execute(
+            select(ReferralCode)
+            .where(ReferralCode.guild_id == guild_id)
+            .order_by(ReferralCode.created_at.desc(), ReferralCode.id.desc())
+        )
+        codes = result.scalars().all()
+
+    return [
+        ReferralPromoCodeOut(
+            id=code.id,
+            guild_id=int(code.guild_id),
+            code=code.code,
+            reward_amount=int(code.reward_amount),
+            max_uses=code.max_uses,
+            expires_at=(code.expires_at.isoformat() + "Z") if code.expires_at else None,
+            is_active=bool(code.is_active),
+            current_uses=int(code.current_uses),
+            created_at=code.created_at.isoformat() + "Z",
+        )
+        for code in codes
+    ]
+
+
+@app.post("/api/guilds/{guild_id}/referral-promo/codes", response_model=ReferralPromoCodeOut)
+async def create_referral_promo_code(
+    guild_id: int,
+    payload: ReferralPromoCodeIn,
+    access_token: str = Depends(get_access_token),
+) -> ReferralPromoCodeOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    expires_at = _parse_iso_datetime(payload.expires_at) if payload.expires_at else None
+    code = ReferralCode(
+        guild_id=guild_id,
+        creator_user_id=None,
+        code=payload.code.strip().upper(),
+        reward_amount=payload.reward_amount,
+        max_uses=payload.max_uses,
+        expires_at=expires_at,
+        is_active=payload.is_active,
+    )
+    async with database.session() as session:
+        session.add(code)
+        await session.commit()
+        await session.refresh(code)
+
+    return ReferralPromoCodeOut(
+        id=code.id,
+        guild_id=int(code.guild_id),
+        code=code.code,
+        reward_amount=int(code.reward_amount),
+        max_uses=code.max_uses,
+        expires_at=(code.expires_at.isoformat() + "Z") if code.expires_at else None,
+        is_active=bool(code.is_active),
+        current_uses=int(code.current_uses),
+        created_at=code.created_at.isoformat() + "Z",
+    )
+
+
+@app.get("/api/guilds/{guild_id}/referral-promo/stats", response_model=ReferralDashboardStats)
+async def get_referral_promo_stats(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> ReferralDashboardStats:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    async with database.session() as session:
+        total_uses = await session.scalar(
+            select(func.count()).select_from(ReferralUsage).where(ReferralUsage.guild_id == guild_id)
+        )
+        total_currency_distributed = await session.scalar(
+            select(func.coalesce(func.sum(ReferralUsage.reward_amount * 2), 0)).where(
+                ReferralUsage.guild_id == guild_id
+            )
+        )
+        leaderboard_result = await session.execute(
+            select(
+                ReferralUsage.inviter_user_id,
+                func.count(ReferralUsage.id).label("invites"),
+                func.coalesce(func.sum(ReferralUsage.reward_amount), 0).label("earned"),
+            )
+            .where(ReferralUsage.guild_id == guild_id)
+            .group_by(ReferralUsage.inviter_user_id)
+            .order_by(func.count(ReferralUsage.id).desc(), func.sum(ReferralUsage.reward_amount).desc())
+            .limit(10)
+        )
+        leaderboard = [
+            {
+                "user_id": int(row.inviter_user_id),
+                "invites": int(row.invites or 0),
+                "earned": int(row.earned or 0),
+            }
+            for row in leaderboard_result
+        ]
+
+    return ReferralDashboardStats(
+        total_uses=int(total_uses or 0),
+        total_currency_distributed=int(total_currency_distributed or 0),
+        top_inviters=leaderboard,
+    )
+
+
+@app.get("/api/guilds/{guild_id}/analytics/referrals", response_model=ReferralRedeemSummary)
+async def get_referral_analytics(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> ReferralRedeemSummary:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+
+    month_start = dt.datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    async with database.session() as session:
+        monthly_referral_volume = await session.scalar(
+            select(func.count()).select_from(ReferralUsage).where(
+                ReferralUsage.guild_id == guild_id,
+                ReferralUsage.created_at >= month_start,
+            )
+        )
+        total_referral_payout = await session.scalar(
+            select(func.coalesce(func.sum(ReferralUsage.reward_amount * 2), 0)).where(
+                ReferralUsage.guild_id == guild_id
+            )
+        )
+        top_inviters_result = await session.execute(
+            select(
+                ReferralUsage.inviter_user_id,
+                func.count(ReferralUsage.id).label("invites"),
+                func.coalesce(func.sum(ReferralUsage.reward_amount), 0).label("earned"),
+            )
+            .where(ReferralUsage.guild_id == guild_id)
+            .group_by(ReferralUsage.inviter_user_id)
+            .order_by(func.count(ReferralUsage.id).desc(), func.sum(ReferralUsage.reward_amount).desc())
+            .limit(10)
+        )
+        top_inviters = [
+            {
+                "user_id": int(row.inviter_user_id),
+                "invites": int(row.invites or 0),
+                "earned": int(row.earned or 0),
+            }
+            for row in top_inviters_result
+        ]
+
+    return ReferralRedeemSummary(
+        monthly_referral_volume=int(monthly_referral_volume or 0),
+        total_referral_payout=int(total_referral_payout or 0),
+        top_inviters=top_inviters,
+    )
 
 
 @app.get("/api/public/guilds/{guild_id}/stats")
