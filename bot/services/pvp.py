@@ -6,7 +6,7 @@ import random
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import PvpDuel
+from bot.database.models import PvpDuel, UserProfile
 from bot.services.economy import EconomyService
 
 
@@ -34,11 +34,16 @@ class PvpService:
         if fee_percent < 0 or fee_percent > 100:
             raise ValueError("Комиссия должна быть в диапазоне 0..100%.")
 
+        challenger, opponent = await self._lock_duel_participants(
+            guild_id=guild_id,
+            challenger_id=challenger_id,
+            opponent_id=opponent_id,
+        )
+
+        # Re-check active-duel invariants after participant rows are locked.
         await self._ensure_user_has_no_active_duel(guild_id, challenger_id)
         await self._ensure_user_has_no_active_duel(guild_id, opponent_id)
 
-        challenger = await self.economy.get_or_create_user_locked(guild_id, challenger_id)
-        opponent = await self.economy.get_or_create_user_locked(guild_id, opponent_id)
         if int(challenger.balance or 0) < amount:
             raise ValueError("У инициатора недостаточно средств.")
         if int(opponent.balance or 0) < amount:
@@ -53,6 +58,20 @@ class PvpService:
             status="pending",
         )
         self.session.add(duel)
+        await self.session.flush()
+        return duel
+
+    async def expire_pending_duel(
+        self,
+        *,
+        guild_id: int,
+        duel_id: int,
+    ) -> PvpDuel:
+        duel = await self._get_duel_for_update(guild_id, duel_id)
+        if duel.status != "pending":
+            return duel
+        duel.status = "expired"
+        duel.resolved_at = dt.datetime.utcnow()
         await self.session.flush()
         return duel
 
@@ -175,3 +194,16 @@ class PvpService:
         if duel is None:
             raise ValueError("Дуэль не найдена.")
         return duel
+
+    async def _lock_duel_participants(
+        self,
+        *,
+        guild_id: int,
+        challenger_id: int,
+        opponent_id: int,
+    ) -> tuple[UserProfile, UserProfile]:
+        ordered_user_ids = sorted((challenger_id, opponent_id))
+        locked_users = {}
+        for user_id in ordered_user_ids:
+            locked_users[user_id] = await self.economy.get_or_create_user_locked(guild_id, user_id)
+        return locked_users[challenger_id], locked_users[opponent_id]
