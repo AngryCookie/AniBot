@@ -1177,6 +1177,30 @@ async def migration_add_step_k_audit_indexes(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_guild_created ON referral_rewards (guild_id, created_at)"))
 
 
+
+
+async def migration_add_leveling_hardening(conn: AsyncConnection) -> None:
+    user_columns = await conn.execute(text("PRAGMA table_info(users)"))
+    user_column_names = {str(row[1]) for row in user_columns}
+    if "last_level_up_announce_at" not in user_column_names:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN last_level_up_announce_at DATETIME"))
+    if "updated_at" not in user_column_names:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN updated_at DATETIME"))
+        await conn.execute(text("UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+
+    await conn.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_users_guild_level_xp ON users (guild_id, level, xp)")
+    )
+    await conn.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_users_guild_updated_at ON users (guild_id, updated_at)")
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_activity_events_guild_user_created "
+            "ON activity_events (guild_id, user_id, created_at)"
+        )
+    )
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1198,4 +1222,5 @@ MIGRATIONS: List[Migration] = [
     migration_create_word_emoji_stats,
     migration_create_growth_v2,
     migration_add_step_k_audit_indexes,
+    migration_add_leveling_hardening,
 ]

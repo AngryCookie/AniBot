@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -16,11 +16,24 @@ class GuildSettings(BaseModel):
 
 class LevelingSettings(BaseModel):
     enabled: bool = True
-    xp_per_message: int = Field(15, ge=1, le=100)
-    xp_cooldown_seconds: int = Field(60, ge=0, le=3600)
+    message_xp_enabled: bool = True
+    message_xp_min_length: int = Field(6, ge=1, le=2000)
+    message_xp_cooldown_seconds: int = Field(45, ge=0, le=3600)
+    message_xp_min: int = Field(5, ge=0, le=100)
+    message_xp_max: int = Field(10, ge=0, le=100)
+    message_ignore_channels: List[int] = Field(default_factory=list)
+    voice_xp_enabled: bool = True
+    voice_xp_per_minute: int = Field(1, ge=0, le=20)
+    voice_ignore_channels: List[int] = Field(default_factory=list)
+    voice_ignore_self_deaf: bool = True
+    voice_ignore_self_mute: bool = False
+    level_curve_type: str = Field("quadratic", pattern="^(quadratic|legacy)$")
+    level_curve_a: int = Field(50, ge=0, le=10000)
+    level_curve_b: int = Field(50, ge=0, le=10000)
+    role_rewards_enabled: bool = True
     announce_level_up: bool = True
     level_up_channel_id: Optional[int] = None
-    rewards_roles_enabled: bool = True
+    announce_cooldown_seconds: int = Field(60, ge=0, le=3600)
 
 
 class EconomySettings(BaseModel):

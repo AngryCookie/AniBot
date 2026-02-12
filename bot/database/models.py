@@ -39,6 +39,8 @@ class UserProfile(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "guild_id", name="uq_user_guild"),
         Index("ix_users_guild_user", "guild_id", "user_id"),
+        Index("ix_users_guild_level_xp", "guild_id", "level", "xp"),
+        Index("ix_users_guild_updated_at", "guild_id", "updated_at"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -60,6 +62,13 @@ class UserProfile(Base):
     total_pvp_wins = Column(Integer, default=0)
     total_pvp_losses = Column(Integer, default=0)
     total_pvp_volume = Column(Integer, default=0)
+    last_level_up_announce_at = Column(DateTime, default=None)
+    updated_at = Column(
+        DateTime,
+        default=dt.datetime.utcnow,
+        onupdate=dt.datetime.utcnow,
+        nullable=False,
+    )
 
 
 class EconomyLedger(Base):
@@ -292,6 +301,7 @@ class ActivityEvent(Base):
     __table_args__ = (
         Index("ix_activity_events_guild_created", "guild_id", "created_at"),
         Index("ix_activity_events_user_created", "user_id", "created_at"),
+        Index("ix_activity_events_guild_user_created", "guild_id", "user_id", "created_at"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
