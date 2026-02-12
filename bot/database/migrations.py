@@ -1201,6 +1201,79 @@ async def migration_add_leveling_hardening(conn: AsyncConnection) -> None:
         )
     )
 
+
+async def migration_betting_v1_admin_core(conn: AsyncConnection) -> None:
+    team_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_teams)"))).all()}
+    if "guild_id" not in team_cols:
+        await conn.execute(text("ALTER TABLE betting_teams ADD COLUMN guild_id BIGINT"))
+        await conn.execute(text("UPDATE betting_teams SET guild_id = 0 WHERE guild_id IS NULL"))
+    if "active" not in team_cols and "is_active" in team_cols:
+        await conn.execute(text("ALTER TABLE betting_teams ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1"))
+        await conn.execute(text("UPDATE betting_teams SET active = is_active"))
+    if "created_at" not in team_cols:
+        await conn.execute(text("ALTER TABLE betting_teams ADD COLUMN created_at DATETIME"))
+        await conn.execute(text("UPDATE betting_teams SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+    if "updated_at" not in team_cols:
+        await conn.execute(text("ALTER TABLE betting_teams ADD COLUMN updated_at DATETIME"))
+        await conn.execute(text("UPDATE betting_teams SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+
+    match_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_matches)"))).all()}
+    if "guild_id" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN guild_id BIGINT"))
+        await conn.execute(text("UPDATE betting_matches SET guild_id = 0 WHERE guild_id IS NULL"))
+    if "min_bet" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN min_bet INTEGER NOT NULL DEFAULT 50"))
+    if "max_bet" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN max_bet INTEGER NOT NULL DEFAULT 5000"))
+    if "announce_channel_id" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN announce_channel_id BIGINT"))
+    if "created_at" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN created_at DATETIME"))
+        await conn.execute(text("UPDATE betting_matches SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+    if "updated_at" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN updated_at DATETIME"))
+        await conn.execute(text("UPDATE betting_matches SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+
+    bet_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_bets)"))).all()}
+    if "guild_id" not in bet_cols:
+        await conn.execute(text("ALTER TABLE betting_bets ADD COLUMN guild_id BIGINT"))
+        await conn.execute(text("UPDATE betting_bets SET guild_id = 0 WHERE guild_id IS NULL"))
+    if "odds" not in bet_cols:
+        await conn.execute(text("ALTER TABLE betting_bets ADD COLUMN odds FLOAT"))
+        if "odds_at_bet" in bet_cols:
+            await conn.execute(text("UPDATE betting_bets SET odds = odds_at_bet WHERE odds IS NULL"))
+        await conn.execute(text("UPDATE betting_bets SET odds = 1.0 WHERE odds IS NULL"))
+    if "created_at" not in bet_cols:
+        await conn.execute(text("ALTER TABLE betting_bets ADD COLUMN created_at DATETIME"))
+        await conn.execute(text("UPDATE betting_bets SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS betting_payouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                match_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                bet_id INTEGER NOT NULL,
+                payout_amount FLOAT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(match_id) REFERENCES betting_matches(id),
+                FOREIGN KEY(bet_id) REFERENCES betting_bets(id)
+            )
+            """
+        )
+    )
+
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_match ON betting_matches (guild_id, id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_status ON betting_matches (guild_id, status)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_match ON betting_bets (guild_id, match_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_user ON betting_bets (guild_id, user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_teams_guild_id ON betting_teams (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_teams_guild_active ON betting_teams (guild_id, active)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_guild_match ON betting_payouts (guild_id, match_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_guild_user ON betting_payouts (guild_id, user_id)"))
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1223,4 +1296,5 @@ MIGRATIONS: List[Migration] = [
     migration_create_growth_v2,
     migration_add_step_k_audit_indexes,
     migration_add_leveling_hardening,
+    migration_betting_v1_admin_core,
 ]
