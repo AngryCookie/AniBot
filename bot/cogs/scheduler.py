@@ -77,7 +77,8 @@ class SchedulerCog(commands.Cog):
             except Exception:
                 logger.exception("Scheduler task failed", extra={"task": key})
             finally:
-                next_iter = getattr(getattr(self, key), "next_iteration", None)
+                task_obj = getattr(self, key, None)
+                next_iter = getattr(task_obj, "next_iteration", None) if task_obj is not None else None
                 self._next_run[key] = next_iter
                 logger.info(
                     "Scheduler task finished",
