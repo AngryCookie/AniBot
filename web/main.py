@@ -31,6 +31,9 @@ from bot.database.models import (
     ServerMonthlyGoal,
     FeatureFlag,
     GuildConfig,
+    GuildGoalTemplate,
+    GuildMonthlyGoal,
+    GuildMonthlyGoalContribution,
     ReferralCode,
     ReferralUsage,
     ReferralReward,
@@ -45,6 +48,7 @@ from bot.database.models import (
 from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardType, ReferralRelationship, PromoCampaignV2, PromoCodeV2, PromoRedemptionV2, ReferralLinkV2, ReferralAttributionV2, ReferralRewardV2
 from bot.community_goals import CommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
+from bot.goals.service import MonthlyCommunityGoalService
 from bot.reports.monthly import calculate_previous_month_period, build_monthly_payload
 from bot.reports.yearly import calculate_previous_year_period, build_yearly_payload
 from bot.reports.service import DEFAULT_REPORTS_SETTINGS
@@ -63,6 +67,10 @@ from .schemas import (
     MonthlyGoalIn,
     MonthlyGoalOut,
     MonthlyGoalUpdate,
+    MonthlyGoalsSettings,
+    MonthlyGoalTemplateIn,
+    MonthlyGoalTemplateOut,
+    MonthlyGoalCurrentOut,
     EconomyAnalyticsSummaryResponse,
     EconomyInsight,
     EconomySettings,
@@ -2833,3 +2841,148 @@ async def growth_referrals_leaderboard(guild_id: int, days: int = 30, access_tok
     async with database.session() as session:
         rows = await session.execute(select(ReferralAttributionV2.referrer_user_id, func.count(ReferralAttributionV2.id).label("activations")).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "activated", ReferralAttributionV2.activated_at >= cutoff).group_by(ReferralAttributionV2.referrer_user_id).order_by(desc(func.count(ReferralAttributionV2.id))).limit(50))
     return [{"user_id": int(r.referrer_user_id), "activations": int(r.activations or 0)} for r in rows]
+
+
+def _goal_template_to_schema(row: GuildGoalTemplate) -> MonthlyGoalTemplateOut:
+    return MonthlyGoalTemplateOut(
+        id=int(row.id),
+        guild_id=int(row.guild_id),
+        name=row.name,
+        description=row.description,
+        goal_type=row.goal_type,
+        target_value=int(row.target_value),
+        eligibility_type=row.eligibility_type,
+        eligibility_min_value=int(row.eligibility_min_value),
+        enabled=bool(row.enabled),
+        created_at=row.created_at.isoformat() + "Z",
+        updated_at=row.updated_at.isoformat() + "Z",
+    )
+
+
+def _current_goal_to_schema(goal: GuildMonthlyGoal, eligible_count: int) -> MonthlyGoalCurrentOut:
+    now = dt.datetime.utcnow()
+    percent = (float(goal.progress_value) / float(goal.target_value) * 100.0) if goal.target_value > 0 else 0.0
+    days_left = max(0, int((goal.ends_at - now).total_seconds() // 86400))
+    return MonthlyGoalCurrentOut(
+        id=int(goal.id),
+        guild_id=int(goal.guild_id),
+        month=goal.month.isoformat(),
+        template_id=goal.template_id,
+        goal_type=goal.goal_type,
+        target_value=int(goal.target_value),
+        progress_value=int(goal.progress_value),
+        status=goal.status,
+        started_at=goal.started_at.isoformat() + "Z",
+        ends_at=goal.ends_at.isoformat() + "Z",
+        closed_at=goal.closed_at.isoformat() + "Z" if goal.closed_at else None,
+        reward_role_id=goal.reward_role_id,
+        announce_channel_id=goal.announce_channel_id,
+        summary_message_id=goal.summary_message_id,
+        percent_completed=max(0.0, min(100.0, percent)),
+        days_left=days_left,
+        eligible_count=int(eligible_count),
+    )
+
+
+@app.get("/api/guilds/{guild_id}/monthly-goals/settings", response_model=MonthlyGoalsSettings)
+async def get_monthly_goals_settings(guild_id: int, access_token: str = Depends(get_access_token)) -> MonthlyGoalsSettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    cfg = await _get_or_create_config(guild_id)
+    settings = MonthlyCommunityGoalService.parse_settings(cfg.settings)
+    return MonthlyGoalsSettings(**settings)
+
+
+@app.put("/api/guilds/{guild_id}/monthly-goals/settings", response_model=MonthlyGoalsSettings)
+async def update_monthly_goals_settings(guild_id: int, payload: MonthlyGoalsSettings, access_token: str = Depends(get_access_token)) -> MonthlyGoalsSettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        cfg = (await session.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))).scalars().first()
+        if cfg is None:
+            cfg = GuildConfig(guild_id=guild_id)
+            session.add(cfg)
+            await session.flush()
+        cfg.settings = MonthlyCommunityGoalService.save_settings(cfg.settings, payload.model_dump())
+        await session.commit()
+    return payload
+
+
+@app.get("/api/guilds/{guild_id}/monthly-goals/templates", response_model=list[MonthlyGoalTemplateOut])
+async def list_monthly_goal_templates(guild_id: int, access_token: str = Depends(get_access_token)) -> list[MonthlyGoalTemplateOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        rows = (await session.execute(select(GuildGoalTemplate).where(GuildGoalTemplate.guild_id == guild_id).order_by(GuildGoalTemplate.id.asc()))).scalars().all()
+        return [_goal_template_to_schema(r) for r in rows]
+
+
+@app.post("/api/guilds/{guild_id}/monthly-goals/templates", response_model=MonthlyGoalTemplateOut)
+async def create_monthly_goal_template(guild_id: int, payload: MonthlyGoalTemplateIn, access_token: str = Depends(get_access_token)) -> MonthlyGoalTemplateOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = GuildGoalTemplate(guild_id=guild_id, **payload.model_dump())
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+        return _goal_template_to_schema(row)
+
+
+@app.put("/api/guilds/{guild_id}/monthly-goals/templates/{template_id}", response_model=MonthlyGoalTemplateOut)
+async def update_monthly_goal_template(guild_id: int, template_id: int, payload: MonthlyGoalTemplateIn, access_token: str = Depends(get_access_token)) -> MonthlyGoalTemplateOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(GuildGoalTemplate).where((GuildGoalTemplate.guild_id == guild_id) & (GuildGoalTemplate.id == template_id)))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Template not found")
+        for k, v in payload.model_dump().items():
+            setattr(row, k, v)
+        await session.commit()
+        await session.refresh(row)
+        return _goal_template_to_schema(row)
+
+
+@app.delete("/api/guilds/{guild_id}/monthly-goals/templates/{template_id}")
+async def delete_monthly_goal_template(guild_id: int, template_id: int, access_token: str = Depends(get_access_token)) -> dict[str, bool]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(GuildGoalTemplate).where((GuildGoalTemplate.guild_id == guild_id) & (GuildGoalTemplate.id == template_id)))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Template not found")
+        await session.delete(row)
+        await session.commit()
+    return {"ok": True}
+
+
+@app.get("/api/guilds/{guild_id}/monthly-goals/current", response_model=MonthlyGoalCurrentOut | None)
+async def get_monthly_goal_current(guild_id: int, access_token: str = Depends(get_access_token)) -> MonthlyGoalCurrentOut | None:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(GuildMonthlyGoal).where(GuildMonthlyGoal.guild_id == guild_id).order_by(GuildMonthlyGoal.month.desc()))).scalars().first()
+        if row is None:
+            return None
+        eligible = await session.scalar(select(func.count()).select_from(GuildMonthlyGoalContribution).where((GuildMonthlyGoalContribution.goal_id == row.id) & (GuildMonthlyGoalContribution.eligible.is_(True))))
+        return _current_goal_to_schema(row, int(eligible or 0))
+
+
+@app.post("/api/guilds/{guild_id}/monthly-goals/current/force-close")
+async def force_close_monthly_goal(guild_id: int, access_token: str = Depends(get_access_token)) -> dict:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        service = MonthlyCommunityGoalService(session)
+        row = (await session.execute(select(GuildMonthlyGoal).where((GuildMonthlyGoal.guild_id == guild_id) & (GuildMonthlyGoal.closed_at.is_(None))).order_by(GuildMonthlyGoal.month.desc()))).scalars().first()
+        if row is None:
+            return {"ok": True, "closed": False, "reason": "no_open_goal"}
+        guild_obj = app.state.bot.get_guild(guild_id) if hasattr(app.state, "bot") else None
+        if guild_obj is None:
+            return {"ok": False, "closed": False, "reason": "guild_not_loaded"}
+        await service.recalc_progress(guild_id, int(row.id), row.started_at, row.ends_at)
+        await service.recalc_contributions(guild_id, int(row.id), row.started_at, row.ends_at)
+        result = await service.close_monthly_goal(guild_obj, int(row.id), dt.datetime.utcnow())
+        await session.commit()
+        return {"ok": True, **result}

@@ -11,6 +11,7 @@ from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, GuildConfig, ModLog, ServerMonthlyGoal, UserProfile
 from bot.monthly_goals import MonthlyGoalService
 from bot.pvp.seasons import PvpSeasonService
+from bot.goals.service import MonthlyCommunityGoalService
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class SchedulerCog(commands.Cog):
         self.community_goals_task.start()
         self.monthly_goals_task.start()
         self.monthly_reports_task.start()
+        self.monthly_community_goals_v2_task.start()
         self.pvp_seasons_task.start()
 
     def cog_unload(self) -> None:
@@ -32,6 +34,7 @@ class SchedulerCog(commands.Cog):
         self.community_goals_task.cancel()
         self.monthly_goals_task.cancel()
         self.monthly_reports_task.cancel()
+        self.monthly_community_goals_v2_task.cancel()
         self.pvp_seasons_task.cancel()
 
     @tasks.loop(hours=24)
@@ -209,12 +212,24 @@ class SchedulerCog(commands.Cog):
         except Exception:
             logger.exception("Monthly reports scheduler iteration failed")
 
+    @tasks.loop(minutes=20)
+    async def monthly_community_goals_v2_task(self) -> None:
+        try:
+            async with self.bot.db.session() as session:
+                async with session.begin():
+                    service = MonthlyCommunityGoalService(session)
+                    await service.scheduler_tick(self.bot)
+        except Exception:
+            logger.exception("Monthly community goals v2 scheduler iteration failed")
+
+
     @daily_reset_task.before_loop
     @cleanup_task.before_loop
     @community_goals_task.before_loop
     @monthly_goals_task.before_loop
     @monthly_reports_task.before_loop
     @pvp_seasons_task.before_loop
+    @monthly_community_goals_v2_task.before_loop
     async def before_tasks(self) -> None:
         await self.bot.wait_until_ready()
 

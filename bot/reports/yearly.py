@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 import discord
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import GuildReport
+from bot.database.models import GuildReport, GuildMonthlyGoal
 from bot.reports.monthly import build_monthly_payload
 
 
@@ -230,8 +230,17 @@ async def build_yearly_payload(
         reusable_payloads.append(payload)
         seen_periods.add(period_key)
 
+    completed_goals_count = await session.scalar(
+        select(func.count()).select_from(GuildMonthlyGoal).where(
+            (GuildMonthlyGoal.guild_id == guild_id)
+            & (GuildMonthlyGoal.started_at >= period_start)
+            & (GuildMonthlyGoal.started_at < period_end)
+            & (GuildMonthlyGoal.progress_value >= GuildMonthlyGoal.target_value)
+        )
+    )
+
     if len(reusable_payloads) == 12 and seen_periods == expected_periods:
-        return _aggregate_yearly_payload(
+        result_payload = _aggregate_yearly_payload(
             guild_id=guild_id,
             period_start=period_start,
             period_end=period_end,
@@ -240,6 +249,8 @@ async def build_yearly_payload(
             monthly_payloads=sorted(reusable_payloads, key=lambda p: str(p.get("period_start", ""))),
             source="monthly_cache",
         )
+        result_payload["monthly_goals_completed"] = int(completed_goals_count or 0)
+        return result_payload
 
     computed_payloads: list[dict] = []
     for month in range(1, 13):
@@ -254,7 +265,7 @@ async def build_yearly_payload(
         )
         computed_payloads.append(payload)
 
-    return _aggregate_yearly_payload(
+    result_payload = _aggregate_yearly_payload(
         guild_id=guild_id,
         period_start=period_start,
         period_end=period_end,
@@ -263,6 +274,8 @@ async def build_yearly_payload(
         monthly_payloads=computed_payloads,
         source="direct_db",
     )
+    result_payload["monthly_goals_completed"] = int(completed_goals_count or 0)
+    return result_payload
 
 
 def build_yearly_embed(payload: dict) -> discord.Embed:
@@ -327,6 +340,9 @@ def build_yearly_embed(payload: dict) -> discord.Embed:
         emojis = "\n".join([f"• {e['emoji_key']}: {e['count']}" for e in language.get("top_emojis", [])[:10]]) or "—"
         embed.add_field(name="📝 Топ слов", value=words, inline=False)
         embed.add_field(name="😀 Топ эмодзи", value=emojis, inline=False)
+
+    goals_completed = int(payload.get("monthly_goals_completed", 0) or 0)
+    embed.add_field(name="🎯 Цели сообщества", value=f"Выполнено целей за год: **{goals_completed}**", inline=False)
 
     highlights = payload.get("highlights") or {}
     if highlights:
