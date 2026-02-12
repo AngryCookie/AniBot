@@ -6,7 +6,7 @@ import logging
 from discord.ext import commands, tasks
 from sqlalchemy import and_, delete, select, update
 
-from bot.analytics.monthly_reports import MonthlyAnalyticsReportService
+from bot.reports.service import MonthlyWrappedService
 from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, GuildConfig, ModLog, ServerMonthlyGoal, UserProfile
 from bot.monthly_goals import MonthlyGoalService
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SchedulerCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.monthly_reports_service = MonthlyAnalyticsReportService(bot)
+        self.monthly_reports_service = MonthlyWrappedService(bot)
         self.daily_reset_task.start()
         self.cleanup_task.start()
         self.community_goals_task.start()
@@ -202,10 +202,10 @@ class SchedulerCog(commands.Cog):
                             extra={"guild_id": int(config.guild_id)},
                         )
 
-    @tasks.loop(time=dt.time(hour=0, minute=10, tzinfo=dt.timezone.utc))
+    @tasks.loop(minutes=10)
     async def monthly_reports_task(self) -> None:
         try:
-            await self.monthly_reports_service.run_daily()
+            await self.monthly_reports_service.run_scheduler_tick()
         except Exception:
             logger.exception("Monthly reports scheduler iteration failed")
 

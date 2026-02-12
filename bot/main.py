@@ -31,6 +31,7 @@ COGS = [
     "bot.cogs.monthly_goals",
     "bot.cogs.referral",
     "bot.cogs.observability",
+    "bot.cogs.reports",
 ]
 
 

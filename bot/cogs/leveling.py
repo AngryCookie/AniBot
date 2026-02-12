@@ -17,7 +17,7 @@ from bot.cogs.utils import (
     get_role_multiplier,
     xp_to_next,
 )
-from bot.database.models import LevelReward, UserProfile
+from bot.database.models import ActivityEvent, LevelReward, UserProfile
 from bot.database.operations import apply_balance_change
 
 
@@ -62,6 +62,14 @@ class LevelingCog(commands.Cog):
                 user.last_xp_date = now
                 user.last_message_ts = now
                 user.last_message_content = message.content.strip()
+                session.add(
+                    ActivityEvent(
+                        guild_id=message.guild.id,
+                        user_id=message.author.id,
+                        event_type="message",
+                        value=1,
+                    )
+                )
                 await self._process_level_up(session, message.author, guild, user, settings)
 
     @commands.Cog.listener()
@@ -75,6 +83,17 @@ class LevelingCog(commands.Cog):
             if after.channel and not before.channel:
                 user.voice_join_ts = dt.datetime.utcnow()
             elif before.channel and not after.channel:
+                now = dt.datetime.utcnow()
+                if user.voice_join_ts is not None:
+                    elapsed_minutes = max(1, int((now - user.voice_join_ts).total_seconds() // 60))
+                    session.add(
+                        ActivityEvent(
+                            guild_id=member.guild.id,
+                            user_id=member.id,
+                            event_type="voice_minutes",
+                            value=elapsed_minutes,
+                        )
+                    )
                 user.voice_join_ts = None
             await session.commit()
 

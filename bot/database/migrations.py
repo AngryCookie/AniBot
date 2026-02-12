@@ -808,6 +808,63 @@ async def migration_create_pvp_seasons(conn: AsyncConnection) -> None:
     )
 
 
+
+
+async def migration_create_guild_reports(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS guild_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                report_type VARCHAR(32) NOT NULL,
+                period_start DATETIME NOT NULL,
+                period_end DATETIME NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT NULL,
+                payload_json JSON NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'posted',
+                CONSTRAINT uq_guild_reports_period
+                    UNIQUE (guild_id, report_type, period_start, period_end)
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_guild_reports_guild_id ON guild_reports (guild_id)"
+        )
+    )
+
+
+async def migration_create_activity_events(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS activity_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                event_type VARCHAR(32) NOT NULL,
+                value INTEGER NOT NULL DEFAULT 1,
+                metadata_json JSON NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_activity_events_guild_created ON activity_events (guild_id, created_at)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_activity_events_user_created ON activity_events (user_id, created_at)"
+        )
+    )
+
 async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
     await conn.execute(
         text(
@@ -852,5 +909,7 @@ MIGRATIONS: List[Migration] = [
     migration_create_pvp_stats,
     migration_add_pvp_user_fields,
     migration_create_pvp_seasons,
+    migration_create_guild_reports,
+    migration_create_activity_events,
     migration_add_operational_indexes,
 ]

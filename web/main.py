@@ -12,6 +12,7 @@ import datetime as dt
 import time
 from pathlib import Path
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -42,6 +43,8 @@ from bot.database.models import (
 from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardType, ReferralRelationship
 from bot.community_goals import CommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
+from bot.reports.monthly import calculate_previous_month_period, build_monthly_payload
+from bot.reports.service import DEFAULT_REPORTS_SETTINGS
 
 from .analytics.behavior import build_behavior_analytics
 from .config import settings
@@ -96,6 +99,8 @@ from .schemas import (
     ShopSettings,
     ShadowPenaltySettings,
     TrustScoreSettings,
+    ReportsSettings,
+    ReportsDryRunOut,
 )
 from .security import (
     DISCORD_API_BASE,
@@ -731,6 +736,7 @@ trust_get, trust_put, trust_reset = _category_routes(
 shadow_get, shadow_put, shadow_reset = _category_routes(
     "shadow_penalties", ShadowPenaltySettings
 )
+reports_get, reports_put, reports_reset = _category_routes("reports", ReportsSettings)
 
 app.get("/api/guilds/{guild_id}/leveling", response_model=LevelingSettings)(
     leveling_get
@@ -1127,6 +1133,44 @@ app.post("/api/guilds/{guild_id}/shop/reset", response_model=ShopSettings)(shop_
 app.get("/api/guilds/{guild_id}/logs", response_model=LogsSettings)(logs_get)
 app.put("/api/guilds/{guild_id}/logs", response_model=LogsSettings)(logs_put)
 app.post("/api/guilds/{guild_id}/logs/reset", response_model=LogsSettings)(logs_reset)
+
+app.get("/api/guilds/{guild_id}/reports", response_model=ReportsSettings)(reports_get)
+app.put("/api/guilds/{guild_id}/reports", response_model=ReportsSettings)(reports_put)
+
+
+@app.post("/api/guilds/{guild_id}/reports/monthly/dry-run", response_model=ReportsDryRunOut)
+async def reports_monthly_dry_run(
+    guild_id: int,
+    range: str = "prev_month",
+    context: Dict[str, Any] = Depends(_settings_dependency("reports")),
+) -> ReportsDryRunOut:
+    if range != "prev_month":
+        raise HTTPException(status_code=400, detail="Only range=prev_month is supported")
+
+    settings_map = context["settings_map"]
+    report_settings = settings_map.get("reports", {})
+    merged = ReportsSettings(**{**DEFAULT_REPORTS_SETTINGS, **report_settings})
+
+    try:
+        ZoneInfo(merged.timezone)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid timezone: {merged.timezone}") from exc
+
+    now = dt.datetime.now(dt.timezone.utc)
+    period = calculate_previous_month_period(tz_name=merged.timezone, now_utc=now)
+
+    async with database.session() as session:
+        payload = await build_monthly_payload(
+            session,
+            guild_id=guild_id,
+            period_start=period.period_start_utc,
+            period_end=period.period_end_utc,
+            tz=merged.timezone,
+            include_sections=merged.monthly.include_sections.dict(),
+        )
+
+    return ReportsDryRunOut(payload=payload)
+
 
 app.get("/api/guilds/{guild_id}/pvp", response_model=PvpSettings)(pvp_get)
 app.put("/api/guilds/{guild_id}/pvp", response_model=PvpSettings)(pvp_put)
