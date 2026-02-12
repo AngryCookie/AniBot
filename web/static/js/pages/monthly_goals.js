@@ -1,4 +1,5 @@
 import { apiFetch } from "../api.js";
+import { showToast } from "../ui.js";
 
 const renderCurrent = (goal) => {
   const summary = document.getElementById("monthlyGoalSummary");
@@ -16,10 +17,27 @@ const renderCurrent = (goal) => {
   bar.style.width = `${Math.max(0, Math.min(100, Number(goal.percent_completed || 0)))}%`;
 };
 
-const renderTemplates = (templates) => {
+const renderTemplates = (guildId, templates, reload) => {
   const box = document.getElementById("goalTemplatesList");
   if (!box) return;
-  box.innerHTML = templates.map(t => `<div class="notice">#${t.id} <b>${t.name}</b> (${t.goal_type}) → ${t.target_value}; eligibility: ${t.eligibility_type} >= ${t.eligibility_min_value}</div>`).join("") || "<div class='notice'>Нет шаблонов</div>";
+  box.innerHTML = templates
+    .map(
+      (t) => `
+      <div class="notice" data-template-id="${t.id}">
+        #${t.id} <b>${t.name}</b> (${t.goal_type}) → ${t.target_value}; eligibility: ${t.eligibility_type} >= ${t.eligibility_min_value}
+        <button type="button" data-action="delete-template" data-id="${t.id}" style="margin-left:8px;">Удалить</button>
+      </div>`,
+    )
+    .join("") || "<div class='notice'>Нет шаблонов</div>";
+
+  box.querySelectorAll("button[data-action='delete-template']").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const templateId = Number(btn.dataset.id);
+      await apiFetch(`/api/guilds/${guildId}/monthly-goals/templates/${templateId}`, { method: "DELETE" });
+      showToast("Шаблон удалён", "success");
+      await reload();
+    });
+  });
 };
 
 export const initMonthlyGoals = async (guildId) => {
@@ -44,7 +62,7 @@ export const initMonthlyGoals = async (guildId) => {
       settingsForm.elements.timezone.value = settings.timezone || "UTC";
       settingsForm.elements.default_template_id.value = settings.default_template_id || "";
     }
-    renderTemplates(templates || []);
+    renderTemplates(guildId, templates || [], load);
     renderCurrent(current);
   };
 
@@ -61,6 +79,7 @@ export const initMonthlyGoals = async (guildId) => {
       default_template_id: settingsForm.elements.default_template_id.value ? Number(settingsForm.elements.default_template_id.value) : null,
     };
     await apiFetch(`/api/guilds/${guildId}/monthly-goals/settings`, { method: "PUT", body: JSON.stringify(payload) });
+    showToast("Настройки месячных целей сохранены", "success");
     await load();
   });
 
@@ -77,17 +96,18 @@ export const initMonthlyGoals = async (guildId) => {
     };
     await apiFetch(`/api/guilds/${guildId}/monthly-goals/templates`, { method: "POST", body: JSON.stringify(payload) });
     templateForm.reset();
+    showToast("Шаблон создан", "success");
     await load();
   });
 
   dryRunBtn?.addEventListener("click", async () => {
-    const current = await apiFetch(`/api/guilds/${guildId}/monthly-goals/current`);
-    alert(`Dry-run: eligible=${current?.eligible_count || 0}, progress=${current?.progress_value || 0}/${current?.target_value || 0}`);
+    const current = await apiFetch(`/api/guilds/${guildId}/monthly-goals/current/dry-run`);
+    showToast(`Dry-run: eligible=${current?.eligible_count || 0}, progress=${current?.progress_value || 0}/${current?.target_value || 0}`, "success");
   });
 
   forceCloseBtn?.addEventListener("click", async () => {
     const result = await apiFetch(`/api/guilds/${guildId}/monthly-goals/current/force-close`, { method: "POST" });
-    alert(`force-close: ${JSON.stringify(result)}`);
+    showToast(`Force-close: ${result.closed ? "closed" : "not closed"}`, result.closed ? "success" : "error");
     await load();
   });
 
