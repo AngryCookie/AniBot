@@ -560,3 +560,78 @@ class GrowthOverviewResponse(BaseModel):
     recommendations: list[GrowthRecommendation]
     top_referrers: list[GrowthTopReferrer]
     most_used_promo: Optional[GrowthMostUsedPromo] = None
+
+
+class GrowthActivationSettings(BaseModel):
+    messages_required: int = Field(20, ge=0, le=1_000_000)
+    voice_minutes_required: int = Field(60, ge=0, le=10_000_000)
+    first_transaction_required: bool = True
+    window_days: int = Field(14, ge=1, le=3650)
+
+
+class GrowthReferralRewardsSettings(BaseModel):
+    referrer_fixed: int = Field(200, ge=0, le=1_000_000_000)
+    referred_fixed: int = Field(100, ge=0, le=1_000_000_000)
+    percent_of_first_earnings: float = Field(5, ge=0, le=100)
+    percent_cap: int = Field(500, ge=0, le=1_000_000_000)
+    max_reward_days: int = Field(7, ge=1, le=3650)
+
+
+class GrowthAntiAbuseSettings(BaseModel):
+    min_account_age_days: int = Field(3, ge=0, le=36500)
+    cooldown_seconds: int = Field(300, ge=0, le=86400)
+
+
+class GrowthSettings(BaseModel):
+    enabled: bool = True
+    promo_enabled: bool = True
+    referrals_enabled: bool = True
+    referral_activation: GrowthActivationSettings = Field(default_factory=GrowthActivationSettings)
+    referral_rewards: GrowthReferralRewardsSettings = Field(default_factory=GrowthReferralRewardsSettings)
+    anti_abuse: GrowthAntiAbuseSettings = Field(default_factory=GrowthAntiAbuseSettings)
+
+
+class PromoCampaignIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str | None = None
+    status: str = Field("active", pattern="^(active|paused|ended)$")
+    starts_at: str | None = None
+    ends_at: str | None = None
+
+
+class PromoCampaignOut(PromoCampaignIn):
+    id: int
+    guild_id: int
+    created_at: str
+    updated_at: str
+
+
+class PromoCodeV2In(BaseModel):
+    campaign_id: int | None = None
+    code: str = Field(..., min_length=3, max_length=64)
+    reward_type: str = Field(..., pattern="^(balance_fixed|balance_percent)$")
+    reward_value: float = Field(..., gt=0, le=1_000_000_000)
+    currency_cap: int | None = Field(None, ge=0, le=1_000_000_000)
+    total_uses_limit: int | None = Field(None, ge=1, le=10_000_000)
+    per_user_uses_limit: int = Field(1, ge=1, le=1000)
+    min_account_age_days: int | None = Field(None, ge=0, le=36500)
+    only_new_users: bool = False
+    allowed_role_ids_json: str | None = None
+    enabled: bool = True
+
+
+class PromoCodeV2Out(PromoCodeV2In):
+    id: int
+    guild_id: int
+    created_at: str
+    updated_at: str
+
+
+class GrowthOverviewV2(BaseModel):
+    days: int
+    promo_total_redemptions: int
+    promo_total_payout: int
+    referrals_pending: int
+    referrals_activated: int
+    referrals_total_rewards: int
+    top_referrers: list[GrowthTopReferrer]

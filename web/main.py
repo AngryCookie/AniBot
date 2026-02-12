@@ -42,7 +42,7 @@ from bot.database.models import (
     WordStatDaily,
     EmojiStatDaily,
 )
-from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardType, ReferralRelationship
+from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardType, ReferralRelationship, PromoCampaignV2, PromoCodeV2, PromoRedemptionV2, ReferralLinkV2, ReferralAttributionV2, ReferralRewardV2
 from bot.community_goals import CommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 from bot.reports.monthly import calculate_previous_month_period, build_monthly_payload
@@ -97,6 +97,12 @@ from .schemas import (
     GrowthReferrerStatsRow,
     GrowthReferralCampaignSettings,
     GrowthTopReferrer,
+    GrowthSettings,
+    PromoCampaignIn,
+    PromoCampaignOut,
+    PromoCodeV2In,
+    PromoCodeV2Out,
+    GrowthOverviewV2,
     ShopItemIn,
     ShopItemOut,
     ShopSettings,
@@ -2619,3 +2625,211 @@ async def get_emojis_stats(
     async with database.session() as session:
         top, series = await _build_top_stats(session, EmojiStatDaily, guild_id, period_days, "emoji_key")
     return WordEmojiStatsResponse(guild_id=guild_id, days=period_days, top=top, series=series)
+
+
+def _default_growth_settings() -> GrowthSettings:
+    return GrowthSettings()
+
+
+def _get_growth_settings_map(settings_map: Dict[str, Any]) -> Dict[str, Any]:
+    raw = settings_map.get("growth", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+@app.get("/api/guilds/{guild_id}/growth", response_model=GrowthSettings)
+async def get_growth_settings(
+    guild_id: int,
+    access_token: str = Depends(get_access_token),
+) -> GrowthSettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    config = await _get_or_create_config(guild_id)
+    settings_map = _load_settings(config)
+    merged = _default_growth_settings().dict()
+    merged.update(_get_growth_settings_map(settings_map))
+    return GrowthSettings(**merged)
+
+
+@app.put("/api/guilds/{guild_id}/growth", response_model=GrowthSettings)
+async def put_growth_settings(
+    guild_id: int,
+    payload: GrowthSettings,
+    request: Request,
+    access_token: str = Depends(get_access_token),
+) -> GrowthSettings:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    config = await _get_or_create_config(guild_id)
+    settings_map = _load_settings(config)
+    previous_settings = dict(settings_map)
+    settings_map["growth"] = payload.dict()
+    _save_settings(config, settings_map)
+    async with database.session() as session:
+        session.add(config)
+        await session.commit()
+    await _record_config_change(
+        guild_id=guild_id,
+        category="growth",
+        previous_settings=previous_settings,
+        new_settings=settings_map,
+        reason=request.headers.get("X-Change-Reason", "Updated growth settings"),
+        access_token=access_token,
+    )
+    return payload
+
+
+@app.get("/api/guilds/{guild_id}/growth/campaigns", response_model=list[PromoCampaignOut])
+async def list_growth_campaigns(guild_id: int, access_token: str = Depends(get_access_token)) -> list[PromoCampaignOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        result = await session.execute(
+            select(PromoCampaignV2).where(PromoCampaignV2.guild_id == guild_id).order_by(PromoCampaignV2.id.desc())
+        )
+        rows = result.scalars().all()
+    return [PromoCampaignOut(id=int(r.id), guild_id=int(r.guild_id), name=r.name, description=r.description, status=r.status, starts_at=r.starts_at.isoformat() if r.starts_at else None, ends_at=r.ends_at.isoformat() if r.ends_at else None, created_at=r.created_at.isoformat(), updated_at=r.updated_at.isoformat()) for r in rows]
+
+
+@app.post("/api/guilds/{guild_id}/growth/campaigns", response_model=PromoCampaignOut)
+async def create_growth_campaign(guild_id: int, payload: PromoCampaignIn, access_token: str = Depends(get_access_token)) -> PromoCampaignOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    row = PromoCampaignV2(
+        guild_id=guild_id,
+        name=payload.name,
+        description=payload.description,
+        status=payload.status,
+        starts_at=_parse_iso_datetime(payload.starts_at) if payload.starts_at else None,
+        ends_at=_parse_iso_datetime(payload.ends_at) if payload.ends_at else None,
+    )
+    async with database.session() as session:
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return PromoCampaignOut(id=int(row.id), guild_id=int(row.guild_id), name=row.name, description=row.description, status=row.status, starts_at=row.starts_at.isoformat() if row.starts_at else None, ends_at=row.ends_at.isoformat() if row.ends_at else None, created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat())
+
+
+@app.put("/api/guilds/{guild_id}/growth/campaigns/{campaign_id}", response_model=PromoCampaignOut)
+async def update_growth_campaign(guild_id: int, campaign_id: int, payload: PromoCampaignIn, access_token: str = Depends(get_access_token)) -> PromoCampaignOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(PromoCampaignV2).where(PromoCampaignV2.guild_id == guild_id, PromoCampaignV2.id == campaign_id))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        row.name = payload.name
+        row.description = payload.description
+        row.status = payload.status
+        row.starts_at = _parse_iso_datetime(payload.starts_at) if payload.starts_at else None
+        row.ends_at = _parse_iso_datetime(payload.ends_at) if payload.ends_at else None
+        await session.commit()
+        await session.refresh(row)
+    return PromoCampaignOut(id=int(row.id), guild_id=int(row.guild_id), name=row.name, description=row.description, status=row.status, starts_at=row.starts_at.isoformat() if row.starts_at else None, ends_at=row.ends_at.isoformat() if row.ends_at else None, created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat())
+
+
+@app.delete("/api/guilds/{guild_id}/growth/campaigns/{campaign_id}")
+async def delete_growth_campaign(guild_id: int, campaign_id: int, access_token: str = Depends(get_access_token)) -> dict[str, bool]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(PromoCampaignV2).where(PromoCampaignV2.guild_id == guild_id, PromoCampaignV2.id == campaign_id))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        await session.delete(row)
+        await session.commit()
+    return {"ok": True}
+
+
+@app.get("/api/guilds/{guild_id}/growth/promo/codes", response_model=list[PromoCodeV2Out])
+async def list_growth_promo_codes_v2(guild_id: int, access_token: str = Depends(get_access_token)) -> list[PromoCodeV2Out]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        rows = (await session.execute(select(PromoCodeV2).where(PromoCodeV2.guild_id == guild_id).order_by(PromoCodeV2.id.desc()))).scalars().all()
+    return [PromoCodeV2Out(id=int(r.id), guild_id=int(r.guild_id), campaign_id=r.campaign_id, code=r.code, reward_type=r.reward_type, reward_value=float(r.reward_value), currency_cap=r.currency_cap, total_uses_limit=r.total_uses_limit, per_user_uses_limit=int(r.per_user_uses_limit), min_account_age_days=r.min_account_age_days, only_new_users=bool(r.only_new_users), allowed_role_ids_json=r.allowed_role_ids_json, enabled=bool(r.enabled), created_at=r.created_at.isoformat(), updated_at=r.updated_at.isoformat()) for r in rows]
+
+
+@app.get("/api/guilds/{guild_id}/growth/overview", response_model=GrowthOverviewV2)
+async def growth_overview_v2(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> GrowthOverviewV2:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=422, detail="days must be one of 7,30,90")
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    async with database.session() as session:
+        promo_total_redemptions = await session.scalar(select(func.count()).select_from(PromoRedemptionV2).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.redeemed_at >= cutoff))
+        promo_total_payout = await session.scalar(select(func.coalesce(func.sum(PromoRedemptionV2.reward_amount), 0)).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.redeemed_at >= cutoff))
+        referrals_pending = await session.scalar(select(func.count()).select_from(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "pending"))
+        referrals_activated = await session.scalar(select(func.count()).select_from(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "activated"))
+        referrals_total_rewards = await session.scalar(select(func.coalesce(func.sum(ReferralRewardV2.reward_amount), 0)).where(ReferralRewardV2.guild_id == guild_id, ReferralRewardV2.rewarded_at >= cutoff))
+        top_rows = await session.execute(select(ReferralAttributionV2.referrer_user_id, func.count(ReferralAttributionV2.id).label("total_referrals")).where(ReferralAttributionV2.guild_id == guild_id).group_by(ReferralAttributionV2.referrer_user_id).order_by(desc(func.count(ReferralAttributionV2.id))).limit(5))
+    return GrowthOverviewV2(days=days, promo_total_redemptions=int(promo_total_redemptions or 0), promo_total_payout=int(promo_total_payout or 0), referrals_pending=int(referrals_pending or 0), referrals_activated=int(referrals_activated or 0), referrals_total_rewards=int(referrals_total_rewards or 0), top_referrers=[GrowthTopReferrer(user_id=int(r.referrer_user_id), total_referrals=int(r.total_referrals or 0), active_referrals=0, total_rewards_paid=0) for r in top_rows])
+
+@app.post("/api/guilds/{guild_id}/growth/promo/codes", response_model=PromoCodeV2Out)
+async def create_growth_promo_code_v2(guild_id: int, payload: PromoCodeV2In, access_token: str = Depends(get_access_token)) -> PromoCodeV2Out:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    row = PromoCodeV2(guild_id=guild_id, campaign_id=payload.campaign_id, code=payload.code.strip().upper(), reward_type=payload.reward_type, reward_value=float(payload.reward_value), currency_cap=payload.currency_cap, total_uses_limit=payload.total_uses_limit, per_user_uses_limit=payload.per_user_uses_limit, min_account_age_days=payload.min_account_age_days, only_new_users=payload.only_new_users, allowed_role_ids_json=payload.allowed_role_ids_json, enabled=payload.enabled)
+    async with database.session() as session:
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return PromoCodeV2Out(id=int(row.id), guild_id=int(row.guild_id), campaign_id=row.campaign_id, code=row.code, reward_type=row.reward_type, reward_value=float(row.reward_value), currency_cap=row.currency_cap, total_uses_limit=row.total_uses_limit, per_user_uses_limit=int(row.per_user_uses_limit), min_account_age_days=row.min_account_age_days, only_new_users=bool(row.only_new_users), allowed_role_ids_json=row.allowed_role_ids_json, enabled=bool(row.enabled), created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat())
+
+
+@app.put("/api/guilds/{guild_id}/growth/promo/codes/{code_id}", response_model=PromoCodeV2Out)
+async def update_growth_promo_code_v2(guild_id: int, code_id: int, payload: PromoCodeV2In, access_token: str = Depends(get_access_token)) -> PromoCodeV2Out:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(PromoCodeV2).where(PromoCodeV2.guild_id == guild_id, PromoCodeV2.id == code_id))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Promo code not found")
+        row.campaign_id = payload.campaign_id
+        row.code = payload.code.strip().upper()
+        row.reward_type = payload.reward_type
+        row.reward_value = float(payload.reward_value)
+        row.currency_cap = payload.currency_cap
+        row.total_uses_limit = payload.total_uses_limit
+        row.per_user_uses_limit = payload.per_user_uses_limit
+        row.min_account_age_days = payload.min_account_age_days
+        row.only_new_users = payload.only_new_users
+        row.allowed_role_ids_json = payload.allowed_role_ids_json
+        row.enabled = payload.enabled
+        await session.commit()
+        await session.refresh(row)
+    return PromoCodeV2Out(id=int(row.id), guild_id=int(row.guild_id), campaign_id=row.campaign_id, code=row.code, reward_type=row.reward_type, reward_value=float(row.reward_value), currency_cap=row.currency_cap, total_uses_limit=row.total_uses_limit, per_user_uses_limit=int(row.per_user_uses_limit), min_account_age_days=row.min_account_age_days, only_new_users=bool(row.only_new_users), allowed_role_ids_json=row.allowed_role_ids_json, enabled=bool(row.enabled), created_at=row.created_at.isoformat(), updated_at=row.updated_at.isoformat())
+
+
+@app.delete("/api/guilds/{guild_id}/growth/promo/codes/{code_id}")
+async def delete_growth_promo_code_v2(guild_id: int, code_id: int, access_token: str = Depends(get_access_token)) -> dict[str, bool]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(PromoCodeV2).where(PromoCodeV2.guild_id == guild_id, PromoCodeV2.id == code_id))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Promo code not found")
+        await session.delete(row)
+        await session.commit()
+    return {"ok": True}
+
+
+@app.get("/api/guilds/{guild_id}/growth/promo/redemptions")
+async def growth_promo_redemptions(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> dict[str, int]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    async with database.session() as session:
+        total = await session.scalar(select(func.count()).select_from(PromoRedemptionV2).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.redeemed_at >= cutoff))
+        payout = await session.scalar(select(func.coalesce(func.sum(PromoRedemptionV2.reward_amount), 0)).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.redeemed_at >= cutoff))
+    return {"days": days, "total_redemptions": int(total or 0), "total_payout": int(payout or 0)}
+
+
+@app.get("/api/guilds/{guild_id}/growth/referrals/leaderboard")
+async def growth_referrals_leaderboard(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> list[dict[str, int]]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    async with database.session() as session:
+        rows = await session.execute(select(ReferralAttributionV2.referrer_user_id, func.count(ReferralAttributionV2.id).label("activations")).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "activated", ReferralAttributionV2.activated_at >= cutoff).group_by(ReferralAttributionV2.referrer_user_id).order_by(desc(func.count(ReferralAttributionV2.id))).limit(50))
+    return [{"user_id": int(r.referrer_user_id), "activations": int(r.activations or 0)} for r in rows]

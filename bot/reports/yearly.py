@@ -178,6 +178,16 @@ def _aggregate_yearly_payload(
             "top_reactions": _merge_keyed_counts(monthly_payloads, "language", "top_reactions", "emoji_key"),
         }
 
+
+    payload["growth"] = {
+        "promo_total_redemptions": _sum_section(monthly_payloads, "growth", "promo_total_redemptions"),
+        "promo_total_payout": _sum_section(monthly_payloads, "growth", "promo_total_payout"),
+        "referrals_pending": int((monthly_payloads[-1].get("growth") or {}).get("referrals_pending", 0)) if monthly_payloads else 0,
+        "referrals_activated": _sum_section(monthly_payloads, "growth", "referrals_activated"),
+        "referrals_total_rewards": _sum_section(monthly_payloads, "growth", "referrals_total_rewards"),
+        "top_referrers": _merge_top_list(monthly_payloads, "growth", "top_referrers", "activations"),
+    }
+
     payload["highlights"] = _build_highlights(monthly_payloads)
     return payload
 

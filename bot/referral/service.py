@@ -602,3 +602,156 @@ class PromoService:
             return reward_amount
 
         return int(await self._run_in_transaction(operation))
+
+from bot.referral.models import (
+    PromoCampaignV2,
+    PromoCodeV2,
+    PromoRedemptionV2,
+    ReferralLinkV2,
+    ReferralAttributionV2,
+    ReferralRewardV2,
+)
+
+
+class GrowthV2Service:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def _growth_settings(self, guild_id: int) -> dict:
+        cfg = (await self.session.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))).scalars().first()
+        if cfg is None or not cfg.settings:
+            return {}
+        try:
+            payload = json.loads(cfg.settings)
+        except json.JSONDecodeError:
+            return {}
+        growth = payload.get("growth", {})
+        return growth if isinstance(growth, dict) else {}
+
+    async def get_or_create_ref_link(self, guild_id: int, referrer_user_id: int) -> str:
+        row = (await self.session.execute(select(ReferralLinkV2).where(ReferralLinkV2.guild_id == guild_id, ReferralLinkV2.referrer_user_id == referrer_user_id))).scalars().first()
+        if row is not None:
+            return str(row.code)
+        for _ in range(10):
+            code = generate_referral_code(length=8)
+            try:
+                async with self.session.begin_nested():
+                    row = ReferralLinkV2(guild_id=guild_id, referrer_user_id=referrer_user_id, code=code)
+                    self.session.add(row)
+                    await self.session.flush()
+                return code
+            except IntegrityError:
+                continue
+        raise ValueError("Не удалось сгенерировать реферальный код.")
+
+    async def use_ref_code(self, guild_id: int, referred_user_id: int, code: str) -> None:
+        normalized = normalize_promo_code(code)
+        link = (await self.session.execute(select(ReferralLinkV2).where(ReferralLinkV2.guild_id == guild_id, ReferralLinkV2.code == normalized))).scalars().first()
+        if link is None:
+            raise ValueError("Реферальный код не найден.")
+        if int(link.referrer_user_id) == referred_user_id:
+            raise ValueError("Нельзя использовать собственный реферальный код.")
+        try:
+            self.session.add(ReferralAttributionV2(guild_id=guild_id, referred_user_id=referred_user_id, referrer_user_id=int(link.referrer_user_id), status="pending"))
+            await self.session.flush()
+        except IntegrityError as exc:
+            raise ValueError("Вы уже были привязаны к рефереру на этом сервере.") from exc
+
+    async def referral_stats(self, guild_id: int, user_id: int) -> dict[str, int]:
+        total = await self.session.scalar(select(func.count()).select_from(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.referrer_user_id == user_id))
+        activated = await self.session.scalar(select(func.count()).select_from(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.referrer_user_id == user_id, ReferralAttributionV2.status == "activated"))
+        rewards = await self.session.scalar(select(func.coalesce(func.sum(ReferralRewardV2.reward_amount), 0)).where(ReferralRewardV2.guild_id == guild_id, ReferralRewardV2.referrer_user_id == user_id))
+        return {"invites": int(total or 0), "activations": int(activated or 0), "rewards": int(rewards or 0)}
+
+    async def redeem_promo(self, guild_id: int, user_id: int, code: str) -> int:
+        growth = await self._growth_settings(guild_id)
+        anti = growth.get("anti_abuse", {}) if isinstance(growth.get("anti_abuse", {}), dict) else {}
+        cooldown_seconds = int(anti.get("cooldown_seconds") or 0)
+        normalized = normalize_promo_code(code)
+
+        promo = (await self.session.execute(select(PromoCodeV2).where(PromoCodeV2.guild_id == guild_id, PromoCodeV2.code == normalized).with_for_update())).scalars().first()
+        if promo is None or not promo.enabled:
+            raise ValueError("Промокод не найден или отключён.")
+
+        if promo.total_uses_limit is not None:
+            used_total = await self.session.scalar(select(func.count()).select_from(PromoRedemptionV2).where(PromoRedemptionV2.promo_code_id == promo.id))
+            if int(used_total or 0) >= int(promo.total_uses_limit):
+                raise ValueError("Лимит активаций этого промокода исчерпан.")
+
+        used_by_user = await self.session.scalar(select(func.count()).select_from(PromoRedemptionV2).where(PromoRedemptionV2.promo_code_id == promo.id, PromoRedemptionV2.user_id == user_id))
+        if int(used_by_user or 0) >= int(promo.per_user_uses_limit or 1):
+            raise ValueError("Вы уже исчерпали лимит активаций этого промокода.")
+
+        if cooldown_seconds > 0:
+            since = utcnow() - timedelta(seconds=cooldown_seconds)
+            recent = await self.session.scalar(select(func.count()).select_from(PromoRedemptionV2).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.user_id == user_id, PromoRedemptionV2.redeemed_at >= since))
+            if int(recent or 0) > 0:
+                raise ValueError("Слишком частые попытки. Попробуйте позже.")
+
+        econ = EconomyService(self.session)
+        user = await econ.get_or_create_user_locked(guild_id, user_id)
+        balance = int(user.balance or 0)
+        if promo.reward_type == "balance_fixed":
+            amount = int(promo.reward_value)
+        else:
+            amount = int(balance * float(promo.reward_value) / 100.0)
+            if promo.currency_cap is not None:
+                amount = min(amount, int(promo.currency_cap))
+        if amount <= 0:
+            raise ValueError("Награда по промокоду равна 0.")
+
+        self.session.add(PromoRedemptionV2(guild_id=guild_id, promo_code_id=int(promo.id), user_id=user_id, reward_amount=amount, redemption_count=int(used_by_user or 0)+1))
+        await econ.credit(guild_id=guild_id, user_id=user_id, amount=amount, source="promo_code_redeem_v2", metadata={"promo_code_id": int(promo.id), "promo_code": normalized}, ledger_type="promo_reward")
+        await self.session.flush()
+        return amount
+
+
+class ReferralActivationService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def check_and_activate(self, guild_id: int, referred_user_id: int) -> bool:
+        growth = await GrowthV2Service(self.session)._growth_settings(guild_id)
+        activation = growth.get("referral_activation", {}) if isinstance(growth.get("referral_activation", {}), dict) else {}
+        rewards_cfg = growth.get("referral_rewards", {}) if isinstance(growth.get("referral_rewards", {}), dict) else {}
+        window_days = int(activation.get("window_days") or 14)
+        msg_required = int(activation.get("messages_required") or 20)
+        first_tx_required = bool(activation.get("first_transaction_required", True))
+
+        attr = (await self.session.execute(select(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.referred_user_id == referred_user_id).with_for_update())).scalars().first()
+        if attr is None or attr.status != "pending":
+            return False
+        if utcnow() > attr.created_at + timedelta(days=window_days):
+            attr.status = "invalid"
+            attr.activation_reason = "window_expired"
+            await self.session.flush()
+            return False
+
+        messages = await self.session.scalar(select(func.count()).select_from(EconomyTransaction).where(EconomyTransaction.guild_id == guild_id, EconomyTransaction.user_id == referred_user_id))
+        tx_count = int(messages or 0)
+        if tx_count < msg_required:
+            return False
+        if first_tx_required and tx_count <= 0:
+            return False
+
+        attr.status = "activated"
+        attr.activated_at = utcnow()
+        attr.activation_reason = "thresholds_met"
+
+        econ = EconomyService(self.session)
+        referrer_fixed = int(rewards_cfg.get("referrer_fixed") or 0)
+        referred_fixed = int(rewards_cfg.get("referred_fixed") or 0)
+        if referrer_fixed > 0:
+            try:
+                self.session.add(ReferralRewardV2(guild_id=guild_id, referred_user_id=referred_user_id, referrer_user_id=int(attr.referrer_user_id), reward_amount=referrer_fixed, reason="activation_referrer"))
+                await econ.credit(guild_id=guild_id, user_id=int(attr.referrer_user_id), amount=referrer_fixed, source="referral_activation_referrer", metadata={"referred_user_id": referred_user_id}, ledger_type="referral_reward")
+            except IntegrityError:
+                pass
+        if referred_fixed > 0:
+            try:
+                self.session.add(ReferralRewardV2(guild_id=guild_id, referred_user_id=referred_user_id, referrer_user_id=int(attr.referrer_user_id), reward_amount=referred_fixed, reason="activation_referred"))
+                await econ.credit(guild_id=guild_id, user_id=referred_user_id, amount=referred_fixed, source="referral_activation_referred", metadata={"referrer_user_id": int(attr.referrer_user_id)}, ledger_type="referral_reward")
+            except IntegrityError:
+                pass
+        await self.session.flush()
+        return True
