@@ -388,6 +388,7 @@ class GuildReport(Base):
             name="uq_guild_reports_period",
         ),
         Index("ix_guild_reports_guild_id", "guild_id"),
+        Index("ix_guild_reports_guild_type_period", "guild_id", "report_type", "period_start"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

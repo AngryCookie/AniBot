@@ -1573,6 +1573,27 @@ async def migration_pvp_tavern_v1_polish(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_duels_guild_status_resolved ON pvp_duels (guild_id, status, resolved_at)"))
 
 
+async def migration_phase8_stability_indexes(conn: AsyncConnection) -> None:
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_betting_open_at ON betting_matches (guild_id, betting_open_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_betting_close_at ON betting_matches (guild_id, betting_close_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_resolved_at ON betting_matches (guild_id, resolved_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_created_at ON betting_bets (guild_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_user ON betting_bets (guild_id, user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_match ON betting_bets (guild_id, match_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_guild_match ON betting_payouts (guild_id, match_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_guild_created_at ON betting_payouts (guild_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_job_runs_guild_user_ran ON job_runs (guild_id, user_id, ran_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_job_runs_guild_job_ran ON job_runs (guild_id, job_id, ran_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_buffs_guild_user_active ON user_buffs (guild_id, user_id, active)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_buffs_guild_user_ends_at ON user_buffs (guild_id, user_id, ends_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_guild_purchased_at ON tavern_purchase_logs (guild_id, purchased_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_guild_item ON tavern_purchase_logs (guild_id, item_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_monthly_goals_guild_month ON guild_monthly_goals (guild_id, month)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_monthly_goal_contrib_goal_user ON guild_monthly_goal_contributions (goal_id, user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_reports_guild_type_period ON guild_reports (guild_id, report_type, period_start)"))
+
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1606,4 +1627,5 @@ MIGRATIONS: List[Migration] = [
     migration_presence_settings,
     migration_pvp_tavern_v1,
     migration_pvp_tavern_v1_polish,
+    migration_phase8_stability_indexes,
 ]

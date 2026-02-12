@@ -33,6 +33,9 @@ class BettingMatch(Base):
         Index("ix_betting_matches_status_close", "status", "betting_close_at"),
         Index("ix_betting_matches_guild_match", "guild_id", "id"),
         Index("ix_betting_matches_guild_status", "guild_id", "status"),
+        Index("ix_betting_matches_guild_betting_open_at", "guild_id", "betting_open_at"),
+        Index("ix_betting_matches_guild_betting_close_at", "guild_id", "betting_close_at"),
+        Index("ix_betting_matches_guild_resolved_at", "guild_id", "resolved_at"),
         Index("ix_betting_matches_schedule_key", "schedule_key"),
         Index("uq_betting_matches_guild_schedule_key", "guild_id", "schedule_key", unique=True),
     )
@@ -95,6 +98,7 @@ class BettingPayout(Base):
     __table_args__ = (
         Index("ix_betting_payouts_guild_match", "guild_id", "match_id"),
         Index("ix_betting_payouts_guild_user", "guild_id", "user_id"),
+        Index("ix_betting_payouts_guild_created_at", "guild_id", "created_at"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
