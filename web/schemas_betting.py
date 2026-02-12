@@ -86,7 +86,7 @@ class BettingSettings(BaseModel):
     max_bet_default: int = Field(5000, ge=1, le=1_000_000)
     odds: BettingSettingsOdds = Field(default_factory=BettingSettingsOdds)
     resolve: BettingSettingsResolve = Field(default_factory=BettingSettingsResolve)
-    scheduling: BettingSchedulingSettings = Field(default_factory=BettingSchedulingSettings)
+    scheduling: "BettingSchedulingSettings" = Field(default_factory=lambda: BettingSchedulingSettings())
 
 
 
@@ -104,8 +104,16 @@ class BettingSchedulingPairingRules(BaseModel):
     min_active_teams: int = Field(4, ge=2, le=128)
 
 
+
+
+class BettingSchedulingAutoApply(BaseModel):
+    enabled: bool = True
+    horizon_days: int = Field(14, ge=1, le=90)
+    run_every_minutes: int = Field(30, ge=1, le=1440)
+
 class BettingSchedulingSettings(BaseModel):
     enabled: bool = True
+    auto_apply: BettingSchedulingAutoApply = Field(default_factory=BettingSchedulingAutoApply)
     timezone: str = Field("UTC", min_length=1, max_length=64)
     month_template: BettingSchedulingMonthTemplate = Field(default_factory=BettingSchedulingMonthTemplate)
     pairing_rules: BettingSchedulingPairingRules = Field(default_factory=BettingSchedulingPairingRules)

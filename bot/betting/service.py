@@ -33,6 +33,11 @@ DEFAULT_BETTING_SETTINGS: dict[str, Any] = {
     "resolve": {"power_weight": 0.60},
     "scheduling": {
         "enabled": True,
+        "auto_apply": {
+            "enabled": True,
+            "horizon_days": 14,
+            "run_every_minutes": 30,
+        },
         "timezone": "UTC",
         "month_template": {
             "days_of_week": [1, 2, 3, 4, 5, 6, 7],
@@ -48,6 +53,23 @@ DEFAULT_BETTING_SETTINGS: dict[str, Any] = {
         },
     },
 }
+
+
+def merge_scheduling_settings(raw_scheduling: dict[str, Any] | None) -> dict[str, Any]:
+    scheduling = {**DEFAULT_BETTING_SETTINGS["scheduling"], **(raw_scheduling or {})}
+    scheduling["auto_apply"] = {
+        **DEFAULT_BETTING_SETTINGS["scheduling"]["auto_apply"],
+        **scheduling.get("auto_apply", {}),
+    }
+    scheduling["month_template"] = {
+        **DEFAULT_BETTING_SETTINGS["scheduling"]["month_template"],
+        **scheduling.get("month_template", {}),
+    }
+    scheduling["pairing_rules"] = {
+        **DEFAULT_BETTING_SETTINGS["scheduling"]["pairing_rules"],
+        **scheduling.get("pairing_rules", {}),
+    }
+    return scheduling
 
 
 class BettingService:
@@ -272,16 +294,7 @@ class BettingService:
         settings.update(payload.get("betting", {}))
         settings["odds"] = {**DEFAULT_BETTING_SETTINGS["odds"], **settings.get("odds", {})}
         settings["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **settings.get("resolve", {})}
-        scheduling = {**DEFAULT_BETTING_SETTINGS["scheduling"], **settings.get("scheduling", {})}
-        scheduling["month_template"] = {
-            **DEFAULT_BETTING_SETTINGS["scheduling"]["month_template"],
-            **scheduling.get("month_template", {}),
-        }
-        scheduling["pairing_rules"] = {
-            **DEFAULT_BETTING_SETTINGS["scheduling"]["pairing_rules"],
-            **scheduling.get("pairing_rules", {}),
-        }
-        settings["scheduling"] = scheduling
+        settings["scheduling"] = merge_scheduling_settings(settings.get("scheduling", {}))
         return settings
 
     def _choose_weighted_winner(self, team_a: BettingTeam, team_b: BettingTeam, cfg: dict[str, Any]) -> BettingTeam:
