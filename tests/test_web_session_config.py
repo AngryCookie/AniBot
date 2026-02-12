@@ -33,6 +33,20 @@ def test_session_same_site_parsing_rejects_invalid_value(monkeypatch):
         assert "SESSION_SAME_SITE" in str(exc)
 
 
+
+
+def test_session_max_age_rejects_non_int(monkeypatch):
+    _base_env(monkeypatch)
+    monkeypatch.setenv("SESSION_MAX_AGE_SECONDS", "abc")
+
+    import web.config as web_config
+
+    try:
+        importlib.reload(web_config)
+        assert False, "Expected RuntimeError for invalid SESSION_MAX_AGE_SECONDS"
+    except RuntimeError as exc:
+        assert "SESSION_MAX_AGE_SECONDS" in str(exc)
+
 def test_session_middleware_receives_same_site_as_string(monkeypatch):
     _base_env(monkeypatch)
     monkeypatch.setenv("SESSION_SAME_SITE", "lax")
