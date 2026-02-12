@@ -77,7 +77,7 @@ class EconomyCog(commands.Cog):
                         final_income = int(final_income * 0.7)
                     user.daily_income = final_income
                     user.last_daily_ts = now
-                    await EconomyService(session).daily_reward(interaction.guild.id, interaction.user.id, final_income)
+                    await EconomyService(session).daily_reward(guild_id=interaction.guild.id, user_id=interaction.user.id, amount=final_income)
                     session.add(ModLog(guild_id=interaction.guild.id, action="economy_daily", moderator_id=interaction.user.id, user_id=interaction.user.id, reason=f"+{final_income}"))
             await i.response.edit_message(content=f"✅ Вы получили {final_income} {guild.currency_name}.", embed=None, view=None)
 
