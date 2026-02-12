@@ -6,10 +6,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from bot.database.models import Base
+from bot.betting.models import BettingBet, BettingMatch, BettingPayout, BettingTeam
 import bot.betting.models  # noqa: F401
 import bot.referral.models  # noqa: F401
 
 Migration = Callable[[AsyncConnection], Awaitable[None]]
+
+
+async def _table_exists(conn: AsyncConnection, table_name: str) -> bool:
+    result = await conn.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :table_name"),
+        {"table_name": table_name},
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def migration_create_all(conn: AsyncConnection) -> None:
@@ -865,6 +874,13 @@ async def migration_create_activity_events(conn: AsyncConnection) -> None:
         )
     )
 
+
+async def migration_ensure_betting_core_tables(conn: AsyncConnection) -> None:
+    await conn.run_sync(lambda sync_conn: BettingTeam.__table__.create(sync_conn, checkfirst=True))
+    await conn.run_sync(lambda sync_conn: BettingMatch.__table__.create(sync_conn, checkfirst=True))
+    await conn.run_sync(lambda sync_conn: BettingBet.__table__.create(sync_conn, checkfirst=True))
+    await conn.run_sync(lambda sync_conn: BettingPayout.__table__.create(sync_conn, checkfirst=True))
+
 async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
     await conn.execute(
         text(
@@ -877,23 +893,25 @@ async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
             "ON economy_transactions (guild_id, user_id, created_at)"
         )
     )
-    await conn.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_betting_matches_status_close "
-            "ON betting_matches (status, betting_close_at)"
+    if await _table_exists(conn, "betting_matches"):
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_betting_matches_status_close "
+                "ON betting_matches (status, betting_close_at)"
+            )
         )
-    )
-    await conn.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_betting_bets_match_status "
-            "ON betting_bets (match_id, status)"
+    if await _table_exists(conn, "betting_bets"):
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_betting_bets_match_status "
+                "ON betting_bets (match_id, status)"
+            )
         )
-    )
-    await conn.execute(
-        text(
-            "CREATE INDEX IF NOT EXISTS ix_betting_bets_user_id ON betting_bets (user_id)"
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_betting_bets_user_id ON betting_bets (user_id)"
+            )
         )
-    )
 
 async def migration_create_word_emoji_stats(conn: AsyncConnection) -> None:
     await conn.execute(
@@ -1611,6 +1629,7 @@ MIGRATIONS: List[Migration] = [
     migration_create_pvp_seasons,
     migration_create_guild_reports,
     migration_create_activity_events,
+    migration_ensure_betting_core_tables,
     migration_add_operational_indexes,
     migration_create_word_emoji_stats,
     migration_create_growth_v2,
