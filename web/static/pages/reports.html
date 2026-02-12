@@ -46,6 +46,33 @@
       <label class="setting"><span>Reactions</span><input type="checkbox" data-path="monthly.include_sections.reactions" /></label>
     </fieldset>
 
+
+    <h4>Quarterly Summary</h4>
+    <label class="setting">
+      <span>Quarterly enabled</span>
+      <input type="checkbox" name="quarterly.enabled" data-path="quarterly.enabled" />
+    </label>
+
+    <label class="setting">
+      <span>Quarterly channel ID</span>
+      <input type="number" name="quarterly.channel_id" data-path="quarterly.channel_id" placeholder="123456789012345678" />
+    </label>
+
+    <label class="setting">
+      <span>Quarterly post day</span>
+      <input type="number" min="1" max="28" name="quarterly.post_day" data-path="quarterly.post_day" />
+    </label>
+
+    <label class="setting">
+      <span>Quarterly post hour (0-23)</span>
+      <input type="number" min="0" max="23" name="quarterly.post_hour" data-path="quarterly.post_hour" />
+    </label>
+
+    <fieldset class="settings-group">
+      <legend>Quarterly sections</legend>
+      <label class="setting"><span>Betting</span><input type="checkbox" data-path="quarterly.include_sections.betting" /></label>
+    </fieldset>
+
     <h4>Yearly Wrapped</h4>
     <label class="setting">
       <span>Yearly enabled</span>
@@ -89,9 +116,11 @@
     <div class="row gap-sm">
       <button type="submit">Сохранить</button>
       <button type="button" class="secondary" id="reportsDryRunBtn">Monthly dry run</button>
+      <button type="button" class="secondary" id="reportsQuarterlyDryRunBtn">Quarterly dry run</button>
       <button type="button" class="secondary" id="reportsYearlyDryRunBtn">Yearly dry run</button>
     </div>
   </form>
   <pre id="reportsDryRunOut" class="notice hidden" style="white-space: pre-wrap;"></pre>
+  <pre id="reportsQuarterlyDryRunOut" class="notice hidden" style="white-space: pre-wrap;"></pre>
   <pre id="reportsYearlyDryRunOut" class="notice hidden" style="white-space: pre-wrap;"></pre>
 </section>

@@ -54,6 +54,16 @@ export const initReports = async (guildId) => {
     }
   });
 
+  const quarterlyDryRunBtn = document.getElementById("reportsQuarterlyDryRunBtn");
+  const quarterlyOutput = document.getElementById("reportsQuarterlyDryRunOut");
+  quarterlyDryRunBtn?.addEventListener("click", async () => {
+    const result = await apiFetch(`/api/guilds/${guildId}/reports/quarterly/dry-run?quarter=prev`, { method: "POST" });
+    if (quarterlyOutput) {
+      quarterlyOutput.classList.remove("hidden");
+      quarterlyOutput.textContent = JSON.stringify(result.payload, null, 2);
+    }
+  });
+
   const yearlyDryRunBtn = document.getElementById("reportsYearlyDryRunBtn");
   const yearlyOutput = document.getElementById("reportsYearlyDryRunOut");
   yearlyDryRunBtn?.addEventListener("click", async () => {

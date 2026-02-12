@@ -91,7 +91,7 @@ def _build_highlights(monthly_payloads: list[dict]) -> dict:
             best_month = label
 
         betting = payload.get("betting") or {}
-        win = int(betting.get("biggest_win", 0))
+        win = int((betting.get("biggest_win") or {}).get("payout", 0))
         if win > biggest_bet_win:
             biggest_bet_win = win
             biggest_bet_win_month = label
@@ -148,11 +148,17 @@ def _aggregate_yearly_payload(
 
     if include_sections.get("betting", True):
         payload["betting"] = {
-            "betting_total_volume": _sum_section(monthly_payloads, "betting", "betting_total_volume"),
-            "betting_total_payout": _sum_section(monthly_payloads, "betting", "betting_total_payout"),
-            "betting_net_sink": _sum_section(monthly_payloads, "betting", "betting_net_sink"),
-            "top_bettors": _merge_top_list(monthly_payloads, "betting", "top_bettors", "volume"),
-            "biggest_win": max([int((p.get("betting") or {}).get("biggest_win", 0)) for p in monthly_payloads] or [0]),
+            "bets_count": _sum_section(monthly_payloads, "betting", "bets_count"),
+            "unique_bettors": max([int((p.get("betting") or {}).get("unique_bettors", 0)) for p in monthly_payloads] or [0]),
+            "total_volume": _sum_section(monthly_payloads, "betting", "total_volume"),
+            "total_payout": _sum_section(monthly_payloads, "betting", "total_payout"),
+            "users_net_profit": _sum_section(monthly_payloads, "betting", "users_net_profit"),
+            "system_net_sink": _sum_section(monthly_payloads, "betting", "system_net_sink"),
+            "top_bettors_by_volume": _merge_top_list(monthly_payloads, "betting", "top_bettors_by_volume", "volume"),
+            "top_profitable": _merge_top_list(monthly_payloads, "betting", "top_profitable", "net_profit"),
+            "biggest_win": max(
+                [(p.get("betting") or {}).get("biggest_win", {}).get("payout", 0) for p in monthly_payloads] or [0]
+            ),
         }
 
     if include_sections.get("pvp", True):
@@ -314,8 +320,10 @@ def build_yearly_embed(payload: dict) -> discord.Embed:
         embed.add_field(
             name="🎲 Ставки",
             value=(
-                f"Оборот: **{int(betting.get('betting_total_volume', 0))}**\n"
-                f"Выплаты: **{int(betting.get('betting_total_payout', 0))}**\n"
+                f"Объём ставок: **{int(betting.get('total_volume', 0))}**\n"
+                f"Выплачено: **{int(betting.get('total_payout', 0))}**\n"
+                f"Профит игроков: **{int(betting.get('users_net_profit', 0))}**\n"
+                f"Системный net-sink: **{int(betting.get('system_net_sink', 0))}**\n"
                 f"Крупнейший выигрыш: **{int(betting.get('biggest_win', 0))}**"
             ),
             inline=False,

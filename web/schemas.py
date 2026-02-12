@@ -301,6 +301,19 @@ class ReportsMonthlySettings(BaseModel):
 
 
 
+
+
+class ReportsQuarterlyIncludeSections(BaseModel):
+    betting: bool = True
+
+
+class ReportsQuarterlySettings(BaseModel):
+    enabled: bool = False
+    channel_id: Optional[int] = None
+    post_day: int = Field(1, ge=1, le=28)
+    post_hour: int = Field(12, ge=0, le=23)
+    include_sections: ReportsQuarterlyIncludeSections = Field(default_factory=ReportsQuarterlyIncludeSections)
+
 class ReportsYearlySettings(BaseModel):
     enabled: bool = True
     channel_id: Optional[int] = None
@@ -314,6 +327,7 @@ class ReportsSettings(BaseModel):
     timezone: str = Field("UTC", min_length=1, max_length=64)
     retention_days: Optional[int] = Field(None, ge=30, le=3650)
     monthly: ReportsMonthlySettings = Field(default_factory=ReportsMonthlySettings)
+    quarterly: ReportsQuarterlySettings = Field(default_factory=ReportsQuarterlySettings)
     yearly: ReportsYearlySettings = Field(default_factory=ReportsYearlySettings)
 
 

@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from bot.database.models import GuildConfig, GuildReport
 from bot.reports.monthly import build_monthly_embed, build_monthly_payload, calculate_previous_month_period
+from bot.reports.quarterly import build_quarterly_embed, build_quarterly_payload, calculate_quarter_period
 from bot.reports.yearly import build_yearly_embed, build_yearly_payload, calculate_previous_year_period
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,15 @@ DEFAULT_REPORTS_SETTINGS = {
             "words": True,
             "emojis": True,
             "reactions": True,
+        },
+    },
+    "quarterly": {
+        "enabled": False,
+        "channel_id": None,
+        "post_day": 1,
+        "post_hour": 12,
+        "include_sections": {
+            "betting": True,
         },
     },
     "yearly": {
@@ -100,6 +110,7 @@ class MonthlyWrappedService:
             **DEFAULT_REPORTS_SETTINGS,
             **reports,
             "monthly": cls._merge_include_sections(reports, "monthly"),
+            "quarterly": cls._merge_include_sections(reports, "quarterly"),
             "yearly": cls._merge_include_sections(reports, "yearly"),
         }
 
@@ -144,6 +155,24 @@ class MonthlyWrappedService:
                     report_type="monthly",
                 )
 
+
+        quarterly = settings.get("quarterly", {})
+        quarterly_channel_id = quarterly.get("channel_id")
+        if quarterly.get("enabled", False) and quarterly_channel_id:
+            post_day = int(quarterly.get("post_day", 1))
+            post_hour = int(quarterly.get("post_hour", 12))
+            if local_now.day == post_day and local_now.hour == post_hour and local_now.month in {1, 4, 7, 10}:
+                period = calculate_quarter_period(tz_name=tz_name, spec="prev", now_utc=now_utc)
+                await self._generate_and_post(
+                    guild=guild,
+                    channel_id=int(quarterly_channel_id),
+                    period_start=period.period_start_utc,
+                    period_end=period.period_end_utc,
+                    tz_name=tz_name,
+                    include_sections=quarterly.get("include_sections", {}),
+                    report_type="quarterly",
+                )
+
         yearly = settings.get("yearly", {})
         yearly_channel_id = yearly.get("channel_id")
         if yearly.get("enabled", True) and yearly_channel_id:
@@ -167,6 +196,19 @@ class MonthlyWrappedService:
         period = calculate_previous_month_period(tz_name=tz_name, now_utc=now_utc)
         async with self.bot.db.session() as session:
             return await build_monthly_payload(
+                session,
+                guild_id=guild_id,
+                period_start=period.period_start_utc,
+                period_end=period.period_end_utc,
+                tz=tz_name,
+                include_sections=include_sections,
+            )
+
+    async def preview_quarter(self, *, guild_id: int, include_sections: dict[str, bool], tz_name: str, quarter_spec: str = "prev") -> dict:
+        now_utc = self._now_utc()
+        period = calculate_quarter_period(tz_name=tz_name, spec=quarter_spec, now_utc=now_utc)
+        async with self.bot.db.session() as session:
+            return await build_quarterly_payload(
                 session,
                 guild_id=guild_id,
                 period_start=period.period_start_utc,
@@ -199,6 +241,19 @@ class MonthlyWrappedService:
             tz_name=tz_name,
             include_sections=include_sections,
             report_type="monthly",
+        )
+
+    async def post_quarterly_now(self, *, guild, channel_id: int, include_sections: dict[str, bool], tz_name: str, quarter_spec: str = "prev") -> GuildReport | None:
+        now_utc = self._now_utc()
+        period = calculate_quarter_period(tz_name=tz_name, spec=quarter_spec, now_utc=now_utc)
+        return await self._generate_and_post(
+            guild=guild,
+            channel_id=channel_id,
+            period_start=period.period_start_utc,
+            period_end=period.period_end_utc,
+            tz_name=tz_name,
+            include_sections=include_sections,
+            report_type="quarterly",
         )
 
     async def post_yearly_now(self, *, guild, channel_id: int, include_sections: dict[str, bool], tz_name: str) -> GuildReport | None:
@@ -247,6 +302,15 @@ class MonthlyWrappedService:
                     tz=tz_name,
                     include_sections=include_sections,
                 )
+            elif report_type == "quarterly":
+                payload = await build_quarterly_payload(
+                    session,
+                    guild_id=guild.id,
+                    period_start=period_start,
+                    period_end=period_end,
+                    tz=tz_name,
+                    include_sections=include_sections,
+                )
             else:
                 payload = await build_yearly_payload(
                     session,
@@ -282,7 +346,12 @@ class MonthlyWrappedService:
                     return report
 
             try:
-                embed = build_monthly_embed(payload) if report_type == "monthly" else build_yearly_embed(payload)
+                if report_type == "monthly":
+                    embed = build_monthly_embed(payload)
+                elif report_type == "quarterly":
+                    embed = build_quarterly_embed(payload)
+                else:
+                    embed = build_yearly_embed(payload)
                 message = await channel.send(embed=embed)
                 report.status = "posted"
                 report.message_id = int(message.id)
