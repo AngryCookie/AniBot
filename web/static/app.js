@@ -9,8 +9,11 @@ const apiFetch = async (url, options = {}) => {
   });
 
   if (response.status === 401) {
-    window.location.href = "/login.html";
-    return null;
+    const detail = await response.json().catch(() => ({}));
+    const message = detail.message || detail.detail || "Сессия истекла, войдите снова";
+    const error = new Error(message);
+    error.status = 401;
+    throw error;
   }
 
   if (!response.ok) {

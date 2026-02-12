@@ -50,13 +50,24 @@ def decrypt_token(token: str) -> str:
 
 
 def get_access_token(request: Request) -> str:
-    encrypted_token = request.session.get("access_token")
+    cookies = getattr(request, "cookies", {}) or {}
+    session = getattr(request, "session", {}) or {}
+    cookie_present = settings.session_cookie_name in cookies
+    session_keys = sorted(session.keys())
+    logger.info(
+        "session.access_token.request",
+        extra={"cookie_present": cookie_present, "session_keys": session_keys},
+    )
+
+    encrypted_token = session.get("access_token")
     if not encrypted_token:
+        logger.info("session.access_token.missing", extra={"cookie_present": cookie_present, "session_keys": session_keys})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
-    expires_at = int(request.session.get("expires_at", 0) or 0)
+    expires_at = int(session.get("expires_at", 0) or 0)
     if expires_at and expires_at <= int(time.time()):
-        request.session.clear()
+        session.clear()
+        logger.info("session.access_token.expired", extra={"expires_at": expires_at})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
 
     return decrypt_token(encrypted_token)

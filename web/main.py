@@ -312,11 +312,20 @@ async def auth_callback(request: Request, code: str, state: str = "") -> Redirec
     if response.status_code != 200:
         raise HTTPException(status_code=400, detail="OAuth exchange failed")
     payload = response.json()
+    access_token = payload.get("access_token", "")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="OAuth exchange returned no access token")
+
+    user_payload = await fetch_user(access_token)
+    user_id = str(user_payload.get("id", ""))
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Unable to resolve Discord user id")
+
     expires_in = int(payload.get("expires_in", 0) or 0)
-    request.session["access_token"] = encrypt_token(payload["access_token"])
+    request.session["access_token"] = encrypt_token(access_token)
     request.session["refresh_token"] = encrypt_token(payload.get("refresh_token", ""))
     request.session["expires_at"] = int(time.time()) + max(expires_in, 0)
-    request.session["discord_user_id"] = str(payload.get("user", {}).get("id", ""))
+    request.session["discord_user_id"] = user_id
     return RedirectResponse(url="/servers.html", status_code=302)
 
 
@@ -337,6 +346,22 @@ async def get_guilds(access_token: str = Depends(get_access_token)) -> Dict[str,
     filtered = [guild for guild in guilds if guild.get("permissions")]
     allowed = [guild for guild in filtered if int(guild.get("permissions", 0)) & 0x28]
     return {"guilds": allowed}
+
+
+@app.get("/api/debug/session")
+async def debug_session(request: Request) -> Dict[str, Any]:
+    if settings.app_env not in {"dev", "development", "local"}:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    now = int(time.time())
+    expires_at = int(request.session.get("expires_at", 0) or 0)
+    return {
+        "cookie_present": settings.session_cookie_name in request.cookies,
+        "session_keys": sorted(request.session.keys()),
+        "expires_at": expires_at,
+        "now": now,
+        "expired": bool(expires_at and expires_at <= now),
+    }
 
 
 def _load_settings(config: GuildConfig) -> Dict[str, Any]:

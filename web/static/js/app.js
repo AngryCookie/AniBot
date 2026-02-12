@@ -374,8 +374,14 @@ const handleApiError = (message, status) => {
         <strong>Сессия истекла, войдите снова.</strong>
         <div>${message || "Авторизация больше не действительна."}</div>
       </div>
-      <p><a href="/login.html">Перейти ко входу</a></p>
+      <p><button id="reloginBtn" class="btn secondary" type="button">Войти заново</button></p>
     `;
+    const reloginBtn = document.getElementById("reloginBtn");
+    if (reloginBtn) {
+      reloginBtn.addEventListener("click", () => {
+        window.location.href = "/login.html";
+      });
+    }
     setError("Сессия истекла, войдите снова.");
     return;
   }
