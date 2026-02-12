@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    CheckConstraint,
 )
 
 from bot.database.models import Base
@@ -265,3 +266,117 @@ class PromoCodeUsage(Base):
             f"user_id={self.user_id}, reward_amount={self.reward_amount}"
             ")"
         )
+
+
+class PromoCampaignV2(Base):
+    __tablename__ = "promo_campaigns"
+    __table_args__ = (
+        Index("ix_promo_campaigns_guild_id", "guild_id"),
+        Index("ix_promo_campaigns_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(16), nullable=False, default="active")
+    starts_at = Column(DateTime(timezone=True), nullable=True)
+    ends_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class PromoCodeV2(Base):
+    __tablename__ = "promo_codes"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "code", name="uq_promo_codes_guild_code"),
+        Index("ix_promo_codes_guild_id", "guild_id"),
+        Index("ix_promo_codes_campaign_id", "campaign_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    campaign_id = Column(Integer, ForeignKey("promo_campaigns.id"), nullable=True)
+    code = Column(String(64), nullable=False)
+    reward_type = Column(String(32), nullable=False, default="balance_fixed")
+    reward_value = Column(Float, nullable=False)
+    currency_cap = Column(Integer, nullable=True)
+    total_uses_limit = Column(Integer, nullable=True)
+    per_user_uses_limit = Column(Integer, nullable=False, default=1)
+    min_account_age_days = Column(Integer, nullable=True)
+    only_new_users = Column(Boolean, nullable=False, default=False)
+    allowed_role_ids_json = Column(Text, nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class PromoRedemptionV2(Base):
+    __tablename__ = "promo_redemptions"
+    __table_args__ = (
+        UniqueConstraint("promo_code_id", "user_id", "redemption_count", name="uq_promo_redemptions_counted"),
+        Index("ix_promo_redemptions_guild_id", "guild_id"),
+        Index("ix_promo_redemptions_user_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    promo_code_id = Column(Integer, ForeignKey("promo_codes.id"), nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    redeemed_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    reward_amount = Column(Integer, nullable=False)
+    redemption_count = Column(Integer, nullable=False, default=1)
+
+
+class ReferralLinkV2(Base):
+    __tablename__ = "referral_links_v2"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "code", name="uq_referral_links_v2_guild_code"),
+        UniqueConstraint("guild_id", "referrer_user_id", name="uq_referral_links_v2_referrer"),
+        Index("ix_referral_links_v2_guild_id", "guild_id"),
+        Index("ix_referral_links_v2_referrer_user_id", "referrer_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    referrer_user_id = Column(BigInteger, nullable=False)
+    code = Column(String(32), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class ReferralAttributionV2(Base):
+    __tablename__ = "referral_attributions"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "referred_user_id", name="uq_referral_attributions_guild_referred"),
+        CheckConstraint("referrer_user_id != referred_user_id", name="ck_referral_attribution_not_self"),
+        Index("ix_referral_attributions_guild_id", "guild_id"),
+        Index("ix_referral_attributions_referred_user_id", "referred_user_id"),
+        Index("ix_referral_attributions_referrer_user_id", "referrer_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    referred_user_id = Column(BigInteger, nullable=False)
+    referrer_user_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    status = Column(String(16), nullable=False, default="pending")
+    activated_at = Column(DateTime(timezone=True), nullable=True)
+    activation_reason = Column(Text, nullable=True)
+
+
+class ReferralRewardV2(Base):
+    __tablename__ = "referral_rewards_v2"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "referred_user_id", "reason", name="uq_referral_rewards_v2_once"),
+        Index("ix_referral_rewards_v2_guild_id", "guild_id"),
+        Index("ix_referral_rewards_v2_referred_user_id", "referred_user_id"),
+        Index("ix_referral_rewards_v2_referrer_user_id", "referrer_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    referred_user_id = Column(BigInteger, nullable=False)
+    referrer_user_id = Column(BigInteger, nullable=False)
+    reward_amount = Column(Integer, nullable=False)
+    rewarded_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    reason = Column(String(32), nullable=False)

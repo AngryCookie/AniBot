@@ -386,8 +386,118 @@ class ReferralCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.bot.tree.add_command(ReferralGroup(bot))
-        self.bot.tree.add_command(PromoGroup(bot))
+        self.bot.tree.add_command(RefGroup(bot))
+        self.bot.tree.add_command(PromoGroupV2(bot), override=True)
 
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ReferralCog(bot))
+
+from bot.referral.service import GrowthV2Service
+
+
+class RewardConfirmView(discord.ui.View):
+    def __init__(self, amount: int, currency_name: str) -> None:
+        super().__init__(timeout=120)
+        self.amount = amount
+        self.currency_name = currency_name
+
+    @discord.ui.button(label="Понял, спасибо!", style=discord.ButtonStyle.success)
+    async def ok(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        del button
+        await interaction.response.send_message(
+            f"Отлично! Вам начислено **{_fmt_number(self.amount)} {self.currency_name}** 🎉",
+            ephemeral=True,
+        )
+
+
+class PromoRedeemModal(discord.ui.Modal, title="Активация промокода"):
+    promo_code = discord.ui.TextInput(label="Введите промокод", min_length=3, max_length=64)
+
+    def __init__(self, bot: commands.Bot):
+        super().__init__()
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        async with self.bot.db.session() as session:
+            guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
+            service = GrowthV2Service(session)
+            try:
+                amount = await service.redeem_promo(interaction.guild.id, interaction.user.id, str(self.promo_code))
+                await session.commit()
+            except ValueError as exc:
+                await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+                return
+        embed = discord.Embed(title="✅ Промокод активирован", description="Награда зачислена.", color=discord.Color.green())
+        embed.add_field(name="Награда", value=f"+{_fmt_number(amount)} {guild.currency_name}")
+        await interaction.response.send_message(embed=embed, view=RewardConfirmView(amount, guild.currency_name), ephemeral=True)
+
+
+class RefUseModal(discord.ui.Modal, title="Привязка реферального кода"):
+    ref_code = discord.ui.TextInput(label="Введите реферальный код", min_length=3, max_length=32)
+
+    def __init__(self, bot: commands.Bot):
+        super().__init__()
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        async with self.bot.db.session() as session:
+            service = GrowthV2Service(session)
+            try:
+                await service.use_ref_code(interaction.guild.id, interaction.user.id, str(self.ref_code))
+                await session.commit()
+            except ValueError as exc:
+                await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+                return
+        await interaction.response.send_message("✅ Код принят. Ваша заявка на активацию реферала создана (статус: pending).", ephemeral=True)
+
+
+class RefGroup(app_commands.Group):
+    def __init__(self, bot: commands.Bot):
+        super().__init__(name="ref", description="Реферальная система v2")
+        self.bot = bot
+
+    @app_commands.command(name="link", description="Показать ваш персональный реферальный код")
+    async def link(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        async with self.bot.db.session() as session:
+            service = GrowthV2Service(session)
+            code = await service.get_or_create_ref_link(interaction.guild.id, interaction.user.id)
+            await session.commit()
+        await interaction.response.send_message(f"Ваш реферальный код: `{code}`\nПередайте его другу для команды `/ref use`.", ephemeral=True)
+
+    @app_commands.command(name="use", description="Использовать чужой реферальный код")
+    async def use(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(RefUseModal(self.bot))
+
+    @app_commands.command(name="stats", description="Ваша статистика по рефералам")
+    async def stats(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+        async with self.bot.db.session() as session:
+            service = GrowthV2Service(session)
+            stats = await service.referral_stats(interaction.guild.id, interaction.user.id)
+        embed = discord.Embed(title="📊 Ваша реферальная статистика", color=discord.Color.blurple())
+        embed.add_field(name="Инвайты", value=_fmt_number(stats["invites"]))
+        embed.add_field(name="Активации", value=_fmt_number(stats["activations"]))
+        embed.add_field(name="Награды", value=_fmt_number(stats["rewards"]))
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class PromoGroupV2(app_commands.Group):
+    def __init__(self, bot: commands.Bot):
+        super().__init__(name="promo", description="Промокоды")
+        self.bot = bot
+
+    @app_commands.command(name="redeem", description="Активировать промокод через модальное окно")
+    async def redeem(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(PromoRedeemModal(self.bot))

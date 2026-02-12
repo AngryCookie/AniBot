@@ -19,6 +19,7 @@ from bot.database.models import (
     Warning,
     WordStatDaily,
 )
+from bot.referral.models import PromoRedemptionV2, ReferralAttributionV2, ReferralRewardV2
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ async def build_monthly_payload(
     if include.get("words", True) or include.get("emojis", True) or include.get("reactions", True):
         payload["language"] = await _build_words_emojis(session, guild_id, period_start, period_end)
 
+    payload["growth"] = await _build_growth(session, guild_id, period_start, period_end)
     return payload
 
 
@@ -418,3 +420,20 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
 
     embed.set_footer(text="Сформировано автоматически • AniBot")
     return embed
+
+
+async def _build_growth(session: AsyncSession, guild_id: int, start: dt.datetime, end: dt.datetime) -> dict:
+    promo_total_redemptions = await session.scalar(select(func.count()).select_from(PromoRedemptionV2).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.redeemed_at >= start, PromoRedemptionV2.redeemed_at < end))
+    promo_total_payout = await session.scalar(select(func.coalesce(func.sum(PromoRedemptionV2.reward_amount), 0)).where(PromoRedemptionV2.guild_id == guild_id, PromoRedemptionV2.redeemed_at >= start, PromoRedemptionV2.redeemed_at < end))
+    referrals_pending = await session.scalar(select(func.count()).select_from(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "pending"))
+    referrals_activated = await session.scalar(select(func.count()).select_from(ReferralAttributionV2).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "activated"))
+    referrals_total_rewards = await session.scalar(select(func.coalesce(func.sum(ReferralRewardV2.reward_amount), 0)).where(ReferralRewardV2.guild_id == guild_id, ReferralRewardV2.rewarded_at >= start, ReferralRewardV2.rewarded_at < end))
+    top_rows = await session.execute(select(ReferralAttributionV2.referrer_user_id, func.count(ReferralAttributionV2.id).label("count")).where(ReferralAttributionV2.guild_id == guild_id, ReferralAttributionV2.status == "activated").group_by(ReferralAttributionV2.referrer_user_id).order_by(func.count(ReferralAttributionV2.id).desc()).limit(5))
+    return {
+        "promo_total_redemptions": int(promo_total_redemptions or 0),
+        "promo_total_payout": int(promo_total_payout or 0),
+        "referrals_pending": int(referrals_pending or 0),
+        "referrals_activated": int(referrals_activated or 0),
+        "referrals_total_rewards": int(referrals_total_rewards or 0),
+        "top_referrers": [{"user_id": int(r.referrer_user_id), "activations": int(r.count or 0)} for r in top_rows],
+    }

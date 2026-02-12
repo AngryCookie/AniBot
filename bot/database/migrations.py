@@ -969,6 +969,133 @@ async def migration_create_word_emoji_stats(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_create_growth_v2(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS promo_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(128) NOT NULL,
+                description TEXT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'active',
+                starts_at DATETIME NULL,
+                ends_at DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_promo_campaigns_guild_id ON promo_campaigns (guild_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS promo_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                campaign_id INTEGER NULL,
+                code VARCHAR(64) NOT NULL,
+                reward_type VARCHAR(32) NOT NULL,
+                reward_value FLOAT NOT NULL,
+                currency_cap INTEGER NULL,
+                total_uses_limit INTEGER NULL,
+                per_user_uses_limit INTEGER NOT NULL DEFAULT 1,
+                min_account_age_days INTEGER NULL,
+                only_new_users BOOLEAN NOT NULL DEFAULT 0,
+                allowed_role_ids_json TEXT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_promo_codes_guild_code UNIQUE (guild_id, code),
+                CONSTRAINT fk_promo_codes_campaign FOREIGN KEY (campaign_id) REFERENCES promo_campaigns (id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_promo_codes_guild_id ON promo_codes (guild_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS promo_redemptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                promo_code_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                redeemed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                reward_amount INTEGER NOT NULL,
+                redemption_count INTEGER NOT NULL DEFAULT 1,
+                CONSTRAINT uq_promo_redemptions_counted UNIQUE (promo_code_id, user_id, redemption_count),
+                CONSTRAINT fk_promo_redemptions_code FOREIGN KEY (promo_code_id) REFERENCES promo_codes (id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_promo_redemptions_guild_id ON promo_redemptions (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_promo_redemptions_user_id ON promo_redemptions (user_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_links_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                referrer_user_id BIGINT NOT NULL,
+                code VARCHAR(32) NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_referral_links_v2_guild_code UNIQUE (guild_id, code),
+                CONSTRAINT uq_referral_links_v2_referrer UNIQUE (guild_id, referrer_user_id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_links_v2_guild_id ON referral_links_v2 (guild_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_attributions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                referred_user_id BIGINT NOT NULL,
+                referrer_user_id BIGINT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                activated_at DATETIME NULL,
+                activation_reason TEXT NULL,
+                CONSTRAINT uq_referral_attributions_guild_referred UNIQUE (guild_id, referred_user_id),
+                CONSTRAINT ck_referral_attribution_not_self CHECK (referrer_user_id != referred_user_id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_attributions_guild_id ON referral_attributions (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_attributions_referred_user_id ON referral_attributions (referred_user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_attributions_referrer_user_id ON referral_attributions (referrer_user_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS referral_rewards_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                referred_user_id BIGINT NOT NULL,
+                referrer_user_id BIGINT NOT NULL,
+                reward_amount INTEGER NOT NULL,
+                rewarded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                reason VARCHAR(32) NOT NULL,
+                CONSTRAINT uq_referral_rewards_v2_once UNIQUE (guild_id, referred_user_id, reason)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_v2_guild_id ON referral_rewards_v2 (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_v2_referred_user_id ON referral_rewards_v2 (referred_user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_v2_referrer_user_id ON referral_rewards_v2 (referrer_user_id)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -987,4 +1114,5 @@ MIGRATIONS: List[Migration] = [
     migration_create_activity_events,
     migration_add_operational_indexes,
     migration_create_word_emoji_stats,
+    migration_create_growth_v2,
 ]
