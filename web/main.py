@@ -18,7 +18,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, desc
 from starlette.middleware.sessions import SessionMiddleware
 
 from bot.analytics.economy import build_economy_analytics
@@ -39,6 +39,8 @@ from bot.database.models import (
     ShopItem,
     UserProfile,
     Warning,
+    WordStatDaily,
+    EmojiStatDaily,
 )
 from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardType, ReferralRelationship
 from bot.community_goals import CommunityGoalService
@@ -102,6 +104,8 @@ from .schemas import (
     TrustScoreSettings,
     ReportsSettings,
     ReportsDryRunOut,
+    WordEmojiStatsSettings,
+    WordEmojiStatsResponse,
 )
 from .security import (
     DISCORD_API_BASE,
@@ -738,6 +742,7 @@ shadow_get, shadow_put, shadow_reset = _category_routes(
     "shadow_penalties", ShadowPenaltySettings
 )
 reports_get, reports_put, reports_reset = _category_routes("reports", ReportsSettings)
+word_emoji_get, word_emoji_put, _ = _category_routes("word_emoji_stats", WordEmojiStatsSettings)
 
 app.get("/api/guilds/{guild_id}/leveling", response_model=LevelingSettings)(
     leveling_get
@@ -1137,6 +1142,8 @@ app.post("/api/guilds/{guild_id}/logs/reset", response_model=LogsSettings)(logs_
 
 app.get("/api/guilds/{guild_id}/reports", response_model=ReportsSettings)(reports_get)
 app.put("/api/guilds/{guild_id}/reports", response_model=ReportsSettings)(reports_put)
+app.get("/api/guilds/{guild_id}/word-emoji-stats", response_model=WordEmojiStatsSettings)(word_emoji_get)
+app.put("/api/guilds/{guild_id}/word-emoji-stats", response_model=WordEmojiStatsSettings)(word_emoji_put)
 
 
 @app.post("/api/guilds/{guild_id}/reports/monthly/dry-run", response_model=ReportsDryRunOut)
@@ -2561,3 +2568,54 @@ async def serve_page(page: str) -> HTMLResponse:
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(betting_router)
+
+
+async def _build_top_stats(session, model, guild_id: int, days: int, key_column: str) -> tuple[list[dict], list[dict]]:
+    start_day = dt.datetime.utcnow().date() - dt.timedelta(days=days - 1)
+    key_attr = getattr(model, key_column)
+
+    top_rows = await session.execute(
+        select(key_attr.label("k"), func.coalesce(func.sum(model.count), 0).label("c"))
+        .where((model.guild_id == guild_id) & (model.day >= start_day))
+        .group_by(key_attr)
+        .order_by(desc("c"))
+        .limit(20)
+    )
+    top = [{"key": str(r.k), "count": int(r.c or 0)} for r in top_rows]
+
+    series_rows = await session.execute(
+        select(model.day, func.coalesce(func.sum(model.count), 0).label("c"))
+        .where((model.guild_id == guild_id) & (model.day >= start_day))
+        .group_by(model.day)
+        .order_by(model.day.asc())
+    )
+    series = [{"day": r.day.isoformat(), "count": int(r.c or 0)} for r in series_rows]
+    return top, series
+
+
+@app.get("/api/guilds/{guild_id}/stats/words", response_model=WordEmojiStatsResponse)
+async def get_words_stats(
+    guild_id: int,
+    days: int = 30,
+    access_token: str = Depends(get_access_token),
+) -> WordEmojiStatsResponse:
+    period_days = _validate_analytics_period(days)
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        top, series = await _build_top_stats(session, WordStatDaily, guild_id, period_days, "token")
+    return WordEmojiStatsResponse(guild_id=guild_id, days=period_days, top=top, series=series)
+
+
+@app.get("/api/guilds/{guild_id}/stats/emojis", response_model=WordEmojiStatsResponse)
+async def get_emojis_stats(
+    guild_id: int,
+    days: int = 30,
+    access_token: str = Depends(get_access_token),
+) -> WordEmojiStatsResponse:
+    period_days = _validate_analytics_period(days)
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        top, series = await _build_top_stats(session, EmojiStatDaily, guild_id, period_days, "emoji_key")
+    return WordEmojiStatsResponse(guild_id=guild_id, days=period_days, top=top, series=series)

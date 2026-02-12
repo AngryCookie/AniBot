@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Date,
     Float,
     ForeignKey,
     Index,
@@ -300,6 +301,48 @@ class ActivityEvent(Base):
     value = Column(Integer, nullable=False, default=1)
     metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class WordStatDaily(Base):
+    __tablename__ = "word_stats_daily"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "day", "token", name="uq_word_stats_daily"),
+        Index("ix_word_stats_daily_guild_day", "guild_id", "day"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)
+    token = Column(String(64), nullable=False, index=True)
+    count = Column(Integer, nullable=False, default=0)
+
+
+class EmojiStatDaily(Base):
+    __tablename__ = "emoji_stats_daily"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "day", "emoji_key", name="uq_emoji_stats_daily"),
+        Index("ix_emoji_stats_daily_guild_day", "guild_id", "day"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)
+    emoji_key = Column(String(128), nullable=False, index=True)
+    count = Column(Integer, nullable=False, default=0)
+
+
+class ReactionStatDaily(Base):
+    __tablename__ = "reaction_stats_daily"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "day", "emoji_key", name="uq_reaction_stats_daily"),
+        Index("ix_reaction_stats_daily_guild_day", "guild_id", "day"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)
+    emoji_key = Column(String(128), nullable=False, index=True)
+    count = Column(Integer, nullable=False, default=0)
 
 
 class UserTrustProfile(Base):

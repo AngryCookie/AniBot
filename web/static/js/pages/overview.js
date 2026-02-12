@@ -13,6 +13,40 @@ const formatValue = (value, formatter = integerFormatter) => {
   return formatter.format(value);
 };
 
+
+const renderRows = (tbody, rows) => {
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  const items = Array.isArray(rows) ? rows : [];
+  if (!items.length) {
+    tbody.innerHTML = "<tr><td>Нет данных</td><td>—</td></tr>";
+    return;
+  }
+  items.slice(0, 10).forEach((item) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${item.key}</td><td>${formatValue(item.count)}</td>`;
+    tbody.appendChild(tr);
+  });
+};
+
+const renderEmojiSeries = (container, series) => {
+  if (!container) return;
+  const points = Array.isArray(series) ? series : [];
+  if (!points.length) {
+    container.innerHTML = "<p>Нет данных</p>";
+    return;
+  }
+  const max = Math.max(...points.map((p) => Number(p.count || 0)), 1);
+  container.innerHTML = "";
+  points.forEach((point) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    const width = Math.max(0, (Number(point.count || 0) / max) * 100);
+    row.innerHTML = `<span class="bar-label">${point.day.slice(5)}</span><div class="bar-track"><span class="bar-fill bar-created" style="width:${width}%"></span></div><span class="bar-value">${formatValue(point.count)}</span>`;
+    container.appendChild(row);
+  });
+};
+
 const setHidden = (element, isHidden) => {
   if (!element) return;
   element.classList.toggle("hidden", isHidden);
@@ -66,6 +100,24 @@ export const initOverview = async (guildId) => {
     });
 
     setHidden(statsGrid, false);
+
+    const daysSelect = document.getElementById("wordEmojiDays");
+    const wordsBody = document.getElementById("topWordsBody");
+    const emojisBody = document.getElementById("topEmojisBody");
+    const emojiSeriesChart = document.getElementById("emojiSeriesChart");
+
+    const loadWordEmoji = async () => {
+      const days = Number(daysSelect?.value || 30);
+      const words = await apiFetch(`/api/guilds/${guildId}/stats/words?days=${days}`);
+      const emojis = await apiFetch(`/api/guilds/${guildId}/stats/emojis?days=${days}`);
+      renderRows(wordsBody, words?.top || []);
+      renderRows(emojisBody, emojis?.top || []);
+      renderEmojiSeries(emojiSeriesChart, emojis?.series || []);
+    };
+
+    daysSelect?.addEventListener("change", loadWordEmoji);
+    await loadWordEmoji();
+
   } catch (err) {
     if (error) {
       error.textContent = err?.message || "Не удалось загрузить статистику";

@@ -9,7 +9,16 @@ import discord
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import ActivityEvent, EconomyTransaction, ModLog, PvpDuel, Warning
+from bot.database.models import (
+    ActivityEvent,
+    EconomyTransaction,
+    EmojiStatDaily,
+    ModLog,
+    PvpDuel,
+    ReactionStatDaily,
+    Warning,
+    WordStatDaily,
+)
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,9 @@ async def build_monthly_payload(
 
     if include.get("moderation", True):
         payload["moderation"] = await _build_moderation(session, guild_id, period_start, period_end)
+
+    if include.get("words", True) or include.get("emojis", True) or include.get("reactions", True):
+        payload["language"] = await _build_words_emojis(session, guild_id, period_start, period_end)
 
     return payload
 
@@ -272,6 +284,60 @@ async def _build_moderation(session: AsyncSession, guild_id: int, start: dt.date
     }
 
 
+async def _build_words_emojis(session: AsyncSession, guild_id: int, start: dt.datetime, end: dt.datetime) -> dict:
+    start_day = start.date()
+    end_day_exclusive = end.date()
+
+    words_result = await session.execute(
+        select(
+            WordStatDaily.token.label("key"),
+            func.coalesce(func.sum(WordStatDaily.count), 0).label("total"),
+        )
+        .where(
+            (WordStatDaily.guild_id == guild_id)
+            & (WordStatDaily.day >= start_day)
+            & (WordStatDaily.day < end_day_exclusive)
+        )
+        .group_by(WordStatDaily.token)
+        .order_by(func.sum(WordStatDaily.count).desc())
+        .limit(10)
+    )
+    emojis_result = await session.execute(
+        select(
+            EmojiStatDaily.emoji_key.label("key"),
+            func.coalesce(func.sum(EmojiStatDaily.count), 0).label("total"),
+        )
+        .where(
+            (EmojiStatDaily.guild_id == guild_id)
+            & (EmojiStatDaily.day >= start_day)
+            & (EmojiStatDaily.day < end_day_exclusive)
+        )
+        .group_by(EmojiStatDaily.emoji_key)
+        .order_by(func.sum(EmojiStatDaily.count).desc())
+        .limit(10)
+    )
+    reactions_result = await session.execute(
+        select(
+            ReactionStatDaily.emoji_key.label("key"),
+            func.coalesce(func.sum(ReactionStatDaily.count), 0).label("total"),
+        )
+        .where(
+            (ReactionStatDaily.guild_id == guild_id)
+            & (ReactionStatDaily.day >= start_day)
+            & (ReactionStatDaily.day < end_day_exclusive)
+        )
+        .group_by(ReactionStatDaily.emoji_key)
+        .order_by(func.sum(ReactionStatDaily.count).desc())
+        .limit(10)
+    )
+
+    return {
+        "top_words": [{"token": str(r.key), "count": int(r.total or 0)} for r in words_result],
+        "top_emojis": [{"emoji_key": str(r.key), "count": int(r.total or 0)} for r in emojis_result],
+        "top_reactions": [{"emoji_key": str(r.key), "count": int(r.total or 0)} for r in reactions_result],
+    }
+
+
 def build_monthly_embed(payload: dict) -> discord.Embed:
     period_start = payload.get("period_start", "")
     title_month = period_start[:7] if isinstance(period_start, str) else ""
@@ -340,6 +406,15 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
             ),
             inline=False,
         )
+
+    language = payload.get("language") or {}
+    if language:
+        words = "\n".join([f"• {w['token']}: {w['count']}" for w in language.get("top_words", [])[:10]]) or "—"
+        emojis = "\n".join([f"• {e['emoji_key']}: {e['count']}" for e in language.get("top_emojis", [])[:10]]) or "—"
+        reactions = "\n".join([f"• {e['emoji_key']}: {e['count']}" for e in language.get("top_reactions", [])[:10]]) or "—"
+        embed.add_field(name="📝 Топ слов", value=words, inline=False)
+        embed.add_field(name="😀 Топ эмодзи", value=emojis, inline=False)
+        embed.add_field(name="👍 Топ реакций", value=reactions, inline=False)
 
     embed.set_footer(text="Сформировано автоматически • AniBot")
     return embed

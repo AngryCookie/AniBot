@@ -60,6 +60,20 @@ def _merge_top_list(monthly_payloads: list[dict], section: str, key: str, value_
     return [{"user_id": user_id, value_key: value} for user_id, value in sorted_items]
 
 
+def _merge_keyed_counts(monthly_payloads: list[dict], section: str, key: str, value_key: str) -> list[dict]:
+    acc: dict[str, int] = defaultdict(int)
+    for payload in monthly_payloads:
+        language = payload.get(section) or {}
+        for item in language.get(key, []):
+            k = str(item.get(value_key, "")).strip()
+            if not k:
+                continue
+            acc[k] += int(item.get("count", 0))
+    top = sorted(acc.items(), key=lambda x: x[1], reverse=True)[:10]
+    field_name = "token" if key == "top_words" else "emoji_key"
+    return [{field_name: k, "count": v} for k, v in top]
+
+
 def _build_highlights(monthly_payloads: list[dict]) -> dict:
     best_month = None
     best_score = -1
@@ -157,6 +171,13 @@ def _aggregate_yearly_payload(
             "bans_count": _sum_section(monthly_payloads, "moderation", "bans_count"),
         }
 
+    if include_sections.get("words", True) or include_sections.get("emojis", True) or include_sections.get("reactions", True):
+        payload["language"] = {
+            "top_words": _merge_keyed_counts(monthly_payloads, "language", "top_words", "token"),
+            "top_emojis": _merge_keyed_counts(monthly_payloads, "language", "top_emojis", "emoji_key"),
+            "top_reactions": _merge_keyed_counts(monthly_payloads, "language", "top_reactions", "emoji_key"),
+        }
+
     payload["highlights"] = _build_highlights(monthly_payloads)
     return payload
 
@@ -193,7 +214,7 @@ async def build_yearly_payload(
         if not isinstance(row.payload_json, dict):
             continue
         payload = row.payload_json
-        if any(include.get(section, True) and section not in payload for section in ["activity", "economy", "betting", "pvp", "moderation"]):
+        if any(include.get(section, True) and section not in payload for section in ["activity", "economy", "betting", "pvp", "moderation", "language"]):
             reusable_payloads = []
             break
         reusable_payloads.append(payload)
@@ -288,6 +309,14 @@ def build_yearly_embed(payload: dict) -> discord.Embed:
             ),
             inline=False,
         )
+
+
+    language = payload.get("language") or {}
+    if language:
+        words = "\n".join([f"• {w['token']}: {w['count']}" for w in language.get("top_words", [])[:10]]) or "—"
+        emojis = "\n".join([f"• {e['emoji_key']}: {e['count']}" for e in language.get("top_emojis", [])[:10]]) or "—"
+        embed.add_field(name="📝 Топ слов", value=words, inline=False)
+        embed.add_field(name="😀 Топ эмодзи", value=emojis, inline=False)
 
     highlights = payload.get("highlights") or {}
     if highlights:
