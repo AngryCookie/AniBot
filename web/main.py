@@ -52,6 +52,7 @@ from bot.community_goals import CommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 from bot.goals.service import MonthlyCommunityGoalService
 from bot.reports.monthly import calculate_previous_month_period, build_monthly_payload
+from bot.reports.quarterly import calculate_quarter_period, build_quarterly_payload
 from bot.reports.yearly import calculate_previous_year_period, build_yearly_payload
 from bot.reports.service import DEFAULT_REPORTS_SETTINGS
 
@@ -1397,6 +1398,40 @@ async def reports_monthly_dry_run(
             period_end=period.period_end_utc,
             tz=merged.timezone,
             include_sections=merged.monthly.include_sections.dict(),
+        )
+
+    return ReportsDryRunOut(payload=payload)
+
+
+@app.post("/api/guilds/{guild_id}/reports/quarterly/dry-run", response_model=ReportsDryRunOut)
+async def reports_quarterly_dry_run(
+    guild_id: int,
+    quarter: str = "prev",
+    context: Dict[str, Any] = Depends(_settings_dependency("reports")),
+) -> ReportsDryRunOut:
+    settings_map = context["settings_map"]
+    report_settings = settings_map.get("reports", {})
+    merged = ReportsSettings(**{**DEFAULT_REPORTS_SETTINGS, **report_settings})
+
+    try:
+        ZoneInfo(merged.timezone)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid timezone: {merged.timezone}") from exc
+
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        period = calculate_quarter_period(tz_name=merged.timezone, spec=quarter, now_utc=now)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    async with database.session() as session:
+        payload = await build_quarterly_payload(
+            session,
+            guild_id=guild_id,
+            period_start=period.period_start_utc,
+            period_end=period.period_end_utc,
+            tz=merged.timezone,
+            include_sections=merged.quarterly.include_sections.dict(),
         )
 
     return ReportsDryRunOut(payload=payload)

@@ -1283,6 +1283,14 @@ async def migration_betting_v1_analytics_indexes(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_resolved_at ON betting_matches (guild_id, resolved_at)"))
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_status ON betting_matches (guild_id, status)"))
 
+
+async def migration_betting_v1_reporting_indexes(conn: AsyncConnection) -> None:
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_resolved_at ON betting_matches (guild_id, resolved_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_match_created_at ON betting_bets (match_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_user_id ON betting_bets (user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_match_created_at ON betting_payouts (match_id, created_at)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1307,4 +1315,5 @@ MIGRATIONS: List[Migration] = [
     migration_add_leveling_hardening,
     migration_betting_v1_admin_core,
     migration_betting_v1_analytics_indexes,
+    migration_betting_v1_reporting_indexes,
 ]

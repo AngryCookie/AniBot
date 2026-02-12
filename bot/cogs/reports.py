@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from bot.database.models import GuildConfig
 from bot.reports.monthly import build_monthly_embed
+from bot.reports.quarterly import build_quarterly_embed
 from bot.reports.service import DEFAULT_REPORTS_SETTINGS, MonthlyWrappedService
 from bot.reports.yearly import build_yearly_embed
 
@@ -59,6 +60,45 @@ class ReportsCog(commands.Cog):
             await interaction.response.send_message("✅ Monthly Wrapped опубликован.", ephemeral=True)
             return
         await interaction.response.send_message("⚠️ Не удалось опубликовать Monthly Wrapped.", ephemeral=True)
+
+
+    @app_commands.command(name="quarterly_wrapped_preview", description="Предпросмотр Quarterly Wrapped")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def quarterly_wrapped_preview(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+
+        settings = await self._guild_reports_settings(interaction.guild.id)
+        payload = await self.service.preview_quarter(
+            guild_id=interaction.guild.id,
+            include_sections=settings["quarterly"]["include_sections"],
+            tz_name=settings.get("timezone", "UTC"),
+            quarter_spec="prev",
+        )
+        embed = build_quarterly_embed(payload)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="quarterly_wrapped_post", description="Опубликовать Quarterly Wrapped сейчас")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def quarterly_wrapped_post(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Команда доступна только на сервере.", ephemeral=True)
+            return
+
+        settings = await self._guild_reports_settings(interaction.guild.id)
+        channel_id = settings["quarterly"].get("channel_id") or interaction.channel_id
+        report = await self.service.post_quarterly_now(
+            guild=interaction.guild,
+            channel_id=int(channel_id),
+            include_sections=settings["quarterly"]["include_sections"],
+            tz_name=settings.get("timezone", "UTC"),
+            quarter_spec="prev",
+        )
+        if report and report.status == "posted":
+            await interaction.response.send_message("✅ Quarterly Wrapped опубликован.", ephemeral=True)
+            return
+        await interaction.response.send_message("⚠️ Не удалось опубликовать Quarterly Wrapped.", ephemeral=True)
 
     @app_commands.command(name="yearly_wrapped_preview", description="Предпросмотр Yearly Wrapped")
     @app_commands.checks.has_permissions(manage_guild=True)

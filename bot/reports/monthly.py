@@ -23,6 +23,7 @@ from bot.database.models import (
     UserProfile,
 )
 from bot.referral.models import PromoRedemptionV2, ReferralAttributionV2, ReferralRewardV2
+from bot.reports.betting import build_betting_report_metrics
 
 
 @dataclass(frozen=True)
@@ -197,69 +198,12 @@ async def _build_economy(session: AsyncSession, guild_id: int, start: dt.datetim
 
 
 async def _build_betting(session: AsyncSession, guild_id: int, start: dt.datetime, end: dt.datetime) -> dict:
-    result = await session.execute(
-        select(
-            func.coalesce(
-                func.sum(
-                    case(
-                        ((EconomyTransaction.source == "bet_placement") & (EconomyTransaction.amount < 0), -EconomyTransaction.amount),
-                        else_=0,
-                    )
-                ),
-                0,
-            ),
-            func.coalesce(
-                func.sum(
-                    case(
-                        ((EconomyTransaction.source == "bet_win") & (EconomyTransaction.amount > 0), EconomyTransaction.amount),
-                        else_=0,
-                    )
-                ),
-                0,
-            ),
-            func.coalesce(
-                func.max(
-                    case(
-                        ((EconomyTransaction.source == "bet_win") & (EconomyTransaction.amount > 0), EconomyTransaction.amount),
-                        else_=0,
-                    )
-                ),
-                0,
-            ),
-        ).where(
-            (EconomyTransaction.guild_id == guild_id)
-            & (EconomyTransaction.created_at >= start)
-            & (EconomyTransaction.created_at < end)
-        )
+    return await build_betting_report_metrics(
+        session,
+        guild_id=guild_id,
+        period_start=start,
+        period_end=end,
     )
-    volume, payout, biggest_win = result.one()
-
-    top_bettors_result = await session.execute(
-        select(
-            EconomyTransaction.user_id,
-            func.coalesce(func.sum(-EconomyTransaction.amount), 0).label("volume"),
-        )
-        .where(
-            (EconomyTransaction.guild_id == guild_id)
-            & (EconomyTransaction.source == "bet_placement")
-            & (EconomyTransaction.amount < 0)
-            & (EconomyTransaction.created_at >= start)
-            & (EconomyTransaction.created_at < end)
-        )
-        .group_by(EconomyTransaction.user_id)
-        .order_by(func.sum(-EconomyTransaction.amount).desc())
-        .limit(5)
-    )
-    top_bettors = [{"user_id": int(r.user_id), "volume": int(r.volume or 0)} for r in top_bettors_result.all()]
-    volume_i = int(volume or 0)
-    payout_i = int(payout or 0)
-    return {
-        "betting_total_volume": volume_i,
-        "betting_total_payout": payout_i,
-        "betting_net_sink": volume_i - payout_i,
-        "top_bettors": top_bettors,
-        "biggest_win": int(biggest_win or 0),
-    }
 
 
 async def _build_pvp(session: AsyncSession, guild_id: int, start: dt.datetime, end: dt.datetime) -> dict:
@@ -431,12 +375,19 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
 
     betting = payload.get("betting") or {}
     if betting:
+        top_bettors = "\n".join(
+            [f"• <@{row['user_id']}> — {int(row['volume'])}" for row in betting.get("top_bettors_by_volume", [])[:5]]
+        ) or "—"
+        biggest = betting.get("biggest_win") or {}
         embed.add_field(
             name="🎲 Ставки",
             value=(
-                f"Оборот: **{int(betting.get('betting_total_volume', 0))}**\n"
-                f"Выплаты: **{int(betting.get('betting_total_payout', 0))}**\n"
-                f"Крупнейший выигрыш: **{int(betting.get('biggest_win', 0))}**"
+                f"Объём ставок: **{int(betting.get('total_volume', 0))}**\n"
+                f"Выплачено: **{int(betting.get('total_payout', 0))}**\n"
+                f"Профит игроков: **{int(betting.get('users_net_profit', 0))}**\n"
+                f"Системный net-sink: **{int(betting.get('system_net_sink', 0))}**\n"
+                f"Biggest win: **{int(biggest.get('payout', 0))}** (<@{biggest.get('user_id') or '—'}>)\n"
+                f"Топ по объёму:\n{top_bettors}"
             ),
             inline=False,
         )
