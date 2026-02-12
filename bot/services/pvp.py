@@ -192,6 +192,7 @@ class PvpService:
 
             resolved_winner_id = winner_id
             tavern = TavernService(self.session)
+            tavern_settings = await tavern.get_tavern_settings(guild_id)
             buffs_map = await tavern.get_active_effects_for_users(guild_id=guild_id, user_ids=[participants[0], participants[1]])
             challenger_buffs = buffs_map.get(participants[0], {})
             opponent_buffs = buffs_map.get(participants[1], {})
@@ -239,6 +240,7 @@ class PvpService:
                 k_factor=k_factor,
                 winner_buffs=challenger_buffs if resolved_winner_id == participants[0] else opponent_buffs,
                 loser_buffs=opponent_buffs if resolved_winner_id == participants[0] else challenger_buffs,
+                tavern_settings=tavern_settings,
             )
 
             now = dt.datetime.utcnow()
@@ -355,6 +357,7 @@ class PvpService:
         k_factor: int,
         winner_buffs: dict[str, Any] | None = None,
         loser_buffs: dict[str, Any] | None = None,
+        tavern_settings: dict[str, Any] | None = None,
     ) -> None:
         winner = await self._get_or_create_stats(guild_id, winner_id)
         loser = await self._get_or_create_stats(guild_id, loser_id)
@@ -366,8 +369,9 @@ class PvpService:
         winner.rating = self._next_rating(winner_before, 1.0, expected_winner, k_factor)
         loser.rating = self._next_rating(loser_before, 0.0, expected_loser, k_factor)
 
-        winner_elo_bonus = self._extract_win_bonus_elo_flat(winner_buffs)
-        loser_protection = self._extract_elo_protection_percent(loser_buffs)
+        caps = (tavern_settings or {}).get("max_bonus_caps", {}) if isinstance(tavern_settings, dict) else {}
+        winner_elo_bonus = self._extract_win_bonus_elo_flat(winner_buffs, caps)
+        loser_protection = self._extract_elo_protection_percent(loser_buffs, caps)
         if winner_elo_bonus > 0:
             winner.rating += winner_elo_bonus
         if loser_protection > 0:
@@ -457,12 +461,14 @@ class PvpService:
             return 0.0
         return float(getattr(buff, "value", 0.0))
 
-    def _extract_win_bonus_elo_flat(self, buffs: dict[str, Any] | None) -> int:
+    def _extract_win_bonus_elo_flat(self, buffs: dict[str, Any] | None, caps: dict[str, Any] | None = None) -> int:
         value = self._extract_effect_percent(buffs, "attack", "win_bonus_elo_flat")
-        return max(0, min(int(round(value)), 5))
+        cap = int(round(float((caps or {}).get("win_bonus_elo_flat", 5))))
+        return max(0, min(int(round(value)), cap))
 
-    def _extract_elo_protection_percent(self, buffs: dict[str, Any] | None) -> float:
-        return max(0.0, min(self._extract_effect_percent(buffs, "defense", "elo_protection_percent"), 20.0))
+    def _extract_elo_protection_percent(self, buffs: dict[str, Any] | None, caps: dict[str, Any] | None = None) -> float:
+        cap = float((caps or {}).get("elo_protection_percent", 20.0))
+        return max(0.0, min(self._extract_effect_percent(buffs, "defense", "elo_protection_percent"), cap))
 
     def _serialize_applied_buffs(
         self,

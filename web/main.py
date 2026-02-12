@@ -127,6 +127,9 @@ from .schemas import (
     ShopItemIn,
     ShopItemOut,
     PvpTavernSettings,
+    TavernAnalyticsImpactOut,
+    TavernAnalyticsItemOut,
+    TavernAnalyticsOverviewOut,
     TavernItemIn,
     TavernItemOut,
     TavernUsageOut,
@@ -2009,8 +2012,17 @@ async def list_tavern_items(guild_id: int, access_token: str = Depends(get_acces
 async def create_tavern_item(guild_id: int, payload: TavernItemIn, access_token: str = Depends(get_access_token)) -> TavernItemOut:
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        settings = await TavernService(session).get_tavern_settings(guild_id)
     try:
-        TavernService.validate_item_payload(slot_type=payload.slot_type, effect_type=payload.effect_type, value=payload.value, duration_seconds=payload.duration_seconds, price=payload.price)
+        TavernService.validate_item_payload(
+            slot_type=payload.slot_type,
+            effect_type=payload.effect_type,
+            value=payload.value,
+            duration_seconds=payload.duration_seconds,
+            price=payload.price,
+            caps=settings.get("max_bonus_caps") if isinstance(settings.get("max_bonus_caps"), dict) else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     item = TavernItem(guild_id=guild_id, **payload.dict())
@@ -2025,8 +2037,17 @@ async def create_tavern_item(guild_id: int, payload: TavernItemIn, access_token:
 async def update_tavern_item(guild_id: int, item_id: int, payload: TavernItemIn, access_token: str = Depends(get_access_token)) -> TavernItemOut:
     guilds = await fetch_user_guilds(access_token)
     ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        settings = await TavernService(session).get_tavern_settings(guild_id)
     try:
-        TavernService.validate_item_payload(slot_type=payload.slot_type, effect_type=payload.effect_type, value=payload.value, duration_seconds=payload.duration_seconds, price=payload.price)
+        TavernService.validate_item_payload(
+            slot_type=payload.slot_type,
+            effect_type=payload.effect_type,
+            value=payload.value,
+            duration_seconds=payload.duration_seconds,
+            price=payload.price,
+            caps=settings.get("max_bonus_caps") if isinstance(settings.get("max_bonus_caps"), dict) else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     async with database.session() as session:
@@ -2060,6 +2081,39 @@ async def tavern_usage(guild_id: int, days: int = 30, access_token: str = Depend
     async with database.session() as session:
         data = await TavernService(session).get_usage_metrics(guild_id=guild_id, days=days)
     return TavernUsageOut(**data)
+
+
+@app.get("/api/guilds/{guild_id}/pvp/tavern/analytics/overview", response_model=TavernAnalyticsOverviewOut)
+async def tavern_analytics_overview(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> TavernAnalyticsOverviewOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=400, detail="Допустимые значения days: 7, 30, 90.")
+    async with database.session() as session:
+        data = await TavernService(session).get_analytics_overview(guild_id=guild_id, days=days)
+    return TavernAnalyticsOverviewOut(**data)
+
+
+@app.get("/api/guilds/{guild_id}/pvp/tavern/analytics/items", response_model=list[TavernAnalyticsItemOut])
+async def tavern_analytics_items(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> list[TavernAnalyticsItemOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=400, detail="Допустимые значения days: 7, 30, 90.")
+    async with database.session() as session:
+        data = await TavernService(session).get_analytics_items(guild_id=guild_id, days=days)
+    return [TavernAnalyticsItemOut(**row) for row in data]
+
+
+@app.get("/api/guilds/{guild_id}/pvp/tavern/analytics/impact", response_model=TavernAnalyticsImpactOut)
+async def tavern_analytics_impact(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> TavernAnalyticsImpactOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=400, detail="Допустимые значения days: 7, 30, 90.")
+    async with database.session() as session:
+        data = await TavernService(session).get_analytics_impact(guild_id=guild_id, days=days)
+    return TavernAnalyticsImpactOut(**data)
 
 @app.get("/api/guilds/{guild_id}/shop/purchases", response_model=list[ShopPurchaseLogOut])
 async def list_shop_purchases(

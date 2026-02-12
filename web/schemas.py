@@ -79,6 +79,17 @@ class PvpSeasonSettings(BaseModel):
 class PvpTavernSettings(BaseModel):
     enabled: bool = True
     season_reset_clears_loadout: bool = True
+    stacking_rule: str = Field("max", pattern="^(max|sum)$")
+    max_bonus_caps: dict[str, float] = Field(
+        default_factory=lambda: {
+            "attack_bonus_percent": 15,
+            "defense_bonus_percent": 15,
+            "crit_chance_percent": 5,
+            "dodge_chance_percent": 5,
+            "elo_protection_percent": 20,
+            "win_bonus_elo_flat": 5,
+        }
+    )
 
 
 class TavernItemIn(BaseModel):
@@ -109,6 +120,48 @@ class TavernUsageOut(BaseModel):
     days: int
     active_loadouts_count: int
     most_bought_items: list[TavernUsageItem]
+
+
+class TavernAnalyticsOverviewKpi(BaseModel):
+    active_loadouts: int
+    purchases: int
+    unique_buyers: int
+    total_spent: int
+    most_popular_item: dict[str, Any] | None = None
+
+
+class TavernAnalyticsOverviewTimeseriesPoint(BaseModel):
+    day: str
+    purchases: int
+    spent: int
+    active_loadouts: int
+
+
+class TavernAnalyticsOverviewOut(BaseModel):
+    days: int
+    kpis: TavernAnalyticsOverviewKpi
+    timeseries: list[TavernAnalyticsOverviewTimeseriesPoint]
+
+
+class TavernAnalyticsItemOut(BaseModel):
+    item_id: int
+    name: str
+    slot: str
+    purchases: int
+    unique_buyers: int
+    spent: int
+    active_now: int
+
+
+class TavernAnalyticsImpactOut(BaseModel):
+    available: bool = True
+    message: str | None = None
+    buffed_duels: int = 0
+    non_buffed_duels: int = 0
+    winrate_buffed: float = 0.0
+    winrate_non_buffed: float = 0.0
+    avg_elo_delta_buffed: float = 0.0
+    avg_elo_delta_non_buffed: float = 0.0
 
 
 class ShopSettings(BaseModel):
