@@ -232,6 +232,92 @@ class EconomyInsight(BaseModel):
     period: int
 
 
+class EconomyRecommendationWarning(BaseModel):
+    code: str
+    message: str
+
+
+class EconomyRecommendationMostBoughtItem(BaseModel):
+    item_id: int
+    name: str
+    quantity: int
+
+
+class EconomyRecommendationJobsMetrics(BaseModel):
+    runs_count: int
+    unique_workers: int
+    total_paid_by_jobs: int
+    avg_payout_per_run: float
+
+
+class EconomyRecommendationShopBuffMetrics(BaseModel):
+    purchases_count: int
+    unique_buyers: int
+    total_spent_on_buffs: int
+    avg_price_paid: float
+    most_bought_items: list[EconomyRecommendationMostBoughtItem]
+
+
+class EconomyRecommendationBuffImpact(BaseModel):
+    method: str
+    estimated_extra_minted: float
+    with_buff_avg: float
+    without_buff_avg: float
+
+
+class EconomyRecommendationKpis(BaseModel):
+    period_days: int
+    minted_total: int
+    burned_total: int
+    net: int
+    active_users_economy: int
+    jobs: EconomyRecommendationJobsMetrics
+    shop_buffs: EconomyRecommendationShopBuffMetrics
+    buff_impact: EconomyRecommendationBuffImpact | None
+
+
+class EconomyRecommendationBuffPriceRange(BaseModel):
+    item_id: int
+    name: str
+    current_price: int
+    current_percent: float
+    suggested_min: int
+    suggested_max: int
+    projected_weekly_sink: int
+    rationale: str
+
+
+class EconomyRecommendationPercentWarning(BaseModel):
+    item_id: int
+    name: str
+    value_percent: float
+    recommended_cap: float
+
+
+class EconomyRecommendationTargetSinkRatio(BaseModel):
+    min: float
+    max: float
+    current: float
+
+
+class EconomyRecommendationJobsBalance(BaseModel):
+    avg_payout: float
+    suggested_adjustment_hint: str
+    target_sink_ratio: EconomyRecommendationTargetSinkRatio
+
+
+class EconomyRecommendationSuggestions(BaseModel):
+    buff_price_ranges: list[EconomyRecommendationBuffPriceRange]
+    buff_percent_warnings: list[EconomyRecommendationPercentWarning]
+    jobs_balance: EconomyRecommendationJobsBalance
+
+
+class EconomyRecommendationsResponse(BaseModel):
+    kpis: EconomyRecommendationKpis
+    warnings: list[EconomyRecommendationWarning]
+    suggestions: EconomyRecommendationSuggestions
+
+
 class BehaviorAnalyticsSegments(BaseModel):
     new_users: Optional[int]
     new_users_active: Optional[int]

@@ -1,0 +1,43 @@
+<section class="page-header">
+  <h3>Economy → Recommendations</h3>
+  <p class="notice">Рекомендации по балансу экономики и ценам buff-товаров.</p>
+</section>
+
+<section class="card economy-analytics">
+  <div class="analytics-toolbar">
+    <span class="analytics-title">Период</span>
+    <div class="period-switcher" role="group" aria-label="Период рекомендаций">
+      <button type="button" class="tab-button is-active" data-days="7">7 дней</button>
+      <button type="button" class="tab-button" data-days="30">30 дней</button>
+      <button type="button" class="tab-button" data-days="90">90 дней</button>
+    </div>
+  </div>
+
+  <p class="notice">Это рекомендации, бот ничего сам не меняет.</p>
+
+  <div class="loading hidden" id="economyRecommendationsLoading">Загрузка рекомендаций...</div>
+  <div class="alert error hidden" id="economyRecommendationsError" role="alert"></div>
+
+  <div id="economyRecommendationsContent" class="analytics-content hidden">
+    <div class="grid analytics-metrics">
+      <div class="stat kpi-card"><span class="kpi-value" id="recMinted">—</span><p class="kpi-label">Minted</p></div>
+      <div class="stat kpi-card"><span class="kpi-value" id="recBurned">—</span><p class="kpi-label">Burned</p></div>
+      <div class="stat kpi-card"><span class="kpi-value" id="recNet">—</span><p class="kpi-label">Net</p></div>
+    </div>
+
+    <div id="recWarnings" class="notice">Предупреждений нет.</div>
+
+    <h5>Buff pricing suggestions</h5>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Item</th><th>Текущая цена</th><th>%</th><th>Реком. диапазон</th><th>Прогноз sink/нед</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="recBuffRows"></tbody>
+    </table>
+
+    <h5>Percent warnings</h5>
+    <ul id="recPercentWarnings" class="field-hint"></ul>
+  </div>
+</section>
