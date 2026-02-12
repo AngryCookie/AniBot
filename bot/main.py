@@ -28,6 +28,7 @@ COGS = [
     "bot.cogs.betting",
     "bot.cogs.roles",
     "bot.cogs.admin",
+    "bot.cogs.admin_control_center",
     "bot.cogs.scheduler",
     "bot.cogs.monthly_goals",
     "bot.cogs.referral",
