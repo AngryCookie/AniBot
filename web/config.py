@@ -20,6 +20,7 @@ class Settings:
     session_https_only: bool
     session_cookie_path: str
     cors_allowed_origins: tuple[str, ...]
+    app_env: str
 
 
 def _require_env(name: str, *, allow_empty: bool = False) -> str:
@@ -35,6 +36,38 @@ def _validate_secret_strength(name: str, value: str, *, min_len: int = 24) -> st
     return value
 
 
+def _parse_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer, got {raw!r}") from exc
+
+
+def _parse_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError(
+        f"{name} must be a boolean value (true/false/1/0/yes/no/on/off), got {raw!r}"
+    )
+
+
+def _parse_same_site(name: str, default: str = "lax") -> str:
+    raw = os.getenv(name, default)
+    normalized = raw.strip().lower()
+    if normalized in {"lax", "strict", "none"}:
+        return normalized
+    raise RuntimeError(
+        f"{name} must be one of: lax, strict, none (case-insensitive), got {raw!r}"
+    )
+
+
 settings = Settings(
     database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///bot.db"),
     discord_client_id=os.getenv("DISCORD_CLIENT_ID", ""),
@@ -45,13 +78,14 @@ settings = Settings(
     readonly_api_key=os.getenv("READONLY_API_KEY", ""),
     web_base_url=os.getenv("WEB_BASE_URL", "http://localhost:8000"),
     session_cookie_name=os.getenv("SESSION_COOKIE_NAME", "anibot_session"),
-    session_max_age_seconds=int(os.getenv("SESSION_MAX_AGE_SECONDS", "2592000")),
-    session_same_site=os.getenv("SESSION_SAME_SITE", "lax").lower(),
-    session_https_only=os.getenv("SESSION_HTTPS_ONLY", "false").lower() in {"1", "true", "yes", "on"},
+    session_max_age_seconds=_parse_int_env("SESSION_MAX_AGE_SECONDS", 2592000),
+    session_same_site=_parse_same_site("SESSION_SAME_SITE", "lax"),
+    session_https_only=_parse_bool_env("SESSION_HTTPS_ONLY", False),
     session_cookie_path=os.getenv("SESSION_COOKIE_PATH", "/"),
     cors_allowed_origins=tuple(
         origin.strip()
         for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
         if origin.strip()
     ),
+    app_env=os.getenv("APP_ENV", "development").strip().lower(),
 )
