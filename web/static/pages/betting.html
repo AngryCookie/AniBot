@@ -59,6 +59,17 @@
     <label><span>Odds power influence</span><input type="number" name="odds_power_influence" step="0.01" min="0" max="2" required /></label>
     <label><span>Resolve power weight</span><input type="number" name="resolve_power_weight" step="0.01" min="0" max="2" required /></label>
     <fieldset style="margin-top:1rem; border:1px solid var(--panel-border); padding:0.75rem; border-radius:8px;">
+      <legend>Автоматизация объявлений и резолва</legend>
+      <label><span>Анонс при открытии</span><input type="checkbox" name="automation_announce_on_open" /></label>
+      <label><span>Анонс при закрытии</span><input type="checkbox" name="automation_announce_on_close" /></label>
+      <label><span>Канал анонсов automation (ID)</span><input type="number" name="automation_announce_channel_id" min="0" /></label>
+      <label><span>Задержка сообщения о закрытии (сек)</span><input type="number" name="automation_close_message_delay_seconds" min="0" max="86400" /></label>
+      <label><span>Авто-резолв включен</span><input type="checkbox" name="automation_auto_resolve_enabled" /></label>
+      <label><span>Авто-резолв задержка (сек)</span><input type="number" name="automation_auto_resolve_delay_seconds" min="0" max="86400" /></label>
+      <label><span>Авто-резолв: минимум ставок</span><input type="number" name="automation_auto_resolve_require_min_bets" min="0" /></label>
+      <small class="hint">Авто-резолв используется только для вымышленных матчей. Отключите, если хотите решать вручную.</small>
+    </fieldset>
+    <fieldset style="margin-top:1rem; border:1px solid var(--panel-border); padding:0.75rem; border-radius:8px;">
       <legend>Seasonal noise (Power drift)</legend>
       <p class="hint">Параметры медленного дрейфа силы команд: шум + возврат к base + опциональный momentum.</p>
       <label><span>Включено</span><input type="checkbox" name="power_drift_enabled" /></label>

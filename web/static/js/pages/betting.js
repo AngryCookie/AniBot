@@ -90,6 +90,16 @@ export const initBetting = async (guildId) => {
     settingsForm.elements.namedItem("odds_power_influence").value = data.odds?.power_influence;
     settingsForm.elements.namedItem("resolve_power_weight").value = data.resolve?.power_weight;
 
+    const automation = data.automation || {};
+    const autoResolve = automation.auto_resolve || {};
+    settingsForm.elements.namedItem("automation_announce_on_open").checked = Boolean(automation.announce_on_open ?? true);
+    settingsForm.elements.namedItem("automation_announce_on_close").checked = Boolean(automation.announce_on_close ?? true);
+    settingsForm.elements.namedItem("automation_announce_channel_id").value = automation.announce_channel_id || "";
+    settingsForm.elements.namedItem("automation_close_message_delay_seconds").value = automation.close_message_delay_seconds ?? 0;
+    settingsForm.elements.namedItem("automation_auto_resolve_enabled").checked = Boolean(autoResolve.enabled);
+    settingsForm.elements.namedItem("automation_auto_resolve_delay_seconds").value = autoResolve.delay_seconds ?? 300;
+    settingsForm.elements.namedItem("automation_auto_resolve_require_min_bets").value = autoResolve.require_min_bets ?? 1;
+
     const pd = data.power_drift || {};
     settingsForm.elements.namedItem("power_drift_enabled").checked = Boolean(pd.enabled);
     settingsForm.elements.namedItem("power_drift_timezone").value = pd.timezone || "UTC";
@@ -228,6 +238,17 @@ export const initBetting = async (guildId) => {
           power_influence: Number(settingsForm.elements.namedItem("odds_power_influence").value),
         },
         resolve: { power_weight: Number(settingsForm.elements.namedItem("resolve_power_weight").value) },
+        automation: {
+          announce_on_open: settingsForm.elements.namedItem("automation_announce_on_open").checked,
+          announce_on_close: settingsForm.elements.namedItem("automation_announce_on_close").checked,
+          announce_channel_id: Number(settingsForm.elements.namedItem("automation_announce_channel_id").value) || null,
+          close_message_delay_seconds: Number(settingsForm.elements.namedItem("automation_close_message_delay_seconds").value) || 0,
+          auto_resolve: {
+            enabled: settingsForm.elements.namedItem("automation_auto_resolve_enabled").checked,
+            delay_seconds: Number(settingsForm.elements.namedItem("automation_auto_resolve_delay_seconds").value) || 0,
+            require_min_bets: Number(settingsForm.elements.namedItem("automation_auto_resolve_require_min_bets").value) || 0,
+          },
+        },
         power_drift: {
           enabled: settingsForm.elements.namedItem("power_drift_enabled").checked,
           timezone: settingsForm.elements.namedItem("power_drift_timezone").value.trim() || "UTC",

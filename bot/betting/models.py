@@ -50,6 +50,11 @@ class BettingMatch(Base):
     min_bet = Column(Integer, nullable=False, default=50)
     max_bet = Column(Integer, nullable=False, default=5000)
     announce_channel_id = Column(BigInteger, nullable=True)
+    open_announce_message_id = Column(BigInteger, nullable=True)
+    close_announce_message_id = Column(BigInteger, nullable=True)
+    close_announced_at = Column(DateTime, nullable=True)
+    auto_resolve_scheduled_at = Column(DateTime, nullable=True)
+    auto_resolved_at = Column(DateTime, nullable=True)
     schedule_key = Column(String(128), nullable=True)
     status = Column(
         SAEnum(BettingMatchStatus, name="betting_match_status", native_enum=False),

@@ -7,7 +7,7 @@ import random
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.betting import core
@@ -65,6 +65,17 @@ DEFAULT_BETTING_SETTINGS: dict[str, Any] = {
             "min_active_teams": 4,
         },
     },
+    "automation": {
+        "announce_on_open": True,
+        "announce_on_close": True,
+        "announce_channel_id": None,
+        "close_message_delay_seconds": 0,
+        "auto_resolve": {
+            "enabled": False,
+            "delay_seconds": 300,
+            "require_min_bets": 1,
+        },
+    },
 }
 
 
@@ -92,6 +103,15 @@ def merge_scheduling_settings(raw_scheduling: dict[str, Any] | None) -> dict[str
         **scheduling.get("pairing_rules", {}),
     }
     return scheduling
+
+
+def merge_automation_settings(raw_automation: dict[str, Any] | None) -> dict[str, Any]:
+    automation = {**DEFAULT_BETTING_SETTINGS["automation"], **(raw_automation or {})}
+    automation["auto_resolve"] = {
+        **DEFAULT_BETTING_SETTINGS["automation"]["auto_resolve"],
+        **automation.get("auto_resolve", {}),
+    }
+    return automation
 
 
 class BettingService:
@@ -318,6 +338,7 @@ class BettingService:
         settings["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **settings.get("resolve", {})}
         settings["scheduling"] = merge_scheduling_settings(settings.get("scheduling", {}))
         settings["power_drift"] = merge_power_drift_settings(settings.get("power_drift", {}))
+        settings["automation"] = merge_automation_settings(settings.get("automation", {}))
         return settings
 
     def _choose_weighted_winner(self, team_a: BettingTeam, team_b: BettingTeam, cfg: dict[str, Any]) -> BettingTeam:
@@ -387,6 +408,69 @@ async def announce_match_result(*, bot, guild_id: int, match: BettingMatch, winn
         await channel.send(embed=embed)
     except Exception:
         return
+
+
+async def announce_match_open(*, bot, match: BettingMatch, team_a_name: str, team_b_name: str, channel_id: int | None = None, now: dt.datetime | None = None) -> int | None:
+    if bot is None:
+        return None
+    target_channel_id = channel_id or match.announce_channel_id
+    if not target_channel_id:
+        return None
+    channel = bot.get_channel(int(target_channel_id))
+    if channel is None:
+        return None
+
+    now = now or dt.datetime.utcnow()
+    left = max(dt.timedelta(0), match.betting_close_at - now)
+    hours, rem = divmod(int(left.total_seconds()), 3600)
+    minutes, _ = divmod(rem, 60)
+    close_hint = f"{hours}ч {minutes}м"
+
+    embed = EmbedFactory.info("🎲 Матч открыт для ставок")
+    EmbedFactory.add_kv(embed, "⚔️ Команды", f"{team_a_name} vs {team_b_name}", inline=False)
+    EmbedFactory.add_kv(embed, "📈 Кэфы", f"{match.odds_a:.2f} / {match.odds_b:.2f}")
+    EmbedFactory.add_kv(embed, "💸 Лимиты", f"{int(match.min_bet)} - {int(match.max_bet)}")
+    EmbedFactory.add_kv(embed, "⏳ До закрытия", close_hint, inline=False)
+    EmbedFactory.add_section(embed, "💡", "Что дальше", ["Используйте /bets, чтобы сделать ставку."])
+    try:
+        msg = await channel.send(embed=embed)
+        return int(msg.id)
+    except Exception:
+        return None
+
+
+async def announce_match_close(*, bot, match: BettingMatch, team_a_name: str, team_b_name: str, bets_count: int, pool_total: int, channel_id: int | None = None) -> int | None:
+    if bot is None:
+        return None
+    target_channel_id = channel_id or match.announce_channel_id
+    if not target_channel_id:
+        return None
+    channel = bot.get_channel(int(target_channel_id))
+    if channel is None:
+        return None
+
+    embed = EmbedFactory.warn("⛔ Ставки закрыты")
+    EmbedFactory.add_kv(embed, "⚔️ Матч", f"{team_a_name} vs {team_b_name}", inline=False)
+    EmbedFactory.add_kv(embed, "🧾 Кол-во ставок", str(int(bets_count)))
+    EmbedFactory.add_kv(embed, "💰 Общий пул", str(int(pool_total)))
+    EmbedFactory.add_section(embed, "💡", "Что дальше", ["Ожидайте результат матча."])
+    try:
+        msg = await channel.send(embed=embed)
+        return int(msg.id)
+    except Exception:
+        return None
+
+
+async def collect_match_totals(*, session: AsyncSession, guild_id: int, match_id: int) -> tuple[int, int, int]:
+    stats = await session.execute(
+        select(
+            func.coalesce(func.count(BettingBet.id), 0),
+            func.coalesce(func.sum(BettingBet.amount), 0),
+            func.coalesce(func.max(BettingBet.payout), 0),
+        ).where(and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match_id))
+    )
+    bets_count, pool_total, top_win = stats.one()
+    return int(bets_count or 0), int(pool_total or 0), int(top_win or 0)
 
 
 def _match_status_for_window(betting_open_at: dt.datetime, betting_close_at: dt.datetime, now: dt.datetime) -> BettingMatchStatus:
