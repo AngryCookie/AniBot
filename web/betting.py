@@ -7,9 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import and_, case, func, or_, select
 
 from bot.betting.enums import BettingMatchStatus
-from bot.betting.models import BettingBet, BettingMatch, BettingPayout, BettingTeam
+from bot.betting.models import BettingBet, BettingMatch, BettingPayout, BettingTeam, PowerDriftLog
 from bot.betting.schedule import ScheduleGenerationError, generate_month_schedule
-from bot.betting.service import DEFAULT_BETTING_SETTINGS, BettingService, announce_match_result, merge_scheduling_settings
+from bot.betting.power_drift import fetch_power_drift_logs
+from bot.betting.service import (
+    DEFAULT_BETTING_SETTINGS,
+    BettingService,
+    announce_match_result,
+    merge_power_drift_settings,
+    merge_scheduling_settings,
+)
 from bot.database.models import GuildConfig
 
 from .database import database
@@ -26,6 +33,8 @@ from .schemas_betting import (
     BettingMatchCreate,
     BettingMatchOut,
     BettingMatchUpdate,
+    BettingPowerDriftLogsOut,
+    BettingPowerDriftSettings,
     BettingScheduleApplyOut,
     BettingSchedulingSettings,
     BettingSettings,
@@ -121,6 +130,7 @@ async def get_betting_settings(guild_id: int = Depends(_require_admin_guild)) ->
     data["odds"] = {**DEFAULT_BETTING_SETTINGS["odds"], **data.get("odds", {})}
     data["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **data.get("resolve", {})}
     data["scheduling"] = merge_scheduling_settings(data.get("scheduling", {}))
+    data["power_drift"] = merge_power_drift_settings(data.get("power_drift", {}))
     return BettingSettings(**data)
 
 
@@ -143,6 +153,58 @@ async def update_betting_settings(payload: BettingSettings, guild_id: int = Depe
     return payload
 
 
+
+
+
+
+@router.get("/power-drift", response_model=BettingPowerDriftSettings)
+async def get_betting_power_drift(guild_id: int = Depends(_require_admin_guild)) -> BettingPowerDriftSettings:
+    settings = await get_betting_settings(guild_id)
+    return settings.power_drift
+
+
+@router.put("/power-drift", response_model=BettingPowerDriftSettings)
+async def update_betting_power_drift(
+    payload: BettingPowerDriftSettings,
+    guild_id: int = Depends(_require_admin_guild),
+) -> BettingPowerDriftSettings:
+    async with database.session() as session:
+        cfg = await session.get(GuildConfig, guild_id)
+        if cfg is None:
+            cfg = GuildConfig(guild_id=guild_id)
+            session.add(cfg)
+        raw = {}
+        if cfg.settings:
+            try:
+                raw = json.loads(cfg.settings)
+            except json.JSONDecodeError:
+                raw = {}
+
+        betting = dict(DEFAULT_BETTING_SETTINGS)
+        betting.update(raw.get("betting", {}))
+        betting["power_drift"] = payload.model_dump()
+        betting["scheduling"] = merge_scheduling_settings(betting.get("scheduling", {}))
+        betting["power_drift"] = merge_power_drift_settings(betting.get("power_drift", {}))
+
+        raw["betting"] = betting
+        cfg.settings = json.dumps(raw)
+        await session.commit()
+    return BettingPowerDriftSettings(**betting["power_drift"])
+
+
+@router.get("/power-drift/logs", response_model=BettingPowerDriftLogsOut)
+async def get_betting_power_drift_logs(
+    guild_id: int = Depends(_require_admin_guild),
+    days: int = 7,
+) -> BettingPowerDriftLogsOut:
+    days = _normalize_days(days)
+    async with database.session() as session:
+        teams = await fetch_power_drift_logs(session, guild_id=guild_id, days=days)
+        latest_day = (
+            await session.execute(select(func.max(PowerDriftLog.day)).where(PowerDriftLog.guild_id == guild_id))
+        ).scalar_one_or_none()
+
+    return BettingPowerDriftLogsOut(day=(latest_day.isoformat() if latest_day else "-"), teams=teams)
 
 
 @router.get("/scheduling", response_model=BettingSchedulingSettings)

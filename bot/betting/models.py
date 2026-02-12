@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, BigInteger, Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 
 from bot.betting.enums import BettingBetStatus, BettingMatchStatus
@@ -98,4 +98,24 @@ class BettingPayout(Base):
     user_id = Column(BigInteger, nullable=False)
     bet_id = Column(Integer, ForeignKey("betting_bets.id"), nullable=False)
     payout_amount = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class PowerDriftLog(Base):
+    __tablename__ = "betting_power_drift_logs"
+    __table_args__ = (
+        Index("ix_betting_power_drift_logs_guild_id", "guild_id"),
+        Index("ix_betting_power_drift_logs_team_id", "team_id"),
+        Index("ix_betting_power_drift_logs_day", "day"),
+        UniqueConstraint("guild_id", "team_id", "day", name="uq_betting_power_drift_logs_guild_team_day"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    team_id = Column(Integer, ForeignKey("betting_teams.id"), nullable=False)
+    day = Column(Date, nullable=False)
+    old_power = Column(Float, nullable=False)
+    new_power = Column(Float, nullable=False)
+    delta = Column(Float, nullable=False)
+    reason_json = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)

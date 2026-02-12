@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from discord.ext import commands, tasks
 from sqlalchemy import and_, delete, select, update
 
-from bot.betting.scheduler import ensure_scheduling_horizon, update_match_statuses
+from bot.betting.scheduler import apply_power_drift_for_guild, ensure_scheduling_horizon, update_match_statuses
 from bot.betting.service import BettingService
 from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, GuildConfig, GuildReport, ModLog, PvpSeason, PvpSeasonResult, ServerMonthlyGoal, UserProfile
@@ -348,7 +348,10 @@ class SchedulerCog(commands.Cog):
                                 self._betting_auto_apply_next[guild_id] = now + dt.timedelta(minutes=run_every)
 
                             opened, closed = await update_match_statuses(session=guild_session, guild_id=guild_id, now=now)
-                            if inserted or opened or closed:
+                            drift_applied = 0
+                            if bool(settings.get("power_drift", {}).get("enabled", True)):
+                                drift_applied = await apply_power_drift_for_guild(session=guild_session, guild_id=guild_id, now=now)
+                            if inserted or opened or closed or drift_applied:
                                 logger.info(
                                     "Betting scheduling tick applied",
                                     extra={
@@ -356,10 +359,11 @@ class SchedulerCog(commands.Cog):
                                         "inserted": inserted,
                                         "opened": opened,
                                         "closed": closed,
+                                        "power_drift_applied": drift_applied,
                                     },
                                 )
 
-                await self._run_task(f"betting_schedule_{guild_id}", _guild_job)
+                await self._run_task(f"betting_power_drift_{guild_id}", _guild_job)
 
         await self._run_task("betting_scheduling_task", _job)
 
