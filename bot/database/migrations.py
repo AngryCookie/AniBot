@@ -1481,6 +1481,20 @@ async def migration_shop_buffs_v2(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shop_purchase_logs_purchased_at ON shop_purchase_logs (purchased_at)"))
 
 
+async def migration_presence_settings(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS bot_settings (
+                key VARCHAR(64) PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT '{}',
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1511,4 +1525,5 @@ MIGRATIONS: List[Migration] = [
     migration_betting_automation_idempotency,
     migration_shop_buffs_v2,
     migration_jobs_core,
+    migration_presence_settings,
 ]

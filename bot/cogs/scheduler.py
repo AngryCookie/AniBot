@@ -16,6 +16,7 @@ from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, GuildConfig, GuildReport, ModLog, PvpSeason, PvpSeasonResult, ServerMonthlyGoal, UserProfile
 from bot.goals.service import MonthlyCommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
+from bot.presence import PresenceDataProvider, PresenceSettingsService, render_presence_text, to_activity
 from bot.pvp.seasons import PvpSeasonService
 from bot.reports.rituals import RitualsService
 from bot.reports.service import MonthlyWrappedService
@@ -32,6 +33,10 @@ class SchedulerCog(commands.Cog):
         self._task_locks: dict[str, asyncio.Lock] = {}
         self._next_run: dict[str, dt.datetime] = {}
         self._betting_auto_apply_next: dict[int, dt.datetime] = {}
+        self._presence_provider = PresenceDataProvider()
+        self._presence_template_idx = 0
+        self._presence_guild_idx = 0
+        self._presence_next_run = dt.datetime.min
         self.daily_reset_task.start()
         self.cleanup_task.start()
         self.community_goals_task.start()
@@ -42,6 +47,7 @@ class SchedulerCog(commands.Cog):
         self.pvp_seasons_task.start()
         self.betting_scheduling_task.start()
         self.buff_expiry_task.start()
+        self.presence_task.start()
 
     def cog_unload(self) -> None:
         self.daily_reset_task.cancel()
@@ -54,6 +60,7 @@ class SchedulerCog(commands.Cog):
         self.pvp_seasons_task.cancel()
         self.betting_scheduling_task.cancel()
         self.buff_expiry_task.cancel()
+        self.presence_task.cancel()
 
     async def _run_task(self, key: str, coro_factory: Callable[[], Awaitable[None]]) -> None:
         lock = self._task_locks.setdefault(key, asyncio.Lock())
@@ -174,6 +181,70 @@ class SchedulerCog(commands.Cog):
                         logger.info("Expired buffs deactivated", extra={"count": deactivated})
 
         await self._run_task("buff_expiry_task", _job)
+
+
+    def _pick_presence_guild(self, settings: dict):
+        if not self.bot.guilds:
+            return None
+        mode = settings.get("mode", "primary_guild")
+        if mode == "primary_guild":
+            primary_id = settings.get("primary_guild_id")
+            if primary_id:
+                guild = self.bot.get_guild(int(primary_id))
+                if guild is not None:
+                    return guild
+            return self.bot.guilds[0]
+
+        guilds = list(self.bot.guilds)
+        if not guilds:
+            return None
+        guild = guilds[self._presence_guild_idx % len(guilds)]
+        self._presence_guild_idx = (self._presence_guild_idx + 1) % max(len(guilds), 1)
+        return guild
+
+    @tasks.loop(seconds=60)
+    async def presence_task(self) -> None:
+        async def _job() -> None:
+            now = dt.datetime.utcnow()
+            if now < self._presence_next_run:
+                return
+            async with self.bot.db.session() as session:
+                settings = await PresenceSettingsService.get(session)
+                if not settings.get("enabled", True):
+                    self._presence_next_run = now + dt.timedelta(seconds=60)
+                    return
+
+                guild = self._pick_presence_guild(settings)
+                if guild is None:
+                    self._presence_next_run = now + dt.timedelta(seconds=60)
+                    return
+
+                templates = settings.get("templates", [])
+                if not templates:
+                    self._presence_next_run = now + dt.timedelta(seconds=60)
+                    return
+
+                context = await self._presence_provider.get_context(session, guild)
+                rendered = None
+                chosen = None
+                for _ in range(len(templates)):
+                    idx = self._presence_template_idx % len(templates)
+                    candidate = templates[idx]
+                    self._presence_template_idx = (self._presence_template_idx + 1) % max(len(templates), 1)
+                    text = render_presence_text(str(candidate.get("text", "")), context)
+                    if text:
+                        rendered = text
+                        chosen = candidate
+                        break
+
+                if not rendered or chosen is None:
+                    self._presence_next_run = now + dt.timedelta(seconds=int(settings.get("interval_seconds", 300)))
+                    return
+
+                await self.bot.change_presence(activity=to_activity(str(chosen.get("type", "playing")), rendered))
+                self._presence_next_run = now + dt.timedelta(seconds=int(settings.get("interval_seconds", 300)))
+
+        await self._run_task("presence_task", _job)
 
 
     @tasks.loop(minutes=10)

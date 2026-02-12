@@ -58,6 +58,7 @@ from bot.reports.monthly import calculate_previous_month_period, build_monthly_p
 from bot.reports.quarterly import calculate_quarter_period, build_quarterly_payload
 from bot.reports.yearly import calculate_previous_year_period, build_yearly_payload
 from bot.reports.service import DEFAULT_REPORTS_SETTINGS
+from bot.presence import PresenceDataProvider, PresenceSettingsService, render_presence_text
 
 from .analytics.behavior import build_behavior_analytics
 from .config import settings
@@ -2974,6 +2975,68 @@ async def serve_page(page: str) -> HTMLResponse:
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+async def _resolve_guild_name(access_token: str, guild_id: int) -> str:
+    guilds = await fetch_user_guilds(access_token)
+    for guild in guilds:
+        if str(guild.get("id")) == str(guild_id):
+            return str(guild.get("name") or guild_id)
+    return str(guild_id)
+
+
+@app.get("/api/presence/settings", response_model=PresenceSettings)
+async def get_presence_settings(access_token: str = Depends(get_access_token)) -> PresenceSettings:
+    await _ensure_global_admin(access_token)
+    async with database.session() as session:
+        payload = await PresenceSettingsService.get(session)
+    return PresenceSettings(**payload)
+
+
+@app.put("/api/presence/settings", response_model=PresenceSettings)
+async def update_presence_settings(payload: PresenceSettings, access_token: str = Depends(get_access_token)) -> PresenceSettings:
+    await _ensure_global_admin(access_token)
+    async with database.session() as session:
+        merged = await PresenceSettingsService.save(session, payload.model_dump())
+    return PresenceSettings(**merged)
+
+
+@app.post("/api/presence/preview", response_model=PresencePreviewOut)
+async def preview_presence_settings(
+    guild_id: int | None = None,
+    access_token: str = Depends(get_access_token),
+) -> PresencePreviewOut:
+    await _ensure_global_admin(access_token)
+    async with database.session() as session:
+        settings = await PresenceSettingsService.get(session)
+
+        selected_guild_id = guild_id or settings.get("primary_guild_id")
+        if not selected_guild_id:
+            guilds = await fetch_user_guilds(access_token)
+            if not guilds:
+                raise HTTPException(status_code=400, detail="No available guilds")
+            selected_guild_id = int(guilds[0]["id"])
+
+        guild_name = await _resolve_guild_name(access_token, int(selected_guild_id))
+        provider = PresenceDataProvider()
+
+        class _GuildStub:
+            def __init__(self, _id: int, _name: str):
+                self.id = _id
+                self.name = _name
+                self.member_count = None
+                self.members = []
+
+        ctx = await provider.get_context(session, _GuildStub(int(selected_guild_id), guild_name))
+        rendered = []
+        for tpl in settings.get("templates", []):
+            text = render_presence_text(str(tpl.get("text", "")), ctx)
+            if text:
+                rendered.append(text)
+
+    return PresencePreviewOut(guild_id=int(selected_guild_id), rendered=rendered)
+
+
 app.include_router(betting_router)
 
 
