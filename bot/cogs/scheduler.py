@@ -12,8 +12,9 @@ from sqlalchemy import and_, delete, select, update
 
 from bot.betting.scheduler import apply_power_drift_for_guild, ensure_scheduling_horizon, run_betting_automation_tick, update_match_statuses
 from bot.betting.service import BettingService
+from bot.betting.models import BettingBet, BettingPayout, BettingMatch, PowerDriftLog
 from bot.community_goals import CommunityGoalService
-from bot.database.models import EconomyLedger, GuildConfig, GuildReport, ModLog, PvpSeason, PvpSeasonResult, ServerMonthlyGoal, UserProfile
+from bot.database.models import EconomyLedger, GuildConfig, GuildReport, JobRun, ModLog, PvpSeason, PvpSeasonResult, ServerMonthlyGoal, UserBuff, UserProfile, TavernPurchaseLog
 from bot.goals.service import MonthlyCommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 from bot.presence import PresenceDataProvider, PresenceSettingsService, render_presence_text, to_activity
@@ -100,7 +101,19 @@ class SchedulerCog(commands.Cog):
     async def cleanup_task(self) -> None:
         async def _job() -> None:
             now = dt.datetime.utcnow()
-            deleted = {"ledger": 0, "mod_log": 0, "season_results": 0, "reports": 0}
+            deleted = {
+                "ledger": 0,
+                "mod_log": 0,
+                "season_results": 0,
+                "reports": 0,
+                "job_runs": 0,
+                "tavern_purchase_logs": 0,
+                "betting_bets": 0,
+                "betting_payouts": 0,
+                "betting_matches": 0,
+                "power_drift_logs": 0,
+                "inactive_buffs": 0,
+            }
             async with self.bot.db.session() as session:
                 async with session.begin():
                     configs = (await session.execute(select(GuildConfig))).scalars().all()
@@ -111,6 +124,7 @@ class SchedulerCog(commands.Cog):
                         ledger_cutoff = now - dt.timedelta(days=90)
                         modlog_cutoff = now - dt.timedelta(days=90)
                         seasonal_cutoff = now - dt.timedelta(days=int(settings.get("elo_history_retention_days", 365)))
+                        power_drift_cutoff = now.date() - dt.timedelta(days=int(settings.get("power_drift_retention_days", 600)))
 
                         deleted["ledger"] += await self._delete_in_batches(
                             session,
@@ -139,6 +153,64 @@ class SchedulerCog(commands.Cog):
                                 (GuildReport.guild_id == guild_id) & (GuildReport.created_at < report_cutoff),
                             )
 
+                        optional_cutoffs = {
+                            "job_runs": settings.get("job_runs_retention_days"),
+                            "tavern_purchase_logs": settings.get("tavern_purchase_retention_days"),
+                            "betting_bets": settings.get("betting_logs_retention_days"),
+                            "betting_payouts": settings.get("betting_logs_retention_days"),
+                            "betting_matches": settings.get("betting_match_retention_days"),
+                        }
+
+                        if optional_cutoffs["job_runs"]:
+                            deleted["job_runs"] += await self._delete_in_batches(
+                                session,
+                                JobRun,
+                                (JobRun.guild_id == guild_id)
+                                & (JobRun.ran_at < now - dt.timedelta(days=int(optional_cutoffs["job_runs"]))),
+                            )
+
+                        if optional_cutoffs["tavern_purchase_logs"]:
+                            deleted["tavern_purchase_logs"] += await self._delete_in_batches(
+                                session,
+                                TavernPurchaseLog,
+                                (TavernPurchaseLog.guild_id == guild_id)
+                                & (TavernPurchaseLog.purchased_at < now - dt.timedelta(days=int(optional_cutoffs["tavern_purchase_logs"]))),
+                            )
+
+                        if optional_cutoffs["betting_bets"]:
+                            cutoff = now - dt.timedelta(days=int(optional_cutoffs["betting_bets"]))
+                            deleted["betting_bets"] += await self._delete_in_batches(
+                                session,
+                                BettingBet,
+                                (BettingBet.guild_id == guild_id) & (BettingBet.created_at < cutoff),
+                            )
+                            deleted["betting_payouts"] += await self._delete_in_batches(
+                                session,
+                                BettingPayout,
+                                (BettingPayout.guild_id == guild_id) & (BettingPayout.created_at < cutoff),
+                            )
+
+                        if optional_cutoffs["betting_matches"]:
+                            deleted["betting_matches"] += await self._delete_in_batches(
+                                session,
+                                BettingMatch,
+                                (BettingMatch.guild_id == guild_id)
+                                & (BettingMatch.created_at < now - dt.timedelta(days=int(optional_cutoffs["betting_matches"]))),
+                            )
+
+                        deleted["power_drift_logs"] += await self._delete_in_batches(
+                            session,
+                            PowerDriftLog,
+                            (PowerDriftLog.guild_id == guild_id) & (PowerDriftLog.day < power_drift_cutoff),
+                        )
+                        deleted["inactive_buffs"] += await self._delete_in_batches(
+                            session,
+                            UserBuff,
+                            (UserBuff.guild_id == guild_id)
+                            & (UserBuff.active.is_(False))
+                            & (UserBuff.ends_at < now - dt.timedelta(days=int(settings.get("inactive_buff_retention_days", 30)))),
+                        )
+
             logger.info("Cleanup task completed", extra={"deleted": deleted})
 
         await self._run_task("cleanup_task", _job)
@@ -156,6 +228,12 @@ class SchedulerCog(commands.Cog):
             "elo_history_retention_enabled": bool(scheduler.get("elo_history_retention_enabled", False)),
             "elo_history_retention_days": int(scheduler.get("elo_history_retention_days", 365)),
             "reports_retention_days": scheduler.get("reports_retention_days"),
+            "power_drift_retention_days": int(scheduler.get("power_drift_retention_days", 600)),
+            "job_runs_retention_days": scheduler.get("job_runs_retention_days"),
+            "tavern_purchase_retention_days": scheduler.get("tavern_purchase_retention_days"),
+            "betting_logs_retention_days": scheduler.get("betting_logs_retention_days"),
+            "betting_match_retention_days": scheduler.get("betting_match_retention_days"),
+            "inactive_buff_retention_days": int(scheduler.get("inactive_buff_retention_days", 30)),
         }
 
     async def _delete_in_batches(self, session, model, where_clause, *, batch_size: int = 500, enabled: bool = True) -> int:
@@ -492,6 +570,8 @@ class SchedulerCog(commands.Cog):
     @pvp_seasons_task.before_loop
     @betting_scheduling_task.before_loop
     @monthly_community_goals_v2_task.before_loop
+    @buff_expiry_task.before_loop
+    @presence_task.before_loop
     async def before_tasks(self) -> None:
         await self.bot.wait_until_ready()
 

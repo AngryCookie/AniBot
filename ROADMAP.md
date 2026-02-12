@@ -1,169 +1,86 @@
-# ROADMAP AniBot (v2)
+# ROADMAP AniBot (strict phases 0–9)
 
-Краткая цель: довести AniBot до стабильной, предсказуемой и масштабируемой платформы Discord-автоматизации с акцентом на экономику, вовлечение и аналитические отчёты.
-
----
-
-## Current status
-
-Сейчас в проекте уже реализованы:
-
-- ✅ Базовая экономика, магазин и транзакции.
-- ✅ Betting-механики и web-управление матчами/ставками.
-- ✅ PvP-дуэли, рейтинги и сезонная логика.
-- ✅ Growth/referral/promo подсистема.
-- ✅ Ежемесячные и ежегодные отчёты (preview/dry-run/post).
-- ✅ Word/emoji/reaction статистика + flush/retention.
-- ✅ Monthly goals (классические + v2).
-- ✅ Планировщик периодических задач и миграционная база.
+Цель: довести AniBot до максимально стабильного состояния продукта (bot + web + аналитика), а выход в production/hosting выполнять только отдельной командой.
 
 ---
 
-## Phase 1 — Core stability (completed)
+## Легенда статусов
 
-**Goal:** заложить фундамент bot/web/db.
-
-### Deliverables
-- [x] ✅ Асинхронный SQLAlchemy слой и единая схема.
-- [x] ✅ Discord bot c cogs-архитектурой.
-- [x] ✅ FastAPI web-панель с guild-настройками.
-- [x] ✅ Базовая observability (JSON-логи).
-
-### Dependencies
-- Python runtime
-- Discord API
-
-### Definition of done
-- Проект запускается локально и через Docker.
-- Базовые команды и web-endpoints доступны.
+- ✅ завершено
+- 🟡 в работе сейчас
+- ⏳ запланировано
+- ⛔ отложено (deferred)
 
 ---
 
-## Phase 2 — Economy + Betting (completed)
+## Phase 0 — Foundation / Repo bootstrap ✅
 
-**Goal:** дать серверу управляемую игровую экономику.
+- Базовая структура репозитория (bot/web/tests/docs).
+- Первичный конфиг окружения и запуск в локальной среде.
+- Начальные модели БД и слой доступа.
 
-### Deliverables
-- [x] ✅ Балансы, транзакции, операции начисления/списания.
-- [x] ✅ Shop-модуль.
-- [x] ✅ Betting-контур и интеграция с economy.
+## Phase 1 — Core platform (Bot + Web + DB) ✅
 
-### Dependencies
-- Phase 1
+- Discord bot на `discord.py` с cogs.
+- FastAPI web-панель и базовая авторизация.
+- Асинхронный SQLAlchemy и единый DB lifecycle.
+- Базовые миграции и авто-применение миграций на старте.
 
-### Definition of done
-- Можно провести полный цикл: пополнение → ставка → расчёт.
+## Phase 2 — Economy baseline ✅
 
----
+- Балансы, списания/начисления, журнал транзакций.
+- Магазин и экономические операции из bot/web.
+- Экономические настройки по guild.
 
-## Phase 3 — PvP + Seasons (completed)
+## Phase 3 — Betting v1 + Scheduling + Automation ✅
 
-**Goal:** добавить соревновательный слой с ротацией сезонов.
+- Команды ставок и управление матчами.
+- Планирование матчей, auto-create horizon.
+- Автоматизация announce/open/close/resolve.
+- Power drift и аналитика ставок.
 
-### Deliverables
-- [x] ✅ PvP дуэли и рейтинг.
-- [x] ✅ Сезоны PvP и таблица результатов.
-- [x] ✅ Настройки сезона из web-панели.
+## Phase 4 — Jobs + Buff Shop v2 + Recommendations ✅
 
-### Dependencies
-- Phase 2
+- `/work` и Job definitions/cooldowns/history.
+- Баффы v2, применение/истечение/чистка.
+- Экономические рекомендации и аналитика поведения.
 
-### Definition of done
-- Сезон создаётся/закрывается без ручного вмешательства.
+## Phase 5 — Monthly goals + Rituals + Wrapped reports ✅
 
----
+- Goals (classic + v2), прогресс и закрытие периода.
+- Ритуалы (daily/monthly) и плановые тикеры.
+- Monthly/Quarterly/Yearly wrapped отчёты + dry-run.
 
-## Phase 4 — Growth/Referral (completed)
+## Phase 6 — Discord/Web UX consolidation ✅
 
-**Goal:** повысить органический рост сервера.
+- Unified Discord UX preset B (Gaming/Tatsu-like).
+- EmbedFactory + Views и консистентные ответы.
+- Web UX baseline по основным разделам.
 
-### Deliverables
-- [x] ✅ Referral codes/usage/rewards.
-- [x] ✅ Promo campaigns и атрибуция.
-- [x] ✅ Growth-аналитика в web.
+## Phase 7 — PvP + Tavern v1 + Analytics ✅
 
-### Dependencies
-- Phase 2
+- PvP контур и сезонная логика.
+- Tavern v1 (2 слота: attack/defense).
+- Метрики и аналитические представления по PvP/Tavern.
 
-### Definition of done
-- Видно источник привлечения и выданные награды.
+## Phase 8 — Final Stability Pass + Documentation refresh 🟡
 
----
+**Текущая фаза проекта.**
 
-## Phase 5 — Reports + Engagement analytics (completed)
+- Retention/cleanup jobs (batched, safe, idempotent).
+- DB index/performance audit + устранение hot-path узких мест.
+- Scheduler safety hardening (locks, timing logs, idempotency).
+- Единообразная обработка ошибок (bot/web), валидации, graceful fail.
+- Security hygiene (env, startup checks, secret-safe logs).
+- Обновление документации (`README.md`, `ROADMAP.md`, UX ссылки, smoke-checklists).
 
-**Goal:** автоматизировать обзор активности сервера.
+## Phase 9 — Production/Hosting rollout ⛔ DEFERRED
 
-### Deliverables
-- [x] ✅ Monthly report generation.
-- [x] ✅ Yearly report generation.
-- [x] ✅ Dry-run/preview API и posting.
-- [x] ✅ Word/emoji/reaction daily stats.
+**Явно отложено до отдельной команды пользователя.**
 
-### Dependencies
-- Phase 1–4
+- Hosting/VPS/Cloud окружение.
+- CI/CD, секреты и ротация ключей.
+- Monitoring/alerting/backup/disaster recovery.
+- Runbooks и эксплуатационные регламенты.
 
-### Definition of done
-- Отчёт собирается за период, постится и хранится в БД.
-
----
-
-## Phase 6 — Monthly Goals v2 (completed)
-
-**Goal:** добавить долгосрочную вовлечённость сообщества.
-
-### Deliverables
-- [x] ✅ Шаблоны целей и активная цель месяца.
-- [x] ✅ Расчёт прогресса/вкладов.
-- [x] ✅ Закрытие цели и ротация ролей.
-
-### Dependencies
-- Phase 5
-
-### Definition of done
-- Цель автоматически закрывается и корректно выдаёт награды.
-
----
-
-## Phase 7 — Final audit hardening (in progress)
-
-**Goal:** стабилизация прод-качества перед финальным выходом.
-
-### Deliverables
-- [x] ✅ Retention cleanup для word/emoji/reaction таблиц.
-- [x] ✅ Batch delete и логирование времени/объёмов очистки.
-- [x] ✅ Scheduler overlap guard (lock per task).
-- [x] ✅ Единый формат web API ошибок `{error_code, message, details}`.
-- [x] ✅ Санитизация логов от секретов.
-- [x] ✅ Проверка обязательных env vars при старте.
-- [ ] Дополнительный SQL-профайлинг hot endpoints на production data.
-- [ ] Финальный перф-аудит сложных web-вкладок под высокой нагрузкой.
-
-### Dependencies
-- Phase 1–6
-
-### Definition of done
-- Периодические джобы идемпотентны и безопасны к повторному запуску.
-- Ошибки и в bot, и в web стандартизированы и понятны.
-- Нет утечек токенов/секретов в логах.
-
----
-
-## Phase 8 — Hosting / Production rollout (deferred, LAST)
-
-**Goal:** подготовить и выполнить финальный production rollout.
-
-> ⚠️ Эта фаза **отложена** и должна выполняться **в самом конце**, после полного завершения технического аудита.
-
-### Deliverables
-- [ ] Инфраструктура окружения (hosting/VPS/cloud).
-- [ ] CI/CD и секреты окружения.
-- [ ] Мониторинг, алерты, бэкапы.
-- [ ] Disaster recovery runbook.
-
-### Dependencies
-- Обязательное завершение Phase 7.
-
-### Definition of done
-- Система стабильно работает в production-режиме.
-- Есть регламент обновлений, откатов и мониторинга.
+> ⛔ Любые работы по production/hosting **не выполняются**, пока не поступит отдельная прямая команда.

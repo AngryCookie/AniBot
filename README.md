@@ -26,6 +26,7 @@
 - [Web-панель](#-web-панель)
 - [База данных и миграции](#-база-данных-и-миграции)
 - [Документация](#-документация)
+- [Как протестировать ключевые сценарии](#-как-протестировать-ключевые-сценарии)
 - [Troubleshooting](#-troubleshooting)
 
 ---
@@ -143,6 +144,27 @@ docker compose up --build
 - Основной план развития: [`ROADMAP.md`](./ROADMAP.md)
 - Отчёт по экономическому ledger: [`ECONOMY_LEDGER_REPORT_RU.md`](./ECONOMY_LEDGER_REPORT_RU.md)
 - Отчёт по referral core: [`REFERRAL_CORE_REPORT_RU.md`](./REFERRAL_CORE_REPORT_RU.md)
+- Краткий UX-референс: [`UX_STYLE_GUIDE.md`](./UX_STYLE_GUIDE.md)
+
+
+## 🧪 Как протестировать ключевые сценарии
+
+Быстрый smoke-набор для локального прогона:
+
+1. **Bet flow**: создать матч в web → открыть ставки → сделать ставки из Discord.
+2. **Resolve**: закрыть матч (ручной/авто) и проверить начисления payout в экономике.
+3. **Schedule auto-create**: включить auto-apply расписания и дождаться auto-create матчей.
+4. **Jobs**: вызвать `/work` и проверить cooldown + запись JobRun.
+5. **Buff shop**: купить бафф, убедиться в применении модификатора и деактивации по истечению срока.
+6. **Tavern**: покупка + проверка слотов attack/defense + PvP-дуэль с эффектами.
+7. **Monthly goals**: создать цель, проверить накопление прогресса и закрытие месяца.
+8. **Reports dry-run**: сделать dry-run monthly/quarterly/yearly wrapped в web API.
+
+Для запуска автотестов:
+
+```bash
+pytest -q
+```
 
 ---
 
