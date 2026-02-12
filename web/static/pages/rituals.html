@@ -1,0 +1,44 @@
+<section class="card">
+  <h3>Rituals</h3>
+  <form id="ritualsForm" class="settings-form">
+    <label class="setting">
+      <span>Включить ритуалы</span>
+      <input type="checkbox" data-path="enabled" />
+    </label>
+
+    <label class="setting">
+      <span>Timezone</span>
+      <input type="text" data-path="timezone" placeholder="UTC" />
+    </label>
+
+    <h4>🕰️ В этот день</h4>
+    <label class="setting"><span>Enabled</span><input type="checkbox" data-path="daily_this_day.enabled" /></label>
+    <label class="setting">
+      <span>Channel ID</span>
+      <input type="number" data-path="daily_this_day.channel_id" placeholder="123456789012345678" />
+      <p class="field-hint">Канал для ежедневного ритуала. Не чаще 1 поста в день.</p>
+    </label>
+    <label class="setting"><span>Post hour (0-23)</span><input type="number" min="0" max="23" data-path="daily_this_day.post_hour" /></label>
+    <label class="setting"><span>Min years ago</span><input type="number" min="1" max="20" data-path="daily_this_day.min_years_ago" /></label>
+    <label class="setting"><span>Max items</span><input type="number" min="1" max="10" data-path="daily_this_day.max_items" /></label>
+
+    <h4>🎉 Месячные хайлайты</h4>
+    <label class="setting"><span>Enabled</span><input type="checkbox" data-path="monthly_highlights.enabled" /></label>
+    <label class="setting">
+      <span>Channel ID</span>
+      <input type="number" data-path="monthly_highlights.channel_id" placeholder="123456789012345678" />
+      <p class="field-hint">Канал для ежемесячных хайлайтов. Не чаще 1 поста в месяц.</p>
+    </label>
+    <label class="setting"><span>Post day</span><input type="number" min="1" max="28" data-path="monthly_highlights.post_day" /></label>
+    <label class="setting"><span>Post hour (0-23)</span><input type="number" min="0" max="23" data-path="monthly_highlights.post_hour" /></label>
+
+    <fieldset class="settings-group">
+      <legend>Что включать</legend>
+      <label class="setting"><span>Слово месяца</span><input type="checkbox" data-path="monthly_highlights.include.top_word" /></label>
+      <label class="setting"><span>Эмодзи месяца</span><input type="checkbox" data-path="monthly_highlights.include.top_emoji" /></label>
+      <label class="setting"><span>Реакция месяца</span><input type="checkbox" data-path="monthly_highlights.include.top_reaction" /></label>
+    </fieldset>
+
+    <button type="submit">Сохранить</button>
+  </form>
+</section>

@@ -126,6 +126,7 @@ from .schemas import (
     TrustScoreSettings,
     ReportsSettings,
     ReportsDryRunOut,
+    RitualsSettings,
     WordEmojiStatsSettings,
     WordEmojiStatsResponse,
 )
@@ -969,6 +970,7 @@ shadow_get, shadow_put, shadow_reset = _category_routes(
     "shadow_penalties", ShadowPenaltySettings
 )
 reports_get, reports_put, reports_reset = _category_routes("reports", ReportsSettings)
+rituals_get, rituals_put, _ = _category_routes("rituals", RitualsSettings)
 word_emoji_get, word_emoji_put, _ = _category_routes("word_emoji_stats", WordEmojiStatsSettings)
 
 app.get("/api/guilds/{guild_id}/leveling", response_model=LevelingSettings)(
@@ -1390,6 +1392,9 @@ app.post("/api/guilds/{guild_id}/logs/reset", response_model=LogsSettings)(logs_
 
 app.get("/api/guilds/{guild_id}/reports", response_model=ReportsSettings)(reports_get)
 app.put("/api/guilds/{guild_id}/reports", response_model=ReportsSettings)(reports_put)
+app.post("/api/guilds/{guild_id}/reports/reset", response_model=ReportsSettings)(reports_reset)
+app.get("/api/guilds/{guild_id}/rituals", response_model=RitualsSettings)(rituals_get)
+app.put("/api/guilds/{guild_id}/rituals", response_model=RitualsSettings)(rituals_put)
 app.get("/api/guilds/{guild_id}/word-emoji-stats", response_model=WordEmojiStatsSettings)(word_emoji_get)
 app.put("/api/guilds/{guild_id}/word-emoji-stats", response_model=WordEmojiStatsSettings)(word_emoji_put)
 
