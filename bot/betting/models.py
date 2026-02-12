@@ -33,6 +33,8 @@ class BettingMatch(Base):
         Index("ix_betting_matches_status_close", "status", "betting_close_at"),
         Index("ix_betting_matches_guild_match", "guild_id", "id"),
         Index("ix_betting_matches_guild_status", "guild_id", "status"),
+        Index("ix_betting_matches_schedule_key", "schedule_key"),
+        Index("uq_betting_matches_guild_schedule_key", "guild_id", "schedule_key", unique=True),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -48,6 +50,7 @@ class BettingMatch(Base):
     min_bet = Column(Integer, nullable=False, default=50)
     max_bet = Column(Integer, nullable=False, default=5000)
     announce_channel_id = Column(BigInteger, nullable=True)
+    schedule_key = Column(String(128), nullable=True)
     status = Column(
         SAEnum(BettingMatchStatus, name="betting_match_status", native_enum=False),
         default=BettingMatchStatus.scheduled,

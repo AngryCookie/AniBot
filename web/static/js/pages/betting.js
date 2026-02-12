@@ -64,6 +64,11 @@ export const initBetting = async (guildId) => {
   if (!guildId) return;
   const settingsForm = document.getElementById("bettingSettingsForm");
   const teamForm = document.getElementById("teamForm");
+  const schedulingForm = document.getElementById("bettingSchedulingForm");
+  const scheduleGenerateForm = document.getElementById("bettingScheduleGenerateForm");
+  const schedulePreviewBody = document.getElementById("schedulePreviewBody");
+  const schedulePreviewBtn = document.getElementById("schedulePreviewBtn");
+  const scheduleApplyBtn = document.getElementById("scheduleApplyBtn");
   const matchForm = document.getElementById("matchForm");
   const teamsBody = document.getElementById("teamsBody");
   const matchesBody = document.getElementById("matchesBody");
@@ -81,6 +86,30 @@ export const initBetting = async (guildId) => {
     settingsForm.elements.namedItem("odds_randomness").value = data.odds?.randomness;
     settingsForm.elements.namedItem("odds_power_influence").value = data.odds?.power_influence;
     settingsForm.elements.namedItem("resolve_power_weight").value = data.resolve?.power_weight;
+
+    const sc = data.scheduling || {};
+    const mt = sc.month_template || {};
+    const pr = sc.pairing_rules || {};
+    if (schedulingForm) {
+      schedulingForm.elements.namedItem("enabled").checked = Boolean(sc.enabled);
+      schedulingForm.elements.namedItem("timezone").value = sc.timezone || "UTC";
+      schedulingForm.elements.namedItem("days_of_week").value = (mt.days_of_week || [1,2,3,4,5,6,7]).join(",");
+      schedulingForm.elements.namedItem("matches_per_day").value = mt.matches_per_day ?? 1;
+      schedulingForm.elements.namedItem("start_hour").value = mt.start_hour ?? 18;
+      schedulingForm.elements.namedItem("betting_open_minutes_before").value = mt.betting_open_minutes_before ?? 120;
+      schedulingForm.elements.namedItem("betting_close_minutes_before").value = mt.betting_close_minutes_before ?? 10;
+      schedulingForm.elements.namedItem("avoid_same_pair_days").value = pr.avoid_same_pair_days ?? 14;
+      schedulingForm.elements.namedItem("prefer_active_teams").checked = Boolean(pr.prefer_active_teams ?? true);
+      schedulingForm.elements.namedItem("min_active_teams").value = pr.min_active_teams ?? 4;
+    }
+  };
+
+
+  const renderSchedulePreview = (matches = []) => {
+    if (!schedulePreviewBody) return;
+    schedulePreviewBody.innerHTML = matches
+      .map((m) => `<tr><td>${new Date(m.date_time_local).toLocaleString()}</td><td>${m.team_a_id}</td><td>${m.team_b_id}</td><td>${new Date(m.betting_open_at_utc).toLocaleString()}</td><td>${new Date(m.betting_close_at_utc).toLocaleString()}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.seed_key}</td></tr>`)
+      .join("");
   };
 
   const loadTeams = async () => {
@@ -209,6 +238,54 @@ export const initBetting = async (guildId) => {
     await loadAnalytics(currentPeriod);
   });
 
+
+  schedulingForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const days = String(schedulingForm.elements.namedItem("days_of_week").value || "")
+      .split(",")
+      .map((v) => Number(v.trim()))
+      .filter((v) => Number.isInteger(v) && v >= 1 && v <= 7);
+    await apiFetch(`/api/guilds/${guildId}/betting/scheduling`, {
+      method: "PUT",
+      body: JSON.stringify({
+        enabled: schedulingForm.elements.namedItem("enabled").checked,
+        timezone: schedulingForm.elements.namedItem("timezone").value.trim() || "UTC",
+        month_template: {
+          days_of_week: days.length ? days : [1, 2, 3, 4, 5, 6, 7],
+          matches_per_day: Number(schedulingForm.elements.namedItem("matches_per_day").value),
+          start_hour: Number(schedulingForm.elements.namedItem("start_hour").value),
+          betting_open_minutes_before: Number(schedulingForm.elements.namedItem("betting_open_minutes_before").value),
+          betting_close_minutes_before: Number(schedulingForm.elements.namedItem("betting_close_minutes_before").value),
+        },
+        pairing_rules: {
+          avoid_same_pair_days: Number(schedulingForm.elements.namedItem("avoid_same_pair_days").value),
+          prefer_active_teams: schedulingForm.elements.namedItem("prefer_active_teams").checked,
+          min_active_teams: Number(schedulingForm.elements.namedItem("min_active_teams").value),
+        },
+      }),
+    });
+    showToast("Scheduling настройки сохранены", "success");
+  });
+
+  schedulePreviewBtn?.addEventListener("click", async () => {
+    const year = Number(scheduleGenerateForm?.elements.namedItem("year")?.value);
+    const month = Number(scheduleGenerateForm?.elements.namedItem("month")?.value);
+    const preview = await apiFetch(`/api/guilds/${guildId}/betting/scheduling/generate?year=${year}&month=${month}`, { method: "POST" });
+    renderSchedulePreview(preview || []);
+    showToast(`Сгенерировано: ${(preview || []).length}`, "success");
+  });
+
+  scheduleApplyBtn?.addEventListener("click", async () => {
+    const year = Number(scheduleGenerateForm?.elements.namedItem("year")?.value);
+    const month = Number(scheduleGenerateForm?.elements.namedItem("month")?.value);
+    const res = await apiFetch(`/api/guilds/${guildId}/betting/scheduling/apply?year=${year}&month=${month}`, { method: "POST" });
+    showToast(`Apply: +${res.inserted}, skip ${res.skipped_existing}`, "success");
+    const preview = await apiFetch(`/api/guilds/${guildId}/betting/scheduling/generate?year=${year}&month=${month}`, { method: "POST" });
+    renderSchedulePreview(preview || []);
+    await loadMatches();
+    await loadAnalytics(currentPeriod);
+  });
+
   let currentPeriod = 7;
   periodButtons.forEach((button) => {
     button.addEventListener("click", async () => {
@@ -219,6 +296,11 @@ export const initBetting = async (guildId) => {
   });
 
   await loadSettings();
+  const now = new Date();
+  if (scheduleGenerateForm) {
+    scheduleGenerateForm.elements.namedItem("year").value = now.getUTCFullYear();
+    scheduleGenerateForm.elements.namedItem("month").value = now.getUTCMonth() + 1;
+  }
   await loadTeams();
   await loadMatches();
   await loadAnalytics(currentPeriod);

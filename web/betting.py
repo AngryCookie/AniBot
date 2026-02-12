@@ -4,10 +4,11 @@ import datetime as dt
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 
 from bot.betting.enums import BettingMatchStatus
 from bot.betting.models import BettingBet, BettingMatch, BettingPayout, BettingTeam
+from bot.betting.schedule import ScheduleGenerationError, generate_month_schedule
 from bot.betting.service import DEFAULT_BETTING_SETTINGS, BettingService, announce_match_result
 from bot.database.models import GuildConfig
 
@@ -17,6 +18,7 @@ from .schemas_betting import (
     BettingAnalyticsKpis,
     BettingAnalyticsLeaderboardsOut,
     BettingAnalyticsOverviewOut,
+    BettingGeneratedMatchOut,
     BettingLeaderboardBiggestWinRow,
     BettingLeaderboardMatchRow,
     BettingLeaderboardProfitRow,
@@ -24,6 +26,8 @@ from .schemas_betting import (
     BettingMatchCreate,
     BettingMatchOut,
     BettingMatchUpdate,
+    BettingScheduleApplyOut,
+    BettingSchedulingSettings,
     BettingSettings,
     BettingTeamCreate,
     BettingTeamOut,
@@ -116,6 +120,16 @@ async def get_betting_settings(guild_id: int = Depends(_require_admin_guild)) ->
     data.update(payload.get("betting", {}))
     data["odds"] = {**DEFAULT_BETTING_SETTINGS["odds"], **data.get("odds", {})}
     data["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **data.get("resolve", {})}
+    scheduling = {**DEFAULT_BETTING_SETTINGS["scheduling"], **data.get("scheduling", {})}
+    scheduling["month_template"] = {
+        **DEFAULT_BETTING_SETTINGS["scheduling"]["month_template"],
+        **scheduling.get("month_template", {}),
+    }
+    scheduling["pairing_rules"] = {
+        **DEFAULT_BETTING_SETTINGS["scheduling"]["pairing_rules"],
+        **scheduling.get("pairing_rules", {}),
+    }
+    data["scheduling"] = scheduling
     return BettingSettings(**data)
 
 
@@ -137,6 +151,122 @@ async def update_betting_settings(payload: BettingSettings, guild_id: int = Depe
         await session.commit()
     return payload
 
+
+
+
+@router.get("/scheduling", response_model=BettingSchedulingSettings)
+async def get_betting_scheduling(guild_id: int = Depends(_require_admin_guild)) -> BettingSchedulingSettings:
+    settings = await get_betting_settings(guild_id)
+    return settings.scheduling
+
+
+@router.put("/scheduling", response_model=BettingSchedulingSettings)
+async def update_betting_scheduling(
+    payload: BettingSchedulingSettings,
+    guild_id: int = Depends(_require_admin_guild),
+) -> BettingSchedulingSettings:
+    async with database.session() as session:
+        cfg = await session.get(GuildConfig, guild_id)
+        if cfg is None:
+            cfg = GuildConfig(guild_id=guild_id)
+            session.add(cfg)
+        raw = {}
+        if cfg.settings:
+            try:
+                raw = json.loads(cfg.settings)
+            except json.JSONDecodeError:
+                raw = {}
+        betting = dict(DEFAULT_BETTING_SETTINGS)
+        betting.update(raw.get("betting", {}))
+        betting["scheduling"] = payload.model_dump()
+        raw["betting"] = betting
+        cfg.settings = json.dumps(raw)
+        await session.commit()
+    return payload
+
+
+def _validate_schedule_period(year: int, month: int) -> None:
+    if year < 2000 or year > 2100:
+        raise HTTPException(status_code=400, detail="year must be in 2000..2100")
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="month must be in 1..12")
+
+
+async def _load_scheduling_context(session, guild_id: int) -> tuple[dict, list[BettingTeam], BettingService]:
+    service = BettingService(session)
+    cfg = await service._get_betting_settings(guild_id)
+    teams = (
+        await session.execute(select(BettingTeam).where(BettingTeam.guild_id == guild_id).order_by(BettingTeam.id))
+    ).scalars().all()
+    return cfg.get("scheduling", {}), list(teams), service
+
+
+@router.post("/scheduling/generate", response_model=list[BettingGeneratedMatchOut])
+async def preview_month_schedule(
+    guild_id: int = Depends(_require_admin_guild),
+    year: int = 0,
+    month: int = 0,
+) -> list[BettingGeneratedMatchOut]:
+    _validate_schedule_period(year, month)
+    async with database.session() as session:
+        scheduling_cfg, teams, _ = await _load_scheduling_context(session, guild_id)
+    try:
+        generated = generate_month_schedule(guild_id, year, month, scheduling_cfg, teams)
+    except ScheduleGenerationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return [BettingGeneratedMatchOut(**item.__dict__) for item in generated]
+
+
+@router.post("/scheduling/apply", response_model=BettingScheduleApplyOut)
+async def apply_month_schedule(
+    guild_id: int = Depends(_require_admin_guild),
+    year: int = 0,
+    month: int = 0,
+) -> BettingScheduleApplyOut:
+    _validate_schedule_period(year, month)
+    inserted = 0
+    skipped_existing = 0
+    async with database.session() as session:
+        scheduling_cfg, teams, service = await _load_scheduling_context(session, guild_id)
+        try:
+            generated = generate_month_schedule(guild_id, year, month, scheduling_cfg, teams)
+        except ScheduleGenerationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        for item in generated:
+            existing = (
+                await session.execute(
+                    select(BettingMatch).where(
+                        and_(
+                            BettingMatch.guild_id == guild_id,
+                            or_(
+                                BettingMatch.schedule_key == item.seed_key,
+                                and_(
+                                    BettingMatch.betting_close_at == item.betting_close_at_utc,
+                                    BettingMatch.team_a_id == item.team_a_id,
+                                    BettingMatch.team_b_id == item.team_b_id,
+                                ),
+                            ),
+                        )
+                    )
+                )
+            ).scalars().first()
+            if existing is not None:
+                skipped_existing += 1
+                continue
+
+            match = await service.create_match(
+                guild_id=guild_id,
+                team_a_id=item.team_a_id,
+                team_b_id=item.team_b_id,
+                betting_open_at=item.betting_open_at_utc,
+                betting_close_at=item.betting_close_at_utc,
+            )
+            match.schedule_key = item.seed_key
+            inserted += 1
+
+        await session.commit()
+    return BettingScheduleApplyOut(inserted=inserted, skipped_existing=skipped_existing, total_generated=len(generated))
 
 @router.get("/teams", response_model=list[BettingTeamOut])
 async def list_teams(guild_id: int = Depends(_require_admin_guild)) -> list[BettingTeamOut]:
