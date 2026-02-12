@@ -4,6 +4,48 @@
 </section>
 
 <section class="card">
+  <h4>Betting Analytics</h4>
+  <div id="bettingAnalyticsPeriod" class="tabs" role="tablist" aria-label="Период betting analytics">
+    <button type="button" class="tab-button is-active" data-period="7">7 дней</button>
+    <button type="button" class="tab-button" data-period="30">30 дней</button>
+    <button type="button" class="tab-button" data-period="90">90 дней</button>
+  </div>
+  <p id="bettingAnalyticsLoading" class="notice hidden">Загрузка analytics...</p>
+
+  <div class="kpi-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 1rem;">
+    <div class="kpi"><span class="kpi-label">Bets</span><strong id="betKpiBets">0</strong></div>
+    <div class="kpi"><span class="kpi-label">Unique bettors</span><strong id="betKpiUsers">0</strong></div>
+    <div class="kpi"><span class="kpi-label">Volume</span><strong id="betKpiVolume">0</strong></div>
+    <div class="kpi"><span class="kpi-label">Payout</span><strong id="betKpiPayout">0</strong></div>
+    <div class="kpi"><span class="kpi-label">Net sink</span><strong id="betKpiNet">0</strong></div>
+    <div class="kpi"><span class="kpi-label">Avg bet</span><strong id="betKpiAvgBet">0</strong></div>
+    <div class="kpi"><span class="kpi-label">Avg odds</span><strong id="betKpiAvgOdds">0</strong></div>
+  </div>
+
+  <div class="chart-wrap" style="margin-top: 1rem; height: 320px;"><canvas id="bettingAnalyticsChart"></canvas></div>
+  <table class="table hidden" style="margin-top:0.75rem;"><thead><tr><th>Day</th><th>Volume</th><th>Payout</th><th>Net</th></tr></thead><tbody id="bettingAnalyticsFallback"></tbody></table>
+
+  <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem;">
+    <div>
+      <h5>Top volume</h5>
+      <table class="table"><thead><tr><th>User</th><th>Volume</th><th>Bets</th></tr></thead><tbody id="betLbVolume"></tbody></table>
+    </div>
+    <div>
+      <h5>Top profit</h5>
+      <table class="table"><thead><tr><th>User</th><th>Profit</th><th>Bets</th></tr></thead><tbody id="betLbProfit"></tbody></table>
+    </div>
+    <div>
+      <h5>Biggest wins</h5>
+      <table class="table"><thead><tr><th>User</th><th>Match</th><th>Payout</th><th>Bet</th><th>Odds</th></tr></thead><tbody id="betLbWins"></tbody></table>
+    </div>
+    <div>
+      <h5>Top matches</h5>
+      <table class="table"><thead><tr><th>Match</th><th>Volume</th><th>Bets</th></tr></thead><tbody id="betLbMatches"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<section class="card">
   <h4>Настройки</h4>
   <form id="bettingSettingsForm">
     <label><span>Включено</span><input type="checkbox" name="enabled" /></label>

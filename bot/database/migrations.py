@@ -1274,6 +1274,15 @@ async def migration_betting_v1_admin_core(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_guild_match ON betting_payouts (guild_id, match_id)"))
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_guild_user ON betting_payouts (guild_id, user_id)"))
 
+
+async def migration_betting_v1_analytics_indexes(conn: AsyncConnection) -> None:
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_created_at ON betting_bets (guild_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_user ON betting_bets (guild_id, user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_guild_match ON betting_bets (guild_id, match_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_betting_close_at ON betting_matches (guild_id, betting_close_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_resolved_at ON betting_matches (guild_id, resolved_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_status ON betting_matches (guild_id, status)"))
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1297,4 +1306,5 @@ MIGRATIONS: List[Migration] = [
     migration_add_step_k_audit_indexes,
     migration_add_leveling_hardening,
     migration_betting_v1_admin_core,
+    migration_betting_v1_analytics_indexes,
 ]
