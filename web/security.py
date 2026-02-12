@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List
 
 import httpx
@@ -52,6 +53,12 @@ def get_access_token(request: Request) -> str:
     encrypted_token = request.session.get("access_token")
     if not encrypted_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
+
+    expires_at = int(request.session.get("expires_at", 0) or 0)
+    if expires_at and expires_at <= int(time.time()):
+        request.session.clear()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+
     return decrypt_token(encrypted_token)
 
 

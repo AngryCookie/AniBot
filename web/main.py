@@ -7,6 +7,7 @@ env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 import json
+import logging
 import secrets
 import datetime as dt
 import time
@@ -21,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import case, func, select, desc
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from bot.analytics.economy import build_economy_analytics
@@ -160,12 +162,53 @@ from .security import (
 from .observability import request_logger, setup_logging
 
 setup_logging()
+logger = logging.getLogger("anibot.web.session")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="AniBot Web Admin", version="2.0")
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+
+if settings.cors_allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_allowed_origins),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret,
+    session_cookie=settings.session_cookie_name,
+    same_site=settings.session_same_site,
+    https_only=settings.session_https_only,
+    max_age=settings.session_max_age_seconds,
+)
 app.middleware("http")(request_logger())
+
+
+@app.middleware("http")
+async def session_debug_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api") or request.url.path.startswith("/auth"):
+        cookie_present = settings.session_cookie_name in request.cookies
+        session_keys = sorted(list(request.session.keys())) if hasattr(request, "session") else []
+        user_id = request.session.get("discord_user_id") if hasattr(request, "session") else None
+        guild_id = request.path_params.get("guild_id") if hasattr(request, "path_params") else None
+        logger.info(
+            "session.state",
+            extra={
+                "path": request.url.path,
+                "method": request.method,
+                "status_code": response.status_code,
+                "cookie_present": cookie_present,
+                "session_keys": session_keys,
+                "user_id": user_id,
+                "guild_id": guild_id,
+            },
+        )
+    return response
 
 
 _readonly_requests: Dict[str, List[float]] = {}
@@ -268,9 +311,11 @@ async def auth_callback(request: Request, code: str, state: str = "") -> Redirec
     if response.status_code != 200:
         raise HTTPException(status_code=400, detail="OAuth exchange failed")
     payload = response.json()
+    expires_in = int(payload.get("expires_in", 0) or 0)
     request.session["access_token"] = encrypt_token(payload["access_token"])
     request.session["refresh_token"] = encrypt_token(payload.get("refresh_token", ""))
-    request.session["expires_in"] = payload.get("expires_in", 0)
+    request.session["expires_at"] = int(time.time()) + max(expires_in, 0)
+    request.session["discord_user_id"] = str(payload.get("user", {}).get("id", ""))
     return RedirectResponse(url="/servers.html", status_code=302)
 
 
@@ -3141,7 +3186,10 @@ async def readonly_leaderboard(guild_id: int, request: Request) -> Dict[str, Any
 async def serve_page(page: str) -> HTMLResponse:
     file_path = STATIC_DIR / f"{page}.html"
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Page not found")
+        if page in {"settings", "server-settings"}:
+            file_path = STATIC_DIR / "app.html"
+        else:
+            raise HTTPException(status_code=404, detail="Page not found")
     content = file_path.read_text(encoding="utf-8")
     return HTMLResponse(content=content, media_type="text/html; charset=utf-8")
 

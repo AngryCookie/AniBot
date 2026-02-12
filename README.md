@@ -118,6 +118,9 @@ docker compose up --build
 
 - Используется OAuth Discord + серверная сессия.
 - `SESSION_SECRET` обязателен для старта web-приложения.
+- `SESSION_ENCRYPTION_KEY` обязателен и должен быть валидным Fernet-ключом.
+- Параметры cookie-сессии: `SESSION_COOKIE_NAME`, `SESSION_MAX_AGE_SECONDS`, `SESSION_SAME_SITE`, `SESSION_HTTPS_ONLY`.
+- Для cross-origin запросов задайте `CORS_ALLOWED_ORIGINS` (без `*`) и отправляйте cookies с `credentials: include`.
 - Не храните секреты в документации/репозитории.
 
 ---
