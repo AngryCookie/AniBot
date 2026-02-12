@@ -131,9 +131,22 @@ class ShopItem(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text, default="")
     base_price = Column(Integer, default=0)
-    item_type = Column(String(32), default="role")
+    item_type = Column(String(32), default="consumable")
     role_id = Column(BigInteger, nullable=True)
     is_active = Column(Boolean, default=True)
+    buff_json = Column(JSON, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    max_active_per_user = Column(Integer, nullable=True, default=1)
+    purchase_limit_per_user = Column(Integer, nullable=True)
+    purchase_limit_total = Column(Integer, nullable=True)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=dt.datetime.utcnow,
+        onupdate=dt.datetime.utcnow,
+        nullable=False,
+    )
 
 
 class ShopPurchase(Base):
@@ -145,6 +158,37 @@ class ShopPurchase(Base):
     item_id = Column(Integer, nullable=False)
     price = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class ShopPurchaseLog(Base):
+    __tablename__ = "shop_purchase_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("shop_items.id"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False, default=1)
+    total_price = Column(Integer, nullable=False)
+    purchased_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+
+
+class UserBuff(Base):
+    __tablename__ = "user_buffs"
+    __table_args__ = (
+        Index("ix_user_buffs_guild_user_active", "guild_id", "user_id", "active"),
+        Index("ix_user_buffs_guild_user_ends", "guild_id", "user_id", "ends_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    item_id = Column(Integer, ForeignKey("shop_items.id"), nullable=False)
+    buff_type = Column(String(64), nullable=False)
+    value_percent = Column(Float, nullable=False)
+    starts_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    ends_at = Column(DateTime, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
 
 
 class CustomCommand(Base):

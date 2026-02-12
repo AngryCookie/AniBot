@@ -18,6 +18,7 @@ from bot.goals.service import MonthlyCommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 from bot.pvp.seasons import PvpSeasonService
 from bot.reports.service import MonthlyWrappedService
+from bot.services.buffs import BuffService
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class SchedulerCog(commands.Cog):
         self.monthly_community_goals_v2_task.start()
         self.pvp_seasons_task.start()
         self.betting_scheduling_task.start()
+        self.buff_expiry_task.start()
 
     def cog_unload(self) -> None:
         self.daily_reset_task.cancel()
@@ -47,6 +49,7 @@ class SchedulerCog(commands.Cog):
         self.monthly_community_goals_v2_task.cancel()
         self.pvp_seasons_task.cancel()
         self.betting_scheduling_task.cancel()
+        self.buff_expiry_task.cancel()
 
     async def _run_task(self, key: str, coro_factory: Callable[[], Awaitable[None]]) -> None:
         lock = self._task_locks.setdefault(key, asyncio.Lock())
@@ -156,6 +159,18 @@ class SchedulerCog(commands.Cog):
             if len(ids) < batch_size:
                 break
         return deleted_total
+
+    @tasks.loop(hours=1)
+    async def buff_expiry_task(self) -> None:
+        async def _job() -> None:
+            async with self.bot.db.session() as session:
+                async with session.begin():
+                    deactivated = await BuffService(session).deactivate_expired_buffs()
+                    if deactivated > 0:
+                        logger.info("Expired buffs deactivated", extra={"count": deactivated})
+
+        await self._run_task("buff_expiry_task", _job)
+
 
     @tasks.loop(minutes=10)
     async def community_goals_task(self) -> None:

@@ -21,6 +21,7 @@ from bot.cogs.utils import (
 )
 from bot.database.models import ActivityEvent, LevelReward, UserProfile
 from bot.database.operations import apply_balance_change, get_or_create_user_locked
+from bot.services.buffs import BuffService
 
 
 def is_on_cooldown(last_ts: dt.datetime | None, now: dt.datetime, cooldown_seconds: int) -> bool:
@@ -102,6 +103,9 @@ class LevelingCog(commands.Cog):
                 xp_min = int(msg_cfg.get("xp_min", 5))
                 xp_max = int(msg_cfg.get("xp_max", max(xp_min, 10)))
                 gained = random.randint(min(xp_min, xp_max), max(xp_min, xp_max))
+                buffs = await BuffService(session).get_active_buffs(message.guild.id, message.author.id)
+                xp_bonus = float(buffs.get("xp_bonus", 0.0))
+                gained = int(gained * (1 + xp_bonus / 100))
 
                 user.xp += gained
                 user.daily_xp += gained
@@ -211,6 +215,9 @@ class LevelingCog(commands.Cog):
 
                         grant_minutes = max(0, elapsed_minutes)
                         gain = grant_minutes * xp_per_minute
+                        buffs = await BuffService(session).get_active_buffs(guild.id, member.id)
+                        xp_bonus = float(buffs.get("xp_bonus", 0.0))
+                        gain = int(gain * (1 + xp_bonus / 100))
                         if user.daily_xp + gain > max_daily:
                             gain = max(0, max_daily - user.daily_xp)
                             grant_minutes = gain // xp_per_minute if xp_per_minute else 0

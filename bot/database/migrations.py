@@ -1351,6 +1351,71 @@ async def migration_betting_power_drift(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_power_drift_logs_day ON betting_power_drift_logs (day)"))
 
 
+async def migration_shop_buffs_v2(conn: AsyncConnection) -> None:
+    shop_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(shop_items)"))).all()}
+    if "buff_json" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN buff_json JSON"))
+    if "duration_seconds" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN duration_seconds INTEGER"))
+    if "max_active_per_user" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN max_active_per_user INTEGER DEFAULT 1"))
+    if "purchase_limit_per_user" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN purchase_limit_per_user INTEGER"))
+    if "purchase_limit_total" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN purchase_limit_total INTEGER"))
+    if "enabled" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT 1"))
+    if "created_at" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN created_at DATETIME"))
+        await conn.execute(text("UPDATE shop_items SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+    if "updated_at" not in shop_cols:
+        await conn.execute(text("ALTER TABLE shop_items ADD COLUMN updated_at DATETIME"))
+        await conn.execute(text("UPDATE shop_items SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS user_buffs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                item_id INTEGER NOT NULL,
+                buff_type VARCHAR(64) NOT NULL,
+                value_percent FLOAT NOT NULL,
+                starts_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ends_at DATETIME NOT NULL,
+                active BOOLEAN NOT NULL DEFAULT 1,
+                metadata_json JSON NULL,
+                FOREIGN KEY(item_id) REFERENCES shop_items(id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_buffs_guild_user_active ON user_buffs (guild_id, user_id, active)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_buffs_guild_user_ends ON user_buffs (guild_id, user_id, ends_at)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS shop_purchase_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                item_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                total_price INTEGER NOT NULL,
+                purchased_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(item_id) REFERENCES shop_items(id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shop_purchase_logs_guild_id ON shop_purchase_logs (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shop_purchase_logs_user_id ON shop_purchase_logs (user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shop_purchase_logs_item_id ON shop_purchase_logs (item_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shop_purchase_logs_purchased_at ON shop_purchase_logs (purchased_at)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1379,4 +1444,5 @@ MIGRATIONS: List[Migration] = [
     migration_betting_schedule_key,
     migration_betting_power_drift,
     migration_betting_automation_idempotency,
+    migration_shop_buffs_v2,
 ]
