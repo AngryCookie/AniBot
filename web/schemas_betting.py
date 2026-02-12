@@ -109,6 +109,21 @@ class BettingPowerDriftLogsOut(BaseModel):
     teams: list[BettingPowerDriftTeamLogRow]
 
 
+
+class BettingAutomationAutoResolveSettings(BaseModel):
+    enabled: bool = False
+    delay_seconds: int = Field(300, ge=0, le=86_400)
+    require_min_bets: int = Field(1, ge=0, le=1_000_000)
+
+
+class BettingAutomationSettings(BaseModel):
+    announce_on_open: bool = True
+    announce_on_close: bool = True
+    announce_channel_id: int | None = None
+    close_message_delay_seconds: int = Field(0, ge=0, le=86_400)
+    auto_resolve: BettingAutomationAutoResolveSettings = Field(default_factory=BettingAutomationAutoResolveSettings)
+
+
 class BettingSettings(BaseModel):
     enabled: bool = True
     announce_channel_id: int | None = None
@@ -118,6 +133,7 @@ class BettingSettings(BaseModel):
     resolve: BettingSettingsResolve = Field(default_factory=BettingSettingsResolve)
     scheduling: "BettingSchedulingSettings" = Field(default_factory=lambda: BettingSchedulingSettings())
     power_drift: BettingPowerDriftSettings = Field(default_factory=BettingPowerDriftSettings)
+    automation: BettingAutomationSettings = Field(default_factory=BettingAutomationSettings)
 
 
 

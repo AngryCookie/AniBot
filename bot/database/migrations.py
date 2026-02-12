@@ -1306,6 +1306,21 @@ async def migration_betting_v1_reporting_indexes(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_match_created_at ON betting_payouts (match_id, created_at)"))
 
 
+
+
+async def migration_betting_automation_idempotency(conn: AsyncConnection) -> None:
+    match_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_matches)"))).all()}
+    if "open_announce_message_id" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN open_announce_message_id BIGINT"))
+    if "close_announce_message_id" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN close_announce_message_id BIGINT"))
+    if "close_announced_at" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN close_announced_at DATETIME"))
+    if "auto_resolve_scheduled_at" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN auto_resolve_scheduled_at DATETIME"))
+    if "auto_resolved_at" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN auto_resolved_at DATETIME"))
+
 async def migration_betting_power_drift(conn: AsyncConnection) -> None:
     team_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_teams)"))).all()}
     if "current_power" not in team_cols:
@@ -1363,4 +1378,5 @@ MIGRATIONS: List[Migration] = [
     migration_betting_v1_reporting_indexes,
     migration_betting_schedule_key,
     migration_betting_power_drift,
+    migration_betting_automation_idempotency,
 ]

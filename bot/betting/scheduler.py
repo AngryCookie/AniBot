@@ -7,15 +7,15 @@ from zoneinfo import ZoneInfo
 
 from bot.betting.power_drift import apply_daily_power_drift
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.betting.enums import BettingMatchStatus
-from bot.betting.models import BettingMatch, BettingTeam
+from bot.betting.models import BettingBet, BettingMatch, BettingTeam
 from bot.betting.schedule import ScheduleGenerationError, generate_month_schedule
-from bot.betting.service import BettingService
+from bot.betting.service import BettingService, announce_match_close, announce_match_open, announce_match_result
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,140 @@ async def update_match_statuses(*, session: AsyncSession, guild_id: int, now: dt
         .values(status=BettingMatchStatus.closed, updated_at=now_utc)
     )
     return int(opened_result.rowcount or 0), int(closed_result.rowcount or 0)
+
+
+async def run_betting_automation_tick(*, session: AsyncSession, bot, guild_id: int, now: dt.datetime | None = None) -> dict[str, int]:
+    service = BettingService(session)
+    cfg = await service._get_betting_settings(guild_id)
+    automation = cfg.get("automation", {})
+    now_utc = now or dt.datetime.utcnow()
+    announce_channel_id = automation.get("announce_channel_id")
+
+    teams = (await session.execute(select(BettingTeam).where(BettingTeam.guild_id == guild_id))).scalars().all()
+    team_names = {t.id: t.name for t in teams}
+    result = {"open_announced": 0, "close_announced": 0, "auto_resolved": 0}
+
+    if bool(automation.get("announce_on_open", True)):
+        open_matches = (
+            await session.execute(
+                select(BettingMatch)
+                .where(
+                    and_(
+                        BettingMatch.guild_id == guild_id,
+                        BettingMatch.status == BettingMatchStatus.open,
+                        BettingMatch.open_announce_message_id.is_(None),
+                        BettingMatch.betting_open_at <= now_utc,
+                    )
+                )
+                .order_by(BettingMatch.betting_open_at.asc())
+            )
+        ).scalars().all()
+        for match in open_matches:
+            msg_id = await announce_match_open(
+                bot=bot,
+                match=match,
+                team_a_name=team_names.get(match.team_a_id, str(match.team_a_id)),
+                team_b_name=team_names.get(match.team_b_id, str(match.team_b_id)),
+                channel_id=match.announce_channel_id or announce_channel_id,
+                now=now_utc,
+            )
+            if msg_id:
+                match.open_announce_message_id = msg_id
+                result["open_announced"] += 1
+
+    if bool(automation.get("announce_on_close", True)):
+        delay_seconds = max(0, int(automation.get("close_message_delay_seconds", 0)))
+        close_deadline = now_utc - dt.timedelta(seconds=delay_seconds)
+        close_matches = (
+            await session.execute(
+                select(BettingMatch)
+                .where(
+                    and_(
+                        BettingMatch.guild_id == guild_id,
+                        BettingMatch.status == BettingMatchStatus.closed,
+                        BettingMatch.close_announce_message_id.is_(None),
+                        BettingMatch.betting_close_at <= close_deadline,
+                    )
+                )
+                .order_by(BettingMatch.betting_close_at.asc())
+            )
+        ).scalars().all()
+        for match in close_matches:
+            stats = await session.execute(
+                select(func.coalesce(func.count(BettingBet.id), 0), func.coalesce(func.sum(BettingBet.amount), 0)).where(
+                    and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match.id)
+                )
+            )
+            bets_count, pool_total = stats.one()
+            msg_id = await announce_match_close(
+                bot=bot,
+                match=match,
+                team_a_name=team_names.get(match.team_a_id, str(match.team_a_id)),
+                team_b_name=team_names.get(match.team_b_id, str(match.team_b_id)),
+                bets_count=int(bets_count or 0),
+                pool_total=int(pool_total or 0),
+                channel_id=match.announce_channel_id or announce_channel_id,
+            )
+            if msg_id:
+                match.close_announce_message_id = msg_id
+                match.close_announced_at = now_utc
+                result["close_announced"] += 1
+
+    auto_resolve = automation.get("auto_resolve", {}) if isinstance(automation, dict) else {}
+    if bool(auto_resolve.get("enabled", False)):
+        delay_seconds = max(0, int(auto_resolve.get("delay_seconds", 300)))
+        min_bets = max(0, int(auto_resolve.get("require_min_bets", 1)))
+        resolve_deadline = now_utc - dt.timedelta(seconds=delay_seconds)
+        candidates = (
+            await session.execute(
+                select(BettingMatch)
+                .where(
+                    and_(
+                        BettingMatch.guild_id == guild_id,
+                        BettingMatch.status == BettingMatchStatus.closed,
+                        BettingMatch.resolved_at.is_(None),
+                        BettingMatch.betting_close_at <= resolve_deadline,
+                    )
+                )
+                .order_by(BettingMatch.betting_close_at.asc())
+            )
+        ).scalars().all()
+        for match in candidates:
+            match.auto_resolve_scheduled_at = match.auto_resolve_scheduled_at or now_utc
+            stats = await session.execute(
+                select(func.coalesce(func.count(BettingBet.id), 0), func.coalesce(func.sum(BettingBet.amount), 0)).where(
+                    and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match.id)
+                )
+            )
+            bets_count, pool_total = stats.one()
+            if int(bets_count or 0) < min_bets:
+                continue
+            try:
+                resolved = await service.resolve_match(guild_id=guild_id, match_id=match.id, now=now_utc)
+                payout_total = await session.scalar(
+                    select(func.coalesce(func.sum(BettingBet.payout), 0)).where(and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match.id))
+                )
+                winner_name = team_names.get(resolved.winner_team_id, "—")
+                top_win = await session.scalar(
+                    select(func.coalesce(func.max(BettingBet.payout), 0)).where(and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match.id))
+                )
+                await announce_match_result(
+                    bot=bot,
+                    guild_id=guild_id,
+                    match=resolved,
+                    winner_name=winner_name,
+                    volume_total=int(pool_total or 0),
+                    payout_total=int(payout_total or 0),
+                    top_win=int(top_win or 0),
+                    channel_id=resolved.announce_channel_id or announce_channel_id,
+                )
+            except Exception:
+                logger.exception("Auto resolve failed", extra={"guild_id": guild_id, "match_id": match.id})
+                continue
+            match.auto_resolved_at = now_utc
+            result["auto_resolved"] += 1
+
+    return result
 
 
 async def apply_power_drift_for_guild(*, session: AsyncSession, guild_id: int, now: dt.datetime | None = None) -> int:

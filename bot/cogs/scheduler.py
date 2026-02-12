@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from discord.ext import commands, tasks
 from sqlalchemy import and_, delete, select, update
 
-from bot.betting.scheduler import apply_power_drift_for_guild, ensure_scheduling_horizon, update_match_statuses
+from bot.betting.scheduler import apply_power_drift_for_guild, ensure_scheduling_horizon, run_betting_automation_tick, update_match_statuses
 from bot.betting.service import BettingService
 from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, GuildConfig, GuildReport, ModLog, PvpSeason, PvpSeasonResult, ServerMonthlyGoal, UserProfile
@@ -348,10 +348,11 @@ class SchedulerCog(commands.Cog):
                                 self._betting_auto_apply_next[guild_id] = now + dt.timedelta(minutes=run_every)
 
                             opened, closed = await update_match_statuses(session=guild_session, guild_id=guild_id, now=now)
+                            automation = await run_betting_automation_tick(session=guild_session, bot=self.bot, guild_id=guild_id, now=now)
                             drift_applied = 0
                             if bool(settings.get("power_drift", {}).get("enabled", True)):
                                 drift_applied = await apply_power_drift_for_guild(session=guild_session, guild_id=guild_id, now=now)
-                            if inserted or opened or closed or drift_applied:
+                            if inserted or opened or closed or drift_applied or any(automation.values()):
                                 logger.info(
                                     "Betting scheduling tick applied",
                                     extra={
@@ -360,6 +361,9 @@ class SchedulerCog(commands.Cog):
                                         "opened": opened,
                                         "closed": closed,
                                         "power_drift_applied": drift_applied,
+                                        "open_announced": automation.get("open_announced", 0),
+                                        "close_announced": automation.get("close_announced", 0),
+                                        "auto_resolved": automation.get("auto_resolved", 0),
                                     },
                                 )
 

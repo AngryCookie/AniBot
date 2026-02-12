@@ -16,6 +16,8 @@ from bot.betting.service import (
     announce_match_result,
     merge_power_drift_settings,
     merge_scheduling_settings,
+    merge_automation_settings,
+    collect_match_totals,
 )
 from bot.database.models import GuildConfig
 
@@ -131,6 +133,7 @@ async def get_betting_settings(guild_id: int = Depends(_require_admin_guild)) ->
     data["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **data.get("resolve", {})}
     data["scheduling"] = merge_scheduling_settings(data.get("scheduling", {}))
     data["power_drift"] = merge_power_drift_settings(data.get("power_drift", {}))
+    data["automation"] = merge_automation_settings(data.get("automation", {}))
     return BettingSettings(**data)
 
 
@@ -673,12 +676,8 @@ async def resolve_match(request: Request, match_id: int, guild_id: int = Depends
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         winner_team = await session.get(BettingTeam, match.winner_team_id) if match.winner_team_id else None
-        stats = await session.execute(
-            select(func.coalesce(func.sum(BettingBet.amount), 0), func.coalesce(func.sum(BettingBet.payout), 0), func.coalesce(func.max(BettingBet.payout), 0)).where(
-                and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match.id)
-            )
-        )
-        volume_total, payout_total, top_win = stats.one()
+        _, volume_total, top_win = await collect_match_totals(session=session, guild_id=guild_id, match_id=match.id)
+        payout_total = await session.scalar(select(func.coalesce(func.sum(BettingBet.payout), 0)).where(and_(BettingBet.guild_id == guild_id, BettingBet.match_id == match.id)))
         await session.commit()
         await session.refresh(match)
 
