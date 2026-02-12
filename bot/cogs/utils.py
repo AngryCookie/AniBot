@@ -12,6 +12,8 @@ from discord.ext import commands
 
 from sqlalchemy import select
 
+from bot.ui import EmbedFactory, reply_error
+
 from bot.database.models import (
     GuildConfig,
     GuildGamblingSettings,
@@ -165,16 +167,26 @@ class HelpView(discord.ui.View):
         self.cog = cog
         self.admin = admin
         self.web_url = web_url
+        self.message: discord.Message | None = None
         if admin and web_url:
             self.add_item(discord.ui.Button(label="Открыть панель", style=discord.ButtonStyle.link, url=web_url))
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            if hasattr(child, "disabled"):
+                child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
     async def _send_section(self, interaction: discord.Interaction, section: str) -> None:
         await self.cog._send_help_section(interaction, section, as_followup=True)
 
     @discord.ui.button(label="Модерация", style=discord.ButtonStyle.secondary)
     async def moderation(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        embed = discord.Embed(title="🛡️ Модерация", description="/warn /mute /kick /ban /purge", color=discord.Color.orange())
-        embed.set_footer(text="Срок действия кнопок: 60с")
+        embed = EmbedFactory.warn("Модерация", "/warn /mute /kick /ban /purge")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="Экономика", style=discord.ButtonStyle.secondary)
@@ -204,25 +216,21 @@ class UtilityCog(commands.Cog):
             interaction.user.guild_permissions.administrator
             or interaction.user.guild_permissions.moderate_members
         )
-        embed = discord.Embed(
-            title="📘 AniBot — помощь",
-            description="Выберите раздел кнопками ниже или используйте `/help <раздел>`.",
-            color=discord.Color.blurple(),
-        )
+        embed = EmbedFactory.info("AniBot — помощь", "Выберите раздел кнопками ниже или используйте `/help <раздел>`.")
         if is_admin:
             web_url = os.getenv("WEB_BASE_URL", "https://example.com/admin")
             embed.add_field(name="🛡️ Админ-команды", value="/warn /mute /kick /ban /purge /settings", inline=False)
             embed.add_field(name="⚙️ Системные", value="/help /ping /about /announce /topic", inline=False)
             embed.add_field(name="🌐 Веб-панель", value=web_url, inline=False)
             view = HelpView(self, admin=True, web_url=web_url)
-            embed.set_footer(text="Срок действия кнопок: 60с")
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            view.message = await interaction.original_response()
             return
         embed.add_field(name="👤 Пользователь", value="/balance /daily /transfer /shop /bets /pvp /rank", inline=False)
         embed.add_field(name="💡 Быстрые действия", value="Получить daily, проверить магазин, поставить ставку, дуэль PvP", inline=False)
-        embed.set_footer(text="Срок действия кнопок: 60с")
         view = HelpView(self, admin=False)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        view.message = await interaction.original_response()
 
     async def _send_help_section(self, interaction: discord.Interaction, section: str, as_followup: bool = False) -> None:
         mapping = {
@@ -233,10 +241,9 @@ class UtilityCog(commands.Cog):
             "leveling": ("📈 Левелинг", "/rank /leaderboard /level", "Общайтесь в чате, чтобы получать опыт."),
         }
         title, cmds, hint = mapping[section]
-        embed = discord.Embed(title=title, color=discord.Color.blurple())
-        embed.add_field(name="Команды", value=cmds, inline=False)
-        embed.add_field(name="Что дальше", value=hint, inline=False)
-        embed.set_footer(text="Срок действия кнопок: 60с")
+        embed = EmbedFactory.info(title.replace("💰 ", "").replace("⚔️ ", "").replace("🎯 ", "").replace("🛒 ", "").replace("📈 ", ""))
+        EmbedFactory.add_kv(embed, "📌 Команды", cmds, inline=False)
+        EmbedFactory.add_section(embed, "💡", "Что дальше", [hint])
         if as_followup:
             await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
@@ -258,7 +265,7 @@ class UtilityCog(commands.Cog):
     @app_commands.command(name="settings", description="Показать настройки сервера")
     async def settings(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
-            await interaction.response.send_message("Команда доступна только на сервере.")
+            await reply_error(interaction, "Команда доступна только на сервере.")
             return
         async with self.bot.db.session() as session:
             guild = await get_or_create_guild(session, interaction.guild.id, "Coins")

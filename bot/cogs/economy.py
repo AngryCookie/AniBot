@@ -10,7 +10,7 @@ from bot.cogs.utils import get_or_create_guild, get_or_create_user, get_role_mul
 from bot.database.models import ModLog
 from bot.database.operations import get_or_create_user_locked
 from bot.services.economy import EconomyService
-from bot.ui import AmountModal, ConfirmView, build_ux_embed
+from bot.ui import AmountModal, ConfirmView, EmbedFactory, reply_error, reply_success
 
 
 class TransferAmountModal(AmountModal):
@@ -34,18 +34,14 @@ class EconomyCog(commands.Cog):
     @app_commands.command(name="balance", description="Показать баланс")
     async def balance(self, interaction: discord.Interaction, member: discord.Member | None = None) -> None:
         if not interaction.guild:
-            await interaction.response.send_message("Команда доступна только на сервере.")
+            await reply_error(interaction, "Команда доступна только на сервере.")
             return
         target = member or interaction.user
         async with self.bot.db.session() as session:
             user = await get_or_create_user(session, interaction.guild.id, target.id)
             guild = await get_or_create_guild(session, interaction.guild.id, "Coins")
-        embed = build_ux_embed(
-            title="💳 Баланс",
-            description=f"{target.mention}: **{user.balance} {guild.currency_name}**",
-            color=discord.Color.green(),
-            next_hint="Используйте кнопки: daily, transfer, shop.",
-        )
+        embed = EmbedFactory.info("Баланс", f"{target.mention}: **{user.balance} {guild.currency_name}**")
+        EmbedFactory.add_section(embed, "💡", "Быстрые действия", ["Нажмите кнопку ниже или используйте slash-команду."])
         view = discord.ui.View(timeout=60)
         view.add_item(discord.ui.Button(label="daily", style=discord.ButtonStyle.secondary, custom_id="eco:daily"))
         view.add_item(discord.ui.Button(label="transfer", style=discord.ButtonStyle.secondary, custom_id="eco:transfer"))
@@ -55,7 +51,7 @@ class EconomyCog(commands.Cog):
     @app_commands.command(name="daily", description="Получить ежедневный доход")
     async def daily(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
-            await interaction.response.send_message("Команда доступна только на сервере.")
+            await reply_error(interaction, "Команда доступна только на сервере.")
             return
 
         async def _confirm(i: discord.Interaction) -> None:
@@ -68,7 +64,11 @@ class EconomyCog(commands.Cog):
                         remaining = 86400 - int((now - user.last_daily_ts).total_seconds())
                         hours = remaining // 3600
                         minutes = (remaining % 3600) // 60
-                        await i.response.edit_message(content=f"До следующего /daily осталось {hours}ч {minutes}м.", embed=None, view=None)
+                        await i.response.edit_message(
+                            content=f"❌ До следующего /daily осталось {hours}ч {minutes}м.\n💡 Попробуйте позже.",
+                            embed=None,
+                            view=None,
+                        )
                         return
                     base_income = int(user.level * 500 * guild.server_rate)
                     multiplier = get_role_multiplier(interaction.user)
@@ -82,19 +82,15 @@ class EconomyCog(commands.Cog):
             await i.response.edit_message(content=f"✅ Вы получили {final_income} {guild.currency_name}.", embed=None, view=None)
 
         view = ConfirmView(author_id=interaction.user.id, on_confirm=_confirm)
-        embed = build_ux_embed(
-            title="🎁 Подтверждение daily",
-            description="Получить ежедневную награду сейчас?",
-            color=discord.Color.orange(),
-            next_hint="Нажмите «Подтвердить» для начисления.",
-        )
+        embed = EmbedFactory.warn("Подтверждение daily", "Получить ежедневную награду сейчас?")
+        EmbedFactory.add_section(embed, "💡", "Что дальше", ["Нажмите «Подтвердить» для начисления."])
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         view.message = await interaction.original_response()
 
     @app_commands.command(name="transfer", description="Перевести валюту")
     async def transfer(self, interaction: discord.Interaction, member: discord.Member, amount: int | None = None) -> None:
         if not interaction.guild:
-            await interaction.response.send_message("Команда доступна только на сервере.")
+            await reply_error(interaction, "Команда доступна только на сервере.")
             return
         if amount is None:
             await interaction.response.send_modal(TransferAmountModal(self, interaction, member))
@@ -103,10 +99,7 @@ class EconomyCog(commands.Cog):
 
     async def _run_transfer(self, interaction: discord.Interaction, member: discord.Member, amount: int) -> None:
         if amount <= 0:
-            if interaction.response.is_done():
-                await interaction.followup.send("Сумма должна быть больше 0.", ephemeral=True)
-            else:
-                await interaction.response.send_message("Сумма должна быть больше 0.", ephemeral=True)
+            await reply_error(interaction, "Сумма должна быть больше 0.", "Укажите положительное число.")
             return
         async with self.bot.db.session() as session:
             async with session.begin():
@@ -118,20 +111,12 @@ class EconomyCog(commands.Cog):
                 max_transfer = int(settings.get("transfer_max", 100000))
                 confirm_threshold = int(settings.get("transfer_confirm_threshold", 10000))
                 if amount > max_transfer:
-                    msg = "Сумма превышает лимит перевода."
-                    if interaction.response.is_done():
-                        await interaction.followup.send(msg, ephemeral=True)
-                    else:
-                        await interaction.response.send_message(msg, ephemeral=True)
+                    await reply_error(interaction, "Сумма превышает лимит перевода.", "Уменьшите сумму и попробуйте снова.")
                     return
                 fee = int(amount * fee_percent)
                 total = amount + fee
                 if sender.balance < total:
-                    msg = f"Недостаточно средств: нужно {total}, доступно {sender.balance}."
-                    if interaction.response.is_done():
-                        await interaction.followup.send(msg, ephemeral=True)
-                    else:
-                        await interaction.response.send_message(msg, ephemeral=True)
+                    await reply_error(interaction, f"Недостаточно средств: нужно {total}, доступно {sender.balance}.")
                     return
 
         async def _execute_transfer(i: discord.Interaction) -> None:
@@ -145,12 +130,10 @@ class EconomyCog(commands.Cog):
             await i.response.edit_message(content=f"✅ Перевод: {amount} {guild.currency_name}. Комиссия: {fee}. Итого списано: {total}.", embed=None, view=None)
 
         if amount >= confirm_threshold:
-            embed = build_ux_embed(
-                title="💸 Подтверждение перевода",
-                description=f"Получатель: {member.mention}\nСумма: {amount} {guild.currency_name}\nКомиссия: {fee}\nИтого: {total}",
-                color=discord.Color.orange(),
-                next_hint="Проверьте сумму и подтвердите операцию.",
-            )
+            embed = EmbedFactory.warn("Подтверждение перевода", f"Получатель: {member.mention}")
+            EmbedFactory.add_kv(embed, "💸 Сумма", f"{amount} {guild.currency_name}")
+            EmbedFactory.add_kv(embed, "🧾 Комиссия", str(fee))
+            EmbedFactory.add_kv(embed, "📉 Итого", str(total))
             view = ConfirmView(author_id=interaction.user.id, on_confirm=_execute_transfer)
             if interaction.response.is_done():
                 msg = await interaction.followup.send(embed=embed, view=view, ephemeral=True)
@@ -167,11 +150,7 @@ class EconomyCog(commands.Cog):
                 if fee > 0:
                     await economy.debit(interaction.guild.id, interaction.user.id, fee, "transfer_fee", {"recipient_user_id": member.id}, ledger_type="spend")
                 session.add(ModLog(guild_id=interaction.guild.id, action="economy_transfer", moderator_id=interaction.user.id, user_id=member.id, reason=f"{amount}"))
-        msg = f"✅ Перевод выполнен: {amount} {guild.currency_name} (комиссия {fee}, итого {total})."
-        if interaction.response.is_done():
-            await interaction.followup.send(msg, ephemeral=True)
-        else:
-            await interaction.response.send_message(msg, ephemeral=True)
+        await reply_success(interaction, f"Перевод выполнен: {amount} {guild.currency_name} (комиссия {fee}, итого {total}).")
 
 
 async def setup(bot: commands.Bot) -> None:
