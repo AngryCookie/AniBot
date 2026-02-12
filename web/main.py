@@ -25,6 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from bot.analytics.economy import build_economy_analytics
 from bot.analytics.insights import build_economy_insights
+from bot.analytics.recommendations import build_economy_recommendations
 from bot.analytics.service import AnalyticsService
 from bot.database.migrations import MIGRATIONS
 from bot.database.models import (
@@ -78,6 +79,7 @@ from .schemas import (
     EconomyAnalyticsSummaryResponse,
     EconomyInsight,
     EconomySettings,
+    EconomyRecommendationsResponse,
     EconomySinkSettings,
     FeatureFlagState,
     FeatureFlagUpdate,
@@ -1027,6 +1029,27 @@ async def get_economy_insights(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return build_economy_insights(analytics=analytics, period_days=period)
+
+
+@app.get(
+    "/api/guilds/{guild_id}/economy/recommendations",
+    response_model=EconomyRecommendationsResponse,
+)
+async def get_economy_recommendations(
+    guild_id: int,
+    days: int = 7,
+    access_token: str = Depends(get_access_token),
+) -> EconomyRecommendationsResponse:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    try:
+        return await build_economy_recommendations(
+            database=database,
+            guild_id=guild_id,
+            days=days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _validate_analytics_period(period: int) -> int:

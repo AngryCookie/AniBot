@@ -4,6 +4,7 @@ import { initOverview } from "./pages/overview.js";
 import { initLeveling } from "./pages/leveling.js";
 import { initEconomy } from "./pages/economy.js";
 import { initEconomyAnalytics } from "./pages/economy_analytics.js";
+import { initEconomyRecommendations } from "./pages/economy_recommendations.js";
 import { initCommunityGoal } from "./pages/community_goal.js";
 import { initMonthlyGoals } from "./pages/monthly_goals.js";
 import { initReferralPromo } from "./pages/referral_promo.js";
@@ -27,6 +28,7 @@ const routes = {
   history: { title: "History", page: "/static/pages/history.html" },
   leveling: { title: "Leveling", page: "/static/pages/leveling.html", init: () => initLeveling(appState.guildId) },
   "economy-analytics": { title: "Economy Analytics", page: "/static/pages/economy-analytics.html", init: () => initEconomyAnalytics(appState.guildId) },
+  "economy-recommendations": { title: "Economy Recommendations", page: "/static/pages/economy-recommendations.html", init: () => initEconomyRecommendations(appState.guildId) },
   gambling: { title: "Gambling", page: "/static/pages/gambling.html", init: () => initSettingsPage("gambling") },
   "community-goal": { title: "Community Goal", page: "/static/pages/community-goal.html", init: () => initCommunityGoal(appState.guildId) },
   "monthly-goals": { title: "Monthly Goals", page: "/static/pages/monthly-goals.html", init: () => initMonthlyGoals(appState.guildId) },

@@ -73,3 +73,7 @@ export const getEconomyAnalytics = (guildId, period) =>
 
 export const getEconomyInsights = (guildId, period) =>
   apiFetch(`/api/guilds/${guildId}/economy/insights?period=${period}`);
+
+
+export const getEconomyRecommendations = (guildId, days) =>
+  apiFetch(`/api/guilds/${guildId}/economy/recommendations?days=${days}`);
