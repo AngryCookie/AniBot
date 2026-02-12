@@ -22,6 +22,7 @@ const routes = {
   pvp: { title: "PvP", page: "/static/pages/pvp.html", init: () => initPvp(appState.guildId) },
   growth: { title: "Growth", page: "/static/pages/growth.html", init: () => initGrowth(appState.guildId) },
   logs: { title: "Logs", page: "/static/pages/logs.html", init: () => initSettingsPage("logs") },
+  passport: { title: "Passport", page: "/static/pages/passport.html", init: () => initSettingsPage("passport") },
   "feature-flags": { title: "Feature Flags", page: "/static/pages/feature-flags.html" },
   history: { title: "History", page: "/static/pages/history.html" },
   leveling: { title: "Leveling", page: "/static/pages/leveling.html", init: () => initLeveling(appState.guildId) },
@@ -50,6 +51,10 @@ const fieldHelpText = {
     log_moderation: "Логировать модерацию и предупреждения.",
     log_economy: "Логировать экономические транзакции.",
     log_gambling: "Логировать игровые ставки и результаты.",
+  },
+  passport: {
+    enabled: "Включает slash-команду /passport на сервере.",
+    hide_balance_for_others: "Скрывает баланс при просмотре чужого профиля.",
   },
   shop: {
     enabled: "Включает модуль магазина.",

@@ -86,6 +86,7 @@ from .schemas import (
     GuildSettings,
     LevelingSettings,
     LogsSettings,
+    PassportSettings,
     OverviewStats,
     PvpSeasonSettings,
     PvpSettings,
@@ -670,6 +671,49 @@ def _require_readonly_access(request: Request) -> None:
     if len(window) >= READONLY_RATE_LIMIT:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
     window.append(now)
+
+
+
+
+def _passport_settings_from_map(settings_map: Dict[str, Any]) -> PassportSettings:
+    raw = settings_map.get("passport", {}) if isinstance(settings_map, dict) else {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return PassportSettings(
+        enabled=bool(raw.get("enabled", True)),
+        hide_balance_for_others=bool(raw.get("hide_balance_for_others", True)),
+    )
+
+
+@app.get("/api/guilds/{guild_id}/passport", response_model=PassportSettings)
+async def get_passport_settings(context: Dict[str, Any] = Depends(_settings_dependency("passport"))):
+    return _passport_settings_from_map(context["settings_map"])
+
+
+@app.put("/api/guilds/{guild_id}/passport", response_model=PassportSettings)
+async def update_passport_settings(
+    payload: PassportSettings,
+    request: Request,
+    context: Dict[str, Any] = Depends(_settings_dependency("passport")),
+    access_token: str = Depends(get_access_token),
+):
+    config = context["config"]
+    settings_map = context["settings_map"]
+    previous_settings = dict(settings_map.get("passport", {}))
+    settings_map["passport"] = payload.dict()
+    _save_settings(config, settings_map)
+    async with database.session() as session:
+        session.add(config)
+        await session.commit()
+    await _record_config_change(
+        guild_id=config.guild_id,
+        category="passport",
+        previous_settings=previous_settings,
+        new_settings=payload.dict(),
+        reason=request.headers.get("X-Change-Reason", ""),
+        access_token=access_token,
+    )
+    return payload
 
 
 @app.get("/api/guilds/{guild_id}/settings", response_model=GuildSettings)

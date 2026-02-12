@@ -91,6 +91,13 @@ class LogsSettings(BaseModel):
     log_gambling: bool = False
 
 
+
+
+class PassportSettings(BaseModel):
+    enabled: bool = True
+    hide_balance_for_others: bool = True
+
+
 class FeatureToggles(BaseModel):
     leveling_enabled: bool = True
     leveling_roles_enabled: bool = True

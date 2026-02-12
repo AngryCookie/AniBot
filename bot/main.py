@@ -33,6 +33,7 @@ COGS = [
     "bot.cogs.observability",
     "bot.cogs.reports",
     "bot.cogs.word_emoji_stats",
+    "bot.cogs.passport",
 ]
 
 
