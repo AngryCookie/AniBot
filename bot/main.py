@@ -22,6 +22,7 @@ COGS = [
     "bot.cogs.leveling",
     "bot.cogs.economy",
     "bot.cogs.shop",
+    "bot.cogs.jobs",
     "bot.cogs.gambling",
     "bot.cogs.pvp",
     "bot.cogs.betting",
