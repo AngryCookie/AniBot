@@ -1284,6 +1284,21 @@ async def migration_betting_v1_analytics_indexes(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_status ON betting_matches (guild_id, status)"))
 
 
+
+
+async def migration_betting_schedule_key(conn: AsyncConnection) -> None:
+    match_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_matches)"))).all()}
+    if "schedule_key" not in match_cols:
+        await conn.execute(text("ALTER TABLE betting_matches ADD COLUMN schedule_key VARCHAR(128)"))
+
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_schedule_key ON betting_matches (schedule_key)"))
+    await conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_betting_matches_guild_schedule_key "
+            "ON betting_matches (guild_id, schedule_key) WHERE schedule_key IS NOT NULL"
+        )
+    )
+
 async def migration_betting_v1_reporting_indexes(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_matches_guild_resolved_at ON betting_matches (guild_id, resolved_at)"))
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_bets_match_created_at ON betting_bets (match_id, created_at)"))
@@ -1316,4 +1331,5 @@ MIGRATIONS: List[Migration] = [
     migration_betting_v1_admin_core,
     migration_betting_v1_analytics_indexes,
     migration_betting_v1_reporting_indexes,
+    migration_betting_schedule_key,
 ]

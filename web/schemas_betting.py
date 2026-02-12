@@ -86,6 +86,44 @@ class BettingSettings(BaseModel):
     max_bet_default: int = Field(5000, ge=1, le=1_000_000)
     odds: BettingSettingsOdds = Field(default_factory=BettingSettingsOdds)
     resolve: BettingSettingsResolve = Field(default_factory=BettingSettingsResolve)
+    scheduling: BettingSchedulingSettings = Field(default_factory=BettingSchedulingSettings)
+
+
+
+class BettingSchedulingMonthTemplate(BaseModel):
+    days_of_week: list[int] = Field(default_factory=lambda: [1, 2, 3, 4, 5, 6, 7], min_length=1, max_length=7)
+    matches_per_day: int = Field(1, ge=1, le=24)
+    start_hour: int = Field(18, ge=0, le=23)
+    betting_open_minutes_before: int = Field(120, ge=1, le=10_000)
+    betting_close_minutes_before: int = Field(10, ge=0, le=10_000)
+
+
+class BettingSchedulingPairingRules(BaseModel):
+    avoid_same_pair_days: int = Field(14, ge=0, le=365)
+    prefer_active_teams: bool = True
+    min_active_teams: int = Field(4, ge=2, le=128)
+
+
+class BettingSchedulingSettings(BaseModel):
+    enabled: bool = True
+    timezone: str = Field("UTC", min_length=1, max_length=64)
+    month_template: BettingSchedulingMonthTemplate = Field(default_factory=BettingSchedulingMonthTemplate)
+    pairing_rules: BettingSchedulingPairingRules = Field(default_factory=BettingSchedulingPairingRules)
+
+
+class BettingGeneratedMatchOut(BaseModel):
+    date_time_local: dt.datetime
+    betting_open_at_utc: dt.datetime
+    betting_close_at_utc: dt.datetime
+    team_a_id: int
+    team_b_id: int
+    seed_key: str
+
+
+class BettingScheduleApplyOut(BaseModel):
+    inserted: int
+    skipped_existing: int
+    total_generated: int
 
 
 class BettingAnalyticsKpis(BaseModel):

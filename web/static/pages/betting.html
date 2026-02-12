@@ -62,6 +62,38 @@
   </form>
 </section>
 
+
+<section class="card">
+  <h4>Scheduling (P3.1)</h4>
+  <form id="bettingSchedulingForm">
+    <label><span>Включено</span><input type="checkbox" name="enabled" /></label>
+    <label><span>Timezone</span><input type="text" name="timezone" required /></label>
+    <label><span>Дни недели (1-7, через запятую)</span><input type="text" name="days_of_week" required /></label>
+    <label><span>Матчей в день</span><input type="number" name="matches_per_day" min="1" required /></label>
+    <label><span>Час старта (локальный TZ)</span><input type="number" name="start_hour" min="0" max="23" required /></label>
+    <label><span>Открытие ставок за (мин)</span><input type="number" name="betting_open_minutes_before" min="1" required /></label>
+    <label><span>Закрытие ставок за (мин)</span><input type="number" name="betting_close_minutes_before" min="0" required /></label>
+    <label><span>avoid_same_pair_days</span><input type="number" name="avoid_same_pair_days" min="0" required /></label>
+    <label><span>prefer_active_teams</span><input type="checkbox" name="prefer_active_teams" checked /></label>
+    <label><span>min_active_teams</span><input type="number" name="min_active_teams" min="2" required /></label>
+    <div class="footer-actions"><button type="submit">Сохранить scheduling</button></div>
+  </form>
+
+  <form id="bettingScheduleGenerateForm" style="margin-top: 1rem;">
+    <label><span>Год</span><input type="number" name="year" min="2000" max="2100" required /></label>
+    <label><span>Месяц</span><input type="number" name="month" min="1" max="12" required /></label>
+    <div class="footer-actions">
+      <button type="button" id="schedulePreviewBtn">Generate Preview</button>
+      <button type="button" id="scheduleApplyBtn">Apply</button>
+    </div>
+  </form>
+
+  <table class="table" style="margin-top: 1rem;">
+    <thead><tr><th>Local time</th><th>Team A</th><th>Team B</th><th>Open UTC</th><th>Close UTC</th><th>Key</th></tr></thead>
+    <tbody id="schedulePreviewBody"></tbody>
+  </table>
+</section>
+
 <section class="card">
   <h4>Команды</h4>
   <form id="teamForm">

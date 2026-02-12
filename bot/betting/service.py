@@ -31,6 +31,22 @@ DEFAULT_BETTING_SETTINGS: dict[str, Any] = {
         "power_influence": 0.50,
     },
     "resolve": {"power_weight": 0.60},
+    "scheduling": {
+        "enabled": True,
+        "timezone": "UTC",
+        "month_template": {
+            "days_of_week": [1, 2, 3, 4, 5, 6, 7],
+            "matches_per_day": 1,
+            "start_hour": 18,
+            "betting_open_minutes_before": 120,
+            "betting_close_minutes_before": 10,
+        },
+        "pairing_rules": {
+            "avoid_same_pair_days": 14,
+            "prefer_active_teams": True,
+            "min_active_teams": 4,
+        },
+    },
 }
 
 
@@ -256,6 +272,16 @@ class BettingService:
         settings.update(payload.get("betting", {}))
         settings["odds"] = {**DEFAULT_BETTING_SETTINGS["odds"], **settings.get("odds", {})}
         settings["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **settings.get("resolve", {})}
+        scheduling = {**DEFAULT_BETTING_SETTINGS["scheduling"], **settings.get("scheduling", {})}
+        scheduling["month_template"] = {
+            **DEFAULT_BETTING_SETTINGS["scheduling"]["month_template"],
+            **scheduling.get("month_template", {}),
+        }
+        scheduling["pairing_rules"] = {
+            **DEFAULT_BETTING_SETTINGS["scheduling"]["pairing_rules"],
+            **scheduling.get("pairing_rules", {}),
+        }
+        settings["scheduling"] = scheduling
         return settings
 
     def _choose_weighted_winner(self, team_a: BettingTeam, team_b: BettingTeam, cfg: dict[str, Any]) -> BettingTeam:
