@@ -156,6 +156,7 @@ from .security import (
     fetch_user,
     fetch_user_guilds,
     get_access_token,
+    get_access_token_failure_reason,
     has_guild_permission,
     validate_session_encryption_key,
 )
@@ -218,6 +219,41 @@ ALLOWED_ANALYTICS_PERIODS = {7, 30, 90}
 MONTHLY_REPORTS_ENABLED_FLAG = "monthly_reports_enabled"
 MONTHLY_REPORTS_AUTOPOST_FLAG = "monthly_reports_autopost"
 GROWTH_ENABLED_FLAG = "growth_enabled"
+
+
+def _is_dev_env() -> bool:
+    return settings.app_env in {"dev", "development", "local"}
+
+
+def _canonicalize_host(host: str) -> str:
+    return host.split(":", 1)[0].strip().lower()
+
+
+@app.middleware("http")
+async def canonical_host_middleware(request: Request, call_next):
+    host_header = request.headers.get("host", "")
+    request_host = _canonicalize_host(host_header or (request.url.hostname or ""))
+
+    if settings.allowed_hosts and request_host and request_host not in settings.allowed_hosts:
+        logger.warning(
+            "request.host.not_allowed",
+            extra={"request_host": request_host, "allowed_hosts": list(settings.allowed_hosts)},
+        )
+
+    if request_host == "testserver":
+        return await call_next(request)
+
+    if _is_dev_env() and settings.canonical_host and request_host and request_host != settings.canonical_host:
+        canonical_port = request.url.port
+        canonical_netloc = settings.canonical_host + (f":{canonical_port}" if canonical_port else "")
+        canonical_url = str(request.url.replace(netloc=canonical_netloc))
+        logger.warning(
+            "request.host.canonical_redirect",
+            extra={"request_host": request_host, "canonical_host": settings.canonical_host, "path": request.url.path},
+        )
+        return RedirectResponse(url=canonical_url, status_code=307)
+
+    return await call_next(request)
 
 
 @app.on_event("startup")
@@ -291,9 +327,18 @@ async def login(request: Request) -> RedirectResponse:
 async def auth_callback(request: Request, code: str, state: str = "") -> RedirectResponse:
     if not settings.discord_client_secret or not settings.discord_redirect_uri:
         raise HTTPException(status_code=500, detail="Discord OAuth not configured")
+
+    request_host = (request.url.hostname or "").lower()
+    if settings.canonical_host and request_host and request_host != settings.canonical_host:
+        logger.warning(
+            "oauth.callback.host_mismatch",
+            extra={"request_host": request_host, "expected_host": settings.canonical_host},
+        )
+
     expected_state = request.session.pop("oauth_state", None)
     if not expected_state or state != expected_state:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
     data = {
         "client_id": settings.discord_client_id,
         "client_secret": settings.discord_client_secret,
@@ -311,6 +356,7 @@ async def auth_callback(request: Request, code: str, state: str = "") -> Redirec
         raise HTTPException(status_code=502, detail="OAuth provider unavailable") from exc
     if response.status_code != 200:
         raise HTTPException(status_code=400, detail="OAuth exchange failed")
+
     payload = response.json()
     access_token = payload.get("access_token", "")
     if not access_token:
@@ -326,7 +372,19 @@ async def auth_callback(request: Request, code: str, state: str = "") -> Redirec
     request.session["refresh_token"] = encrypt_token(payload.get("refresh_token", ""))
     request.session["expires_at"] = int(time.time()) + max(expires_in, 0)
     request.session["discord_user_id"] = user_id
-    return RedirectResponse(url="/servers.html", status_code=302)
+
+    guild_id = request.query_params.get("guild_id", "")
+    if not guild_id:
+        try:
+            guilds = await fetch_user_guilds(access_token)
+            allowed = [g for g in guilds if int(g.get("permissions", 0)) & 0x28]
+            if allowed:
+                guild_id = str(allowed[0].get("id", ""))
+        except HTTPException:
+            guild_id = ""
+
+    destination = f"/app.html?guild_id={guild_id}" if guild_id else "/servers.html"
+    return RedirectResponse(url=destination, status_code=302)
 
 
 @app.get("/auth/logout")
@@ -350,17 +408,22 @@ async def get_guilds(access_token: str = Depends(get_access_token)) -> Dict[str,
 
 @app.get("/api/debug/session")
 async def debug_session(request: Request) -> Dict[str, Any]:
-    if settings.app_env not in {"dev", "development", "local"}:
+    if not _is_dev_env():
         raise HTTPException(status_code=404, detail="Not found")
 
     now = int(time.time())
     expires_at = int(request.session.get("expires_at", 0) or 0)
+    reason = get_access_token_failure_reason(request)
     return {
         "cookie_present": settings.session_cookie_name in request.cookies,
+        "host": request.url.hostname,
+        "scheme": request.url.scheme,
+        "request_host_header": request.headers.get("host", ""),
         "session_keys": sorted(request.session.keys()),
         "expires_at": expires_at,
         "now": now,
         "expired": bool(expires_at and expires_at <= now),
+        "access_token_failure_reason": reason.value if reason else None,
     }
 
 

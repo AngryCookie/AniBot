@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class Settings:
     session_cookie_path: str
     cors_allowed_origins: tuple[str, ...]
     app_env: str
+    allowed_hosts: tuple[str, ...]
+    canonical_host: str
 
 
 def _require_env(name: str, *, allow_empty: bool = False) -> str:
@@ -88,4 +91,10 @@ settings = Settings(
         if origin.strip()
     ),
     app_env=os.getenv("APP_ENV", "development").strip().lower(),
+    allowed_hosts=tuple(
+        host.strip().lower()
+        for host in os.getenv("ALLOWED_HOSTS", "").split(",")
+        if host.strip()
+    ),
+    canonical_host=(urlparse(os.getenv("WEB_BASE_URL", "http://localhost:8000")).hostname or "").lower(),
 )

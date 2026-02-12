@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from enum import Enum
 from typing import Any, Dict, List
 
 import httpx
@@ -14,6 +15,36 @@ DISCORD_API_BASE = "https://discord.com/api"
 ADMINISTRATOR_BIT = 0x8
 MANAGE_GUILD_BIT = 0x20
 logger = logging.getLogger(__name__)
+
+
+class SessionFailureReason(str, Enum):
+    MISSING_COOKIE = "missing_cookie"
+    MISSING_TOKEN = "missing_token"
+    EXPIRED = "expired"
+    DECRYPT_FAILED = "decrypt_failed"
+
+
+def get_access_token_failure_reason(request: Request) -> SessionFailureReason | None:
+    cookies = getattr(request, "cookies", {}) or {}
+    session = getattr(request, "session", {}) or {}
+    cookie_present = settings.session_cookie_name in cookies
+    encrypted_token = session.get("access_token")
+
+    if not cookie_present and not encrypted_token:
+        return SessionFailureReason.MISSING_COOKIE
+    if not encrypted_token:
+        return SessionFailureReason.MISSING_TOKEN
+
+    expires_at = int(session.get("expires_at", 0) or 0)
+    if expires_at and expires_at <= int(time.time()):
+        return SessionFailureReason.EXPIRED
+
+    try:
+        decrypt_token(encrypted_token)
+    except Exception:
+        return SessionFailureReason.DECRYPT_FAILED
+
+    return None
 
 
 def _build_fernet(key: str) -> Fernet:
@@ -54,21 +85,34 @@ def get_access_token(request: Request) -> str:
     session = getattr(request, "session", {}) or {}
     cookie_present = settings.session_cookie_name in cookies
     session_keys = sorted(session.keys())
+    reason = get_access_token_failure_reason(request)
     logger.info(
         "session.access_token.request",
-        extra={"cookie_present": cookie_present, "session_keys": session_keys},
+        extra={
+            "cookie_present": cookie_present,
+            "session_keys": session_keys,
+            "failure_reason": reason.value if reason else None,
+        },
     )
 
+    if reason is SessionFailureReason.MISSING_COOKIE:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
+
     encrypted_token = session.get("access_token")
-    if not encrypted_token:
+    if reason is SessionFailureReason.MISSING_TOKEN or not encrypted_token:
         logger.info("session.access_token.missing", extra={"cookie_present": cookie_present, "session_keys": session_keys})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
     expires_at = int(session.get("expires_at", 0) or 0)
-    if expires_at and expires_at <= int(time.time()):
+    if reason is SessionFailureReason.EXPIRED:
         session.clear()
         logger.info("session.access_token.expired", extra={"expires_at": expires_at})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+
+    if reason is SessionFailureReason.DECRYPT_FAILED:
+        session.clear()
+        logger.warning("session.access_token.decrypt_failed")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not logged in")
 
     return decrypt_token(encrypted_token)
 
