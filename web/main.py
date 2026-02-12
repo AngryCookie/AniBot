@@ -184,6 +184,7 @@ app.add_middleware(
     same_site=settings.session_same_site,
     https_only=settings.session_https_only,
     max_age=settings.session_max_age_seconds,
+    path=settings.session_cookie_path,
 )
 app.middleware("http")(request_logger())
 

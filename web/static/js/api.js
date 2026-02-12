@@ -15,13 +15,19 @@ export const apiFetch = async (url, options = {}) => {
   });
 
   if (response.status === 401) {
-    window.location.href = "/login.html";
-    return null;
+    const detail = await response.json().catch(() => ({}));
+    const message = detail.message || detail.detail || "Сессия истекла, войдите снова";
+    const error = new Error(message);
+    error.status = 401;
+    if (apiErrorHandler) {
+      apiErrorHandler(message, 401);
+    }
+    throw error;
   }
 
   if (!response.ok) {
-    const detail = await response.json().catch(() => ({ detail: "Request failed" }));
-    const message = detail.detail || "Request failed";
+    const detail = await response.json().catch(() => ({}));
+    const message = detail.message || detail.detail || "Request failed";
     if (apiErrorHandler) {
       apiErrorHandler(message, response.status);
     }

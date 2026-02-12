@@ -29,13 +29,16 @@ const apiFetch = async (url, options = {}) => {
   });
 
   if (response.status === 401) {
-    window.location.href = "/login.html";
-    return null;
+    const detail = await response.json().catch(() => ({}));
+    const message = detail.message || detail.detail || "Сессия истекла, войдите снова";
+    const error = new Error(message);
+    error.status = 401;
+    throw error;
   }
 
   if (!response.ok) {
-    const detail = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(detail.detail || "Request failed");
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(detail.message || detail.detail || "Request failed");
   }
 
   return response.status === 204 ? null : response.json();
@@ -47,8 +50,10 @@ const formatNumber = (value) =>
   }).format(Number(value) || 0);
 
 const getGuildId = () => {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("guild_id");
+  const search = new URLSearchParams(window.location.search).get("guild_id");
+  if (search) return search;
+  const hashPart = window.location.hash.split("?")[1] || "";
+  return new URLSearchParams(hashPart).get("guild_id");
 };
 
 const updateNavLinks = (guildId) => {
