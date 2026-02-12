@@ -87,23 +87,43 @@ class TavernView(discord.ui.View):
         self.cog = cog
         self.guild_id = guild_id
         self.user_id = user_id
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        if getattr(self, "message", None):
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await reply_error(interaction, "Это меню не для вас.")
             return False
         return True
-    @discord.ui.button(label="🗡 Attack Slot", style=discord.ButtonStyle.primary)
+
+    @discord.ui.button(label="🛒 Магазин", style=discord.ButtonStyle.secondary)
+    async def shop(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.cog._open_tavern_slot_picker(interaction)
+
+    @discord.ui.button(label="🗡 Выбрать Attack", style=discord.ButtonStyle.primary)
     async def attack_slot(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await self.cog._open_tavern_shop(interaction, slot_type="attack")
-    @discord.ui.button(label="🛡 Defense Slot", style=discord.ButtonStyle.primary)
+
+    @discord.ui.button(label="🛡 Выбрать Defense", style=discord.ButtonStyle.primary)
     async def defense_slot(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await self.cog._open_tavern_shop(interaction, slot_type="defense")
-    @discord.ui.button(label="🛒 Магазин таверны", style=discord.ButtonStyle.secondary)
-    async def shop(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        await self.cog._open_tavern_shop(interaction, slot_type=None)
-    @discord.ui.button(label="❌ Снять предмет", style=discord.ButtonStyle.danger)
-    async def unequip(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        await interaction.response.send_message("Выберите слот: /tavern_remove slot:attack|defense", ephemeral=True)
+
+    @discord.ui.button(label="❌ Снять Attack", style=discord.ButtonStyle.danger)
+    async def remove_attack(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.cog._confirm_unequip(interaction, "attack")
+
+    @discord.ui.button(label="❌ Снять Defense", style=discord.ButtonStyle.danger)
+    async def remove_defense(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.cog._confirm_unequip(interaction, "defense")
+
+
 class PvpCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -223,16 +243,7 @@ class PvpCog(commands.Cog):
             if not settings.get("enabled", True):
                 await reply_error(interaction, "Таверна отключена администратором.")
                 return
-            loadout = await service.get_or_create_loadout(interaction.guild.id, interaction.user.id)
-            now = dt.datetime.utcnow()
-            def _fmt(ends_at):
-                if not ends_at or ends_at <= now:
-                    return "пусто"
-                left = int((ends_at - now).total_seconds())
-                return f"активно, осталось {left // 60}м"
-            embed = EmbedFactory.info("Таверна PvP", "Ровно 2 слота: Attack / Defense.")
-            EmbedFactory.add_kv(embed, "🗡 Attack", _fmt(loadout.attack_ends_at), inline=False)
-            EmbedFactory.add_kv(embed, "🛡 Defense", _fmt(loadout.defense_ends_at), inline=False)
+            embed = await self._build_tavern_embed(session, interaction.guild.id, interaction.user.id, settings)
             view = TavernView(self, interaction.guild.id, interaction.user.id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         view.message = await interaction.original_response()
@@ -254,48 +265,102 @@ class PvpCog(commands.Cog):
             ephemeral=True,
         )
 
+    async def _build_tavern_embed(self, session, guild_id: int, user_id: int, settings: dict | None = None) -> discord.Embed:
+        service = TavernService(session)
+        settings = settings or await service.get_tavern_settings(guild_id)
+        loadout = await service.get_or_create_loadout(guild_id, user_id)
+        now = dt.datetime.utcnow()
+
+        attack_item = await session.get(TavernItem, int(loadout.attack_item_id)) if loadout.attack_item_id else None
+        defense_item = await session.get(TavernItem, int(loadout.defense_item_id)) if loadout.defense_item_id else None
+
+        def _fmt(item: TavernItem | None, ends_at: dt.datetime | None) -> str:
+            if not item or not ends_at or ends_at <= now:
+                return "Пусто"
+            left = int((ends_at - now).total_seconds())
+            hours = max(0, left // 3600)
+            mins = max(0, (left % 3600) // 60)
+            return f"**{item.name}** • {item.effect_type}: {item.value} • осталось {hours}ч {mins}м"
+
+        caps = settings.get("max_bonus_caps", {}) if isinstance(settings, dict) else {}
+        info = (
+            f"📌 Правила: берём {str(settings.get('stacking_rule', 'max')).upper()} бонус по типу • "
+            f"Капы: атака {caps.get('attack_bonus_percent', 15)}%, защита {caps.get('defense_bonus_percent', 15)}%, "
+            f"crit {caps.get('crit_chance_percent', 5)}%, dodge {caps.get('dodge_chance_percent', 5)}%"
+        )
+        embed = EmbedFactory.info("Таверна PvP", info)
+        EmbedFactory.add_kv(embed, "🗡 Attack", _fmt(attack_item, loadout.attack_ends_at), inline=False)
+        EmbedFactory.add_kv(embed, "🛡 Defense", _fmt(defense_item, loadout.defense_ends_at), inline=False)
+        return embed
+
+    async def _confirm_unequip(self, interaction: discord.Interaction, slot_type: str) -> None:
+        async def _confirm(i: discord.Interaction) -> None:
+            async with self.bot.db.session() as session:
+                async with session.begin():
+                    await TavernService(session).unequip_slot(
+                        guild_id=interaction.guild.id,
+                        user_id=interaction.user.id,
+                        slot_type=slot_type,
+                    )
+                    embed = await self._build_tavern_embed(session, interaction.guild.id, interaction.user.id)
+            await i.response.edit_message(embed=embed, view=None)
+
+        view = ConfirmView(author_id=interaction.user.id, on_confirm=_confirm)
+        await interaction.response.send_message(
+            embed=EmbedFactory.warn("Подтверждение", f"Снять предмет из слота **{slot_type}**?"),
+            view=view,
+            ephemeral=True,
+        )
+        view.message = await interaction.original_response()
+
+    async def _open_tavern_slot_picker(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            embed=EmbedFactory.info("Магазин таверны", "Сначала выберите слот: 🗡 Attack или 🛡 Defense."),
+            ephemeral=True,
+        )
+
     async def _open_tavern_shop(self, interaction: discord.Interaction, slot_type: str | None) -> None:
         if not interaction.guild:
             await reply_error(interaction, "Команда доступна только на сервере.")
             return
+        if slot_type not in {"attack", "defense"}:
+            await reply_error(interaction, "Сначала выберите слот Attack/Defense.")
+            return
         async with self.bot.db.session() as session:
             result = await session.execute(
-                select(TavernItem).where(TavernItem.guild_id == interaction.guild.id, TavernItem.enabled.is_(True))
+                select(TavernItem).where(
+                    TavernItem.guild_id == interaction.guild.id,
+                    TavernItem.enabled.is_(True),
+                    TavernItem.slot_type == slot_type,
+                ).order_by(TavernItem.price.asc(), TavernItem.id.asc())
             )
-            items = [i for i in result.scalars().all() if slot_type is None or i.slot_type == slot_type]
+            items = list(result.scalars().all())
         if not items:
-            await reply_error(interaction, "Нет доступных предметов в таверне.")
+            await reply_error(interaction, "Нет доступных предметов в этом слоте.")
             return
 
-        lines = [
-            f"**{it.id}.** {it.name} • {it.slot_type} • {it.effect_type} {it.value} • {it.price}"
-            for it in items[:20]
-        ]
-        embed = EmbedFactory.info("Магазин таверны", "\n".join(lines))
+        first = items[0]
+        lines = [f"**{it.id}.** {it.name} • {it.effect_type} {it.value} • {it.price}" for it in items[:25]]
+        embed = EmbedFactory.info(f"Магазин Tavern • {slot_type.title()}", "\n".join(lines))
+        EmbedFactory.add_kv(embed, "Выбран предмет", f"{first.name} ({first.effect_type} {first.value})", inline=False)
 
         async def _confirm(i: discord.Interaction) -> None:
-            first = items[0]
             async with self.bot.db.session() as session:
                 try:
                     async with session.begin():
-                        await TavernService(session).purchase_item(
+                        loadout = await TavernService(session).purchase_item(
                             guild_id=interaction.guild.id,
                             user_id=interaction.user.id,
                             item_id=int(first.id),
                         )
                 except Exception as exc:
                     message, hint = map_exception_message(exc)
-                    await i.response.edit_message(
-                        content=f"❌ {message}\n💡 {hint}",
-                        embed=None,
-                        view=None,
-                    )
+                    await i.response.edit_message(content=f"❌ {message}\n💡 {hint}", embed=None, view=None)
                     return
+            ends_at = loadout.attack_ends_at if slot_type == "attack" else loadout.defense_ends_at
+            left = int((ends_at - dt.datetime.utcnow()).total_seconds()) if ends_at else 0
             await i.response.edit_message(
-                embed=EmbedFactory.success(
-                    "Покупка успешна",
-                    f"Вы купили **{first.name}**. При замене слот перезаписывается, остаток времени сгорает.",
-                ),
+                embed=EmbedFactory.success("✅ Куплено и экипировано", f"{first.name} • осталось ~{max(0, left // 60)}м"),
                 view=None,
             )
 
@@ -304,6 +369,7 @@ class PvpCog(commands.Cog):
             await interaction.followup.send(embed=embed, view=view, ephemeral=True)
         else:
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        view.message = await interaction.original_response()
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -1566,6 +1566,13 @@ async def migration_pvp_tavern_v1(conn: AsyncConnection) -> None:
         await conn.execute(text("ALTER TABLE pvp_duels ADD COLUMN applied_buffs_json JSON"))
 
 
+
+async def migration_pvp_tavern_v1_polish(conn: AsyncConnection) -> None:
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_guild_purchased_at ON tavern_purchase_logs (guild_id, purchased_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_guild_item ON tavern_purchase_logs (guild_id, item_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_duels_guild_status_resolved ON pvp_duels (guild_id, status, resolved_at)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1598,4 +1605,5 @@ MIGRATIONS: List[Migration] = [
     migration_jobs_core,
     migration_presence_settings,
     migration_pvp_tavern_v1,
+    migration_pvp_tavern_v1_polish,
 ]

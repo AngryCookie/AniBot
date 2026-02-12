@@ -33,13 +33,37 @@
 </section>
 
 <section class="card">
-  <h4>Таверна PvP (v1)</h4>
-  <p class="notice">Ровно 2 слота: Attack/Defense. Только временные баффы. Капы: атака/защита 15%, crit/dodge 5%, защита ELO 20%, бонус победы +5 ELO.</p>
+  <div class="card-header">
+    <h4>Таверна PvP (v1)</h4>
+    <div class="period-switcher" id="tavernPeriod">
+      <button type="button" class="tab-button is-active" data-period="7">7</button>
+      <button type="button" class="tab-button" data-period="30">30</button>
+      <button type="button" class="tab-button" data-period="90">90</button>
+    </div>
+  </div>
+  <p class="notice">Ровно 2 слота: Attack/Defense. Без новых категорий эффектов.</p>
   <form id="pvpTavernSettingsForm">
     <label><span>Включить Таверну</span><input type="checkbox" name="enabled" /></label>
     <label><span>Сброс слотов в конце сезона</span><input type="checkbox" name="season_reset_clears_loadout" /></label>
+    <label><span>Stacking rule</span><select name="stacking_rule"><option value="max">max</option><option value="sum">sum</option></select></label>
+    <label><span>Кап атаки %</span><input type="number" name="attack_bonus_percent" min="0" max="100" step="0.1" /></label>
+    <label><span>Кап защиты %</span><input type="number" name="defense_bonus_percent" min="0" max="100" step="0.1" /></label>
+    <label><span>Кап crit %</span><input type="number" name="crit_chance_percent" min="0" max="100" step="0.1" /></label>
+    <label><span>Кап dodge %</span><input type="number" name="dodge_chance_percent" min="0" max="100" step="0.1" /></label>
+    <label><span>Кап ELO protection %</span><input type="number" name="elo_protection_percent" min="0" max="100" step="0.1" /></label>
+    <label><span>Кап win bonus ELO</span><input type="number" name="win_bonus_elo_flat" min="0" max="100" step="1" /></label>
     <div class="footer-actions"><button type="submit">Сохранить</button></div>
   </form>
+  <hr />
+  <div class="grid">
+    <div class="stat">Активные лоадауты: <span id="tavernActiveLoadouts">—</span></div>
+    <div class="stat">Покупки: <span id="tavernPurchases">—</span></div>
+    <div class="stat">Уникальные покупатели: <span id="tavernBuyers">—</span></div>
+    <div class="stat">Потрачено: <span id="tavernSpent">—</span></div>
+  </div>
+  <canvas id="tavernChart" height="120"></canvas>
+  <p class="notice" id="tavernImpact">Влияние баффов: —</p>
+  <table class="table"><thead><tr><th>Item</th><th>Слот</th><th>Покупки</th><th>Покупатели</th><th>Потрачено</th><th>Активно сейчас</th></tr></thead><tbody id="tavernTopItemsBody"></tbody></table>
   <hr />
   <form id="tavernItemForm">
     <label><span>Название</span><input type="text" name="name" required maxlength="100" /></label>
