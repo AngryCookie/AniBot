@@ -9,7 +9,7 @@ from sqlalchemy import and_, case, func, or_, select
 from bot.betting.enums import BettingMatchStatus
 from bot.betting.models import BettingBet, BettingMatch, BettingPayout, BettingTeam
 from bot.betting.schedule import ScheduleGenerationError, generate_month_schedule
-from bot.betting.service import DEFAULT_BETTING_SETTINGS, BettingService, announce_match_result
+from bot.betting.service import DEFAULT_BETTING_SETTINGS, BettingService, announce_match_result, merge_scheduling_settings
 from bot.database.models import GuildConfig
 
 from .database import database
@@ -120,16 +120,7 @@ async def get_betting_settings(guild_id: int = Depends(_require_admin_guild)) ->
     data.update(payload.get("betting", {}))
     data["odds"] = {**DEFAULT_BETTING_SETTINGS["odds"], **data.get("odds", {})}
     data["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **data.get("resolve", {})}
-    scheduling = {**DEFAULT_BETTING_SETTINGS["scheduling"], **data.get("scheduling", {})}
-    scheduling["month_template"] = {
-        **DEFAULT_BETTING_SETTINGS["scheduling"]["month_template"],
-        **scheduling.get("month_template", {}),
-    }
-    scheduling["pairing_rules"] = {
-        **DEFAULT_BETTING_SETTINGS["scheduling"]["pairing_rules"],
-        **scheduling.get("pairing_rules", {}),
-    }
-    data["scheduling"] = scheduling
+    data["scheduling"] = merge_scheduling_settings(data.get("scheduling", {}))
     return BettingSettings(**data)
 
 
@@ -178,7 +169,7 @@ async def update_betting_scheduling(
                 raw = {}
         betting = dict(DEFAULT_BETTING_SETTINGS)
         betting.update(raw.get("betting", {}))
-        betting["scheduling"] = payload.model_dump()
+        betting["scheduling"] = merge_scheduling_settings(payload.model_dump())
         raw["betting"] = betting
         cfg.settings = json.dumps(raw)
         await session.commit()

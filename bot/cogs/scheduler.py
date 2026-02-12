@@ -10,6 +10,8 @@ from collections.abc import Awaitable, Callable
 from discord.ext import commands, tasks
 from sqlalchemy import and_, delete, select, update
 
+from bot.betting.scheduler import ensure_scheduling_horizon, update_match_statuses
+from bot.betting.service import BettingService
 from bot.community_goals import CommunityGoalService
 from bot.database.models import EconomyLedger, GuildConfig, GuildReport, ModLog, PvpSeason, PvpSeasonResult, ServerMonthlyGoal, UserProfile
 from bot.goals.service import MonthlyCommunityGoalService
@@ -26,6 +28,7 @@ class SchedulerCog(commands.Cog):
         self.monthly_reports_service = MonthlyWrappedService(bot)
         self._task_locks: dict[str, asyncio.Lock] = {}
         self._next_run: dict[str, dt.datetime] = {}
+        self._betting_auto_apply_next: dict[int, dt.datetime] = {}
         self.daily_reset_task.start()
         self.cleanup_task.start()
         self.community_goals_task.start()
@@ -33,6 +36,7 @@ class SchedulerCog(commands.Cog):
         self.monthly_reports_task.start()
         self.monthly_community_goals_v2_task.start()
         self.pvp_seasons_task.start()
+        self.betting_scheduling_task.start()
 
     def cog_unload(self) -> None:
         self.daily_reset_task.cancel()
@@ -42,6 +46,7 @@ class SchedulerCog(commands.Cog):
         self.monthly_reports_task.cancel()
         self.monthly_community_goals_v2_task.cancel()
         self.pvp_seasons_task.cancel()
+        self.betting_scheduling_task.cancel()
 
     async def _run_task(self, key: str, coro_factory: Callable[[], Awaitable[None]]) -> None:
         lock = self._task_locks.setdefault(key, asyncio.Lock())
@@ -315,6 +320,49 @@ class SchedulerCog(commands.Cog):
 
         await self._run_task("pvp_seasons_task", _job)
 
+
+    @tasks.loop(minutes=1)
+    async def betting_scheduling_task(self) -> None:
+        async def _job() -> None:
+            now = dt.datetime.utcnow()
+            async with self.bot.db.session() as session:
+                result = await session.execute(select(GuildConfig))
+                configs = result.scalars().all()
+
+            for config in configs:
+                guild_id = int(config.guild_id)
+
+                async def _guild_job() -> None:
+                    async with self.bot.db.session() as guild_session:
+                        async with guild_session.begin():
+                            service = BettingService(guild_session)
+                            settings = await service._get_betting_settings(guild_id)
+                            scheduling = settings.get("scheduling", {})
+                            auto_apply = scheduling.get("auto_apply", {})
+                            run_every = max(1, int(auto_apply.get("run_every_minutes", 30)))
+                            next_auto_apply = self._betting_auto_apply_next.get(guild_id)
+
+                            inserted = 0
+                            if next_auto_apply is None or now >= next_auto_apply:
+                                inserted = await ensure_scheduling_horizon(session=guild_session, guild_id=guild_id, now=now)
+                                self._betting_auto_apply_next[guild_id] = now + dt.timedelta(minutes=run_every)
+
+                            opened, closed = await update_match_statuses(session=guild_session, guild_id=guild_id, now=now)
+                            if inserted or opened or closed:
+                                logger.info(
+                                    "Betting scheduling tick applied",
+                                    extra={
+                                        "guild_id": guild_id,
+                                        "inserted": inserted,
+                                        "opened": opened,
+                                        "closed": closed,
+                                    },
+                                )
+
+                await self._run_task(f"betting_schedule_{guild_id}", _guild_job)
+
+        await self._run_task("betting_scheduling_task", _job)
+
     @tasks.loop(minutes=10)
     async def monthly_reports_task(self) -> None:
         await self._run_task("monthly_reports_task", self.monthly_reports_service.run_scheduler_tick)
@@ -335,6 +383,7 @@ class SchedulerCog(commands.Cog):
     @monthly_goals_task.before_loop
     @monthly_reports_task.before_loop
     @pvp_seasons_task.before_loop
+    @betting_scheduling_task.before_loop
     @monthly_community_goals_v2_task.before_loop
     async def before_tasks(self) -> None:
         await self.bot.wait_until_ready()
