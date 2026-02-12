@@ -5,6 +5,8 @@ import logging
 from collections.abc import Iterable
 from zoneinfo import ZoneInfo
 
+from bot.betting.power_drift import apply_daily_power_drift
+
 from sqlalchemy import and_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -147,3 +149,22 @@ async def update_match_statuses(*, session: AsyncSession, guild_id: int, now: dt
         .values(status=BettingMatchStatus.closed, updated_at=now_utc)
     )
     return int(opened_result.rowcount or 0), int(closed_result.rowcount or 0)
+
+
+async def apply_power_drift_for_guild(*, session: AsyncSession, guild_id: int, now: dt.datetime | None = None) -> int:
+    service = BettingService(session)
+    cfg = await service._get_betting_settings(guild_id)
+    drift_cfg = cfg.get("power_drift", {})
+    if not bool(drift_cfg.get("enabled", True)):
+        return 0
+
+    timezone_name = str(drift_cfg.get("timezone", "UTC"))
+    try:
+        tz = ZoneInfo(timezone_name)
+    except Exception:
+        logger.warning("Invalid timezone for betting power drift", extra={"guild_id": guild_id, "timezone": timezone_name})
+        return 0
+
+    now_utc = now or dt.datetime.utcnow()
+    today_local = now_utc.replace(tzinfo=dt.timezone.utc).astimezone(tz).date()
+    return await apply_daily_power_drift(session, guild_id=guild_id, day=today_local, cfg=cfg)

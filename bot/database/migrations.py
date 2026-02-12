@@ -1306,6 +1306,36 @@ async def migration_betting_v1_reporting_indexes(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_payouts_match_created_at ON betting_payouts (match_id, created_at)"))
 
 
+async def migration_betting_power_drift(conn: AsyncConnection) -> None:
+    team_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(betting_teams)"))).all()}
+    if "current_power" not in team_cols:
+        await conn.execute(text("ALTER TABLE betting_teams ADD COLUMN current_power FLOAT"))
+        await conn.execute(text("UPDATE betting_teams SET current_power = base_power WHERE current_power IS NULL"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS betting_power_drift_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                team_id INTEGER NOT NULL,
+                day DATE NOT NULL,
+                old_power FLOAT NOT NULL,
+                new_power FLOAT NOT NULL,
+                delta FLOAT NOT NULL,
+                reason_json JSON NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(team_id) REFERENCES betting_teams(id),
+                CONSTRAINT uq_betting_power_drift_logs_guild_team_day UNIQUE (guild_id, team_id, day)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_power_drift_logs_guild_id ON betting_power_drift_logs (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_power_drift_logs_team_id ON betting_power_drift_logs (team_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_power_drift_logs_day ON betting_power_drift_logs (day)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1332,4 +1362,5 @@ MIGRATIONS: List[Migration] = [
     migration_betting_v1_analytics_indexes,
     migration_betting_v1_reporting_indexes,
     migration_betting_schedule_key,
+    migration_betting_power_drift,
 ]

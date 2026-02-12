@@ -79,6 +79,36 @@ class BettingSettingsResolve(BaseModel):
     power_weight: float = Field(0.60, ge=0.0, le=2.0)
 
 
+class BettingPowerDriftMomentumSettings(BaseModel):
+    enabled: bool = False
+    window_matches: int = Field(10, ge=1, le=100)
+    win_influence_percent: float = Field(2, ge=0, le=20)
+
+
+class BettingPowerDriftSettings(BaseModel):
+    enabled: bool = True
+    timezone: str = Field("UTC", min_length=1, max_length=64)
+    tick: str = Field("daily", pattern="^daily$")
+    max_deviation_percent: float = Field(15, ge=1, le=100)
+    daily_noise_percent: float = Field(3, ge=0, le=100)
+    mean_reversion: float = Field(0.20, ge=0, le=1)
+    momentum: BettingPowerDriftMomentumSettings = Field(default_factory=BettingPowerDriftMomentumSettings)
+
+
+class BettingPowerDriftTeamLogRow(BaseModel):
+    team_id: int
+    team_name: str
+    base_power: float
+    current_power: float
+    deviation_percent: float
+    last_delta: float
+
+
+class BettingPowerDriftLogsOut(BaseModel):
+    day: str
+    teams: list[BettingPowerDriftTeamLogRow]
+
+
 class BettingSettings(BaseModel):
     enabled: bool = True
     announce_channel_id: int | None = None
@@ -87,6 +117,7 @@ class BettingSettings(BaseModel):
     odds: BettingSettingsOdds = Field(default_factory=BettingSettingsOdds)
     resolve: BettingSettingsResolve = Field(default_factory=BettingSettingsResolve)
     scheduling: "BettingSchedulingSettings" = Field(default_factory=lambda: BettingSchedulingSettings())
+    power_drift: BettingPowerDriftSettings = Field(default_factory=BettingPowerDriftSettings)
 
 
 

@@ -74,6 +74,9 @@ export const initBetting = async (guildId) => {
   const matchesBody = document.getElementById("matchesBody");
   const periodButtons = document.querySelectorAll("#bettingAnalyticsPeriod [data-period]");
   const analyticsLoading = document.getElementById("bettingAnalyticsLoading");
+  const powerDriftLogsBody = document.getElementById("bettingPowerDriftLogsBody");
+  const powerDriftDayLabel = document.getElementById("bettingPowerDriftDayLabel");
+  const powerDriftPeriodButtons = document.querySelectorAll("#bettingPowerDriftLogsPeriod [data-days]");
 
   const loadSettings = async () => {
     const data = await apiFetch(`/api/guilds/${guildId}/betting/settings`);
@@ -86,6 +89,17 @@ export const initBetting = async (guildId) => {
     settingsForm.elements.namedItem("odds_randomness").value = data.odds?.randomness;
     settingsForm.elements.namedItem("odds_power_influence").value = data.odds?.power_influence;
     settingsForm.elements.namedItem("resolve_power_weight").value = data.resolve?.power_weight;
+
+    const pd = data.power_drift || {};
+    settingsForm.elements.namedItem("power_drift_enabled").checked = Boolean(pd.enabled);
+    settingsForm.elements.namedItem("power_drift_timezone").value = pd.timezone || "UTC";
+    settingsForm.elements.namedItem("power_drift_tick").value = pd.tick || "daily";
+    settingsForm.elements.namedItem("power_drift_max_deviation_percent").value = pd.max_deviation_percent ?? 15;
+    settingsForm.elements.namedItem("power_drift_daily_noise_percent").value = pd.daily_noise_percent ?? 3;
+    settingsForm.elements.namedItem("power_drift_mean_reversion").value = pd.mean_reversion ?? 0.2;
+    settingsForm.elements.namedItem("power_drift_momentum_enabled").checked = Boolean(pd.momentum?.enabled);
+    settingsForm.elements.namedItem("power_drift_momentum_window_matches").value = pd.momentum?.window_matches ?? 10;
+    settingsForm.elements.namedItem("power_drift_momentum_win_influence_percent").value = pd.momentum?.win_influence_percent ?? 2;
 
     const sc = data.scheduling || {};
     const mt = sc.month_template || {};
@@ -138,9 +152,26 @@ export const initBetting = async (guildId) => {
         showToast("Матч рассчитан", "success");
         await loadMatches();
         await loadAnalytics(currentPeriod);
+  await loadPowerDriftLogs(currentDriftDays);
       });
       matchesBody.appendChild(row);
     });
+  };
+
+
+  const loadPowerDriftLogs = async (days) => {
+    if (!powerDriftLogsBody) return;
+    const data = await apiFetch(`/api/guilds/${guildId}/betting/power-drift/logs?days=${days}`);
+    powerDriftDayLabel.textContent = `День: ${data.day || "-"}`;
+    powerDriftLogsBody.innerHTML = (data.teams || []).map((row) => `
+      <tr>
+        <td>${row.team_name}</td>
+        <td>${num(row.base_power)}</td>
+        <td>${num(row.current_power)}</td>
+        <td>${num(row.deviation_percent)}</td>
+        <td>${num(row.last_delta)}</td>
+      </tr>
+    `).join("");
   };
 
   const loadAnalytics = async (days) => {
@@ -197,6 +228,19 @@ export const initBetting = async (guildId) => {
           power_influence: Number(settingsForm.elements.namedItem("odds_power_influence").value),
         },
         resolve: { power_weight: Number(settingsForm.elements.namedItem("resolve_power_weight").value) },
+        power_drift: {
+          enabled: settingsForm.elements.namedItem("power_drift_enabled").checked,
+          timezone: settingsForm.elements.namedItem("power_drift_timezone").value.trim() || "UTC",
+          tick: "daily",
+          max_deviation_percent: Number(settingsForm.elements.namedItem("power_drift_max_deviation_percent").value),
+          daily_noise_percent: Number(settingsForm.elements.namedItem("power_drift_daily_noise_percent").value),
+          mean_reversion: Number(settingsForm.elements.namedItem("power_drift_mean_reversion").value),
+          momentum: {
+            enabled: settingsForm.elements.namedItem("power_drift_momentum_enabled").checked,
+            window_matches: Number(settingsForm.elements.namedItem("power_drift_momentum_window_matches").value),
+            win_influence_percent: Number(settingsForm.elements.namedItem("power_drift_momentum_win_influence_percent").value),
+          },
+        },
       }),
     });
     showToast("Настройки сохранены", "success");
@@ -236,6 +280,7 @@ export const initBetting = async (guildId) => {
     showToast("Матч создан", "success");
     await loadMatches();
     await loadAnalytics(currentPeriod);
+  await loadPowerDriftLogs(currentDriftDays);
   });
 
 
@@ -284,6 +329,7 @@ export const initBetting = async (guildId) => {
     renderSchedulePreview(preview || []);
     await loadMatches();
     await loadAnalytics(currentPeriod);
+  await loadPowerDriftLogs(currentDriftDays);
   });
 
   let currentPeriod = 7;
@@ -292,6 +338,16 @@ export const initBetting = async (guildId) => {
       currentPeriod = Number(button.dataset.period || 7);
       periodButtons.forEach((b) => b.classList.toggle("is-active", b === button));
       await loadAnalytics(currentPeriod);
+  await loadPowerDriftLogs(currentDriftDays);
+    });
+  });
+
+  let currentDriftDays = 7;
+  powerDriftPeriodButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      currentDriftDays = Number(button.dataset.days || 7);
+      powerDriftPeriodButtons.forEach((b) => b.classList.toggle("is-active", b === button));
+      await loadPowerDriftLogs(currentDriftDays);
     });
   });
 
@@ -304,4 +360,5 @@ export const initBetting = async (guildId) => {
   await loadTeams();
   await loadMatches();
   await loadAnalytics(currentPeriod);
+  await loadPowerDriftLogs(currentDriftDays);
 };

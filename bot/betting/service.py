@@ -31,6 +31,19 @@ DEFAULT_BETTING_SETTINGS: dict[str, Any] = {
         "power_influence": 0.50,
     },
     "resolve": {"power_weight": 0.60},
+    "power_drift": {
+        "enabled": True,
+        "timezone": "UTC",
+        "tick": "daily",
+        "max_deviation_percent": 15,
+        "daily_noise_percent": 3,
+        "mean_reversion": 0.20,
+        "momentum": {
+            "enabled": False,
+            "window_matches": 10,
+            "win_influence_percent": 2,
+        },
+    },
     "scheduling": {
         "enabled": True,
         "auto_apply": {
@@ -53,6 +66,15 @@ DEFAULT_BETTING_SETTINGS: dict[str, Any] = {
         },
     },
 }
+
+
+def merge_power_drift_settings(raw_power_drift: dict[str, Any] | None) -> dict[str, Any]:
+    power_drift = {**DEFAULT_BETTING_SETTINGS["power_drift"], **(raw_power_drift or {})}
+    power_drift["momentum"] = {
+        **DEFAULT_BETTING_SETTINGS["power_drift"]["momentum"],
+        **power_drift.get("momentum", {}),
+    }
+    return power_drift
 
 
 def merge_scheduling_settings(raw_scheduling: dict[str, Any] | None) -> dict[str, Any]:
@@ -295,6 +317,7 @@ class BettingService:
         settings["odds"] = {**DEFAULT_BETTING_SETTINGS["odds"], **settings.get("odds", {})}
         settings["resolve"] = {**DEFAULT_BETTING_SETTINGS["resolve"], **settings.get("resolve", {})}
         settings["scheduling"] = merge_scheduling_settings(settings.get("scheduling", {}))
+        settings["power_drift"] = merge_power_drift_settings(settings.get("power_drift", {}))
         return settings
 
     def _choose_weighted_winner(self, team_a: BettingTeam, team_b: BettingTeam, cfg: dict[str, Any]) -> BettingTeam:
