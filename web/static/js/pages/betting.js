@@ -2,6 +2,63 @@ import { apiFetch } from "../api.js";
 import { showToast } from "../ui.js";
 
 const toIso = (value) => (value ? new Date(value).toISOString() : null);
+const num = (v) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Number(v) || 0);
+
+let analyticsChart = null;
+
+const renderIdWithCopy = (id) => `
+  <span>${id}</span>
+  <button type="button" class="secondary" data-copy-id="${id}" style="margin-left:8px">Copy</button>
+`;
+
+const bindCopyButtons = (root) => {
+  root?.querySelectorAll("[data-copy-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyId || "");
+        showToast("ID скопирован", "success");
+      } catch {
+        showToast("Не удалось скопировать ID", "error");
+      }
+    });
+  });
+};
+
+const drawAnalyticsChart = (timeseries = []) => {
+  const canvas = document.getElementById("bettingAnalyticsChart");
+  const fallback = document.getElementById("bettingAnalyticsFallback");
+  if (!canvas) return;
+
+  const labels = timeseries.map((d) => d.day);
+  const volume = timeseries.map((d) => Number(d.volume) || 0);
+  const payout = timeseries.map((d) => Number(d.payout) || 0);
+  const net = timeseries.map((d) => Number(d.net) || 0);
+
+  if (!window.Chart) {
+    if (fallback) {
+      fallback.innerHTML = labels
+        .map((label, i) => `<tr><td>${label}</td><td>${num(volume[i])}</td><td>${num(payout[i])}</td><td>${num(net[i])}</td></tr>`)
+        .join("");
+      fallback.closest("table")?.classList.remove("hidden");
+    }
+    return;
+  }
+
+  fallback?.closest("table")?.classList.add("hidden");
+  analyticsChart?.destroy();
+  analyticsChart = new window.Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "Volume", data: volume, borderColor: "#7da8ff", tension: 0.25 },
+        { label: "Payout", data: payout, borderColor: "#69d48c", tension: 0.25 },
+        { label: "Net", data: net, borderColor: "#f08b8b", tension: 0.25 },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false },
+  });
+};
 
 export const initBetting = async (guildId) => {
   if (!guildId) return;
@@ -10,6 +67,8 @@ export const initBetting = async (guildId) => {
   const matchForm = document.getElementById("matchForm");
   const teamsBody = document.getElementById("teamsBody");
   const matchesBody = document.getElementById("matchesBody");
+  const periodButtons = document.querySelectorAll("#bettingAnalyticsPeriod [data-period]");
+  const analyticsLoading = document.getElementById("bettingAnalyticsLoading");
 
   const loadSettings = async () => {
     const data = await apiFetch(`/api/guilds/${guildId}/betting/settings`);
@@ -49,9 +108,48 @@ export const initBetting = async (guildId) => {
         await apiFetch(`/api/guilds/${guildId}/betting/matches/${match.id}/resolve`, { method: "POST" });
         showToast("Матч рассчитан", "success");
         await loadMatches();
+        await loadAnalytics(currentPeriod);
       });
       matchesBody.appendChild(row);
     });
+  };
+
+  const loadAnalytics = async (days) => {
+    analyticsLoading?.classList.remove("hidden");
+    try {
+      const [overview, leaderboards] = await Promise.all([
+        apiFetch(`/api/guilds/${guildId}/betting/analytics/overview?days=${days}`),
+        apiFetch(`/api/guilds/${guildId}/betting/analytics/leaderboards?days=${days}`),
+      ]);
+      const k = overview?.kpis || {};
+      document.getElementById("betKpiBets").textContent = num(k.bets_count);
+      document.getElementById("betKpiUsers").textContent = num(k.unique_bettors);
+      document.getElementById("betKpiVolume").textContent = num(k.total_volume);
+      document.getElementById("betKpiPayout").textContent = num(k.total_payout);
+      document.getElementById("betKpiNet").textContent = num(k.net_sink);
+      document.getElementById("betKpiAvgBet").textContent = num(k.avg_bet);
+      document.getElementById("betKpiAvgOdds").textContent = num(k.avg_odds);
+
+      drawAnalyticsChart(overview?.timeseries || []);
+
+      const volBody = document.getElementById("betLbVolume");
+      volBody.innerHTML = (leaderboards.top_by_volume || []).map((row) => `<tr><td>${renderIdWithCopy(row.user_id)}</td><td>${num(row.volume)}</td><td>${num(row.bets)}</td></tr>`).join("");
+
+      const profitBody = document.getElementById("betLbProfit");
+      profitBody.innerHTML = (leaderboards.top_by_profit || []).map((row) => `<tr><td>${renderIdWithCopy(row.user_id)}</td><td>${num(row.profit)}</td><td>${num(row.bets)}</td></tr>`).join("");
+
+      const winsBody = document.getElementById("betLbWins");
+      winsBody.innerHTML = (leaderboards.biggest_wins || []).map((row) => `<tr><td>${renderIdWithCopy(row.user_id)}</td><td>${row.match_id}</td><td>${num(row.payout)}</td><td>${num(row.bet_amount)}</td><td>${num(row.odds)}</td></tr>`).join("");
+
+      const matchesBodyEl = document.getElementById("betLbMatches");
+      matchesBodyEl.innerHTML = (leaderboards.top_matches || []).map((row) => `<tr><td>${row.match_id}</td><td>${num(row.volume)}</td><td>${num(row.bets)}</td></tr>`).join("");
+
+      bindCopyButtons(document);
+    } catch (error) {
+      showToast(error?.message || "Ошибка загрузки analytics", "error");
+    } finally {
+      analyticsLoading?.classList.add("hidden");
+    }
   };
 
   settingsForm?.addEventListener("submit", async (e) => {
@@ -108,9 +206,20 @@ export const initBetting = async (guildId) => {
     matchForm.reset();
     showToast("Матч создан", "success");
     await loadMatches();
+    await loadAnalytics(currentPeriod);
+  });
+
+  let currentPeriod = 7;
+  periodButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      currentPeriod = Number(button.dataset.period || 7);
+      periodButtons.forEach((b) => b.classList.toggle("is-active", b === button));
+      await loadAnalytics(currentPeriod);
+    });
   });
 
   await loadSettings();
   await loadTeams();
   await loadMatches();
+  await loadAnalytics(currentPeriod);
 };
