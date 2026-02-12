@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import logging
+import time
 from collections import Counter, defaultdict
 
 from sqlalchemy import delete, select
@@ -17,6 +19,8 @@ DEFAULT_WORD_EMOJI_STATS_SETTINGS = {
     "ignore_channels": [],
     "retention_days": 400,
 }
+
+logger = logging.getLogger(__name__)
 
 
 class WordEmojiStatsCollector:
@@ -84,6 +88,8 @@ class WordEmojiStatsCollector:
 
     async def cleanup_retention(self) -> None:
         today = dt.datetime.utcnow().date()
+        started_at = time.monotonic()
+        total_deleted = {"word": 0, "emoji": 0, "reaction": 0}
         async with self.bot.db.session() as session:
             async with session.begin():
                 configs = (await session.execute(select(GuildConfig))).scalars().all()
@@ -91,21 +97,47 @@ class WordEmojiStatsCollector:
                     settings = self.load_settings(cfg.settings)
                     retention_days = int(settings.get("retention_days", 400))
                     cutoff = today - dt.timedelta(days=max(1, retention_days))
-                    await session.execute(
-                        delete(WordStatDaily).where(
-                            (WordStatDaily.guild_id == int(cfg.guild_id)) & (WordStatDaily.day < cutoff)
-                        )
+                    guild_id = int(cfg.guild_id)
+                    total_deleted["word"] += await self._delete_in_batches(
+                        session,
+                        WordStatDaily,
+                        (WordStatDaily.guild_id == guild_id) & (WordStatDaily.day < cutoff),
                     )
-                    await session.execute(
-                        delete(EmojiStatDaily).where(
-                            (EmojiStatDaily.guild_id == int(cfg.guild_id)) & (EmojiStatDaily.day < cutoff)
-                        )
+                    total_deleted["emoji"] += await self._delete_in_batches(
+                        session,
+                        EmojiStatDaily,
+                        (EmojiStatDaily.guild_id == guild_id) & (EmojiStatDaily.day < cutoff),
                     )
-                    await session.execute(
-                        delete(ReactionStatDaily).where(
-                            (ReactionStatDaily.guild_id == int(cfg.guild_id)) & (ReactionStatDaily.day < cutoff)
-                        )
+                    total_deleted["reaction"] += await self._delete_in_batches(
+                        session,
+                        ReactionStatDaily,
+                        (ReactionStatDaily.guild_id == guild_id) & (ReactionStatDaily.day < cutoff),
                     )
+        logger.info(
+            "Word/emoji retention cleanup finished",
+            extra={
+                "deleted_word_rows": total_deleted["word"],
+                "deleted_emoji_rows": total_deleted["emoji"],
+                "deleted_reaction_rows": total_deleted["reaction"],
+                "duration_ms": round((time.monotonic() - started_at) * 1000, 2),
+            },
+        )
+
+    async def _delete_in_batches(self, session, model, where_clause, *, batch_size: int = 500) -> int:
+        deleted_total = 0
+        while True:
+            ids = (
+                await session.execute(
+                    select(model.id).where(where_clause).order_by(model.id.asc()).limit(batch_size)
+                )
+            ).scalars().all()
+            if not ids:
+                break
+            result = await session.execute(delete(model).where(model.id.in_(ids)))
+            deleted_total += int(result.rowcount or 0)
+            if len(ids) < batch_size:
+                break
+        return deleted_total
 
     async def _upsert_word_batch(self, session, batch: dict[tuple[int, dt.date], Counter[str]]) -> None:
         for (guild_id, day), counter in batch.items():
