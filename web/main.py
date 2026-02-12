@@ -101,6 +101,8 @@ from .schemas import (
     PvpSeasonSettings,
     PvpSettings,
     PresetOut,
+    PresencePreviewOut,
+    PresenceSettings,
     ReferralDashboardStats,
     ReferralPromoCodeIn,
     ReferralPromoCodeOut,
