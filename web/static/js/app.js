@@ -31,6 +31,7 @@ const routes = {
   "monthly-goals": { title: "Monthly Goals", page: "/static/pages/monthly-goals.html", init: () => initMonthlyGoals(appState.guildId) },
   "referral-promo": { title: "Referral & Promo", page: "/static/pages/referral-promo.html", init: () => initReferralPromo(appState.guildId) },
   reports: { title: "Reports", page: "/static/pages/reports.html", init: () => initReports(appState.guildId) },
+  "word-emoji-stats": { title: "Word/Emoji Stats", page: "/static/pages/word-emoji-stats.html", init: () => initWordEmojiStats(appState.guildId) },
 };
 
 let pageContent; let pageTitle; let pageError; let pageLoading;
@@ -162,6 +163,40 @@ const initSettingsPage = async (endpoint) => {
       }, (msg) => showToast(msg, "error"));
     });
   }
+};
+
+const initWordEmojiStats = async (guildId) => {
+  const form = document.querySelector("form[data-endpoint='word-emoji-stats']");
+  if (!guildId || !form) return;
+  const data = await apiFetch(`/api/guilds/${guildId}/word-emoji-stats`);
+  form.elements.namedItem("enabled").checked = Boolean(data.enabled);
+  form.elements.namedItem("min_token_length").value = data.min_token_length ?? 3;
+  form.elements.namedItem("max_tokens_per_message").value = data.max_tokens_per_message ?? 20;
+  form.elements.namedItem("ignore_bots").checked = Boolean(data.ignore_bots);
+  form.elements.namedItem("retention_days").value = data.retention_days ?? 400;
+  form.elements.namedItem("ignore_channels").value = Array.isArray(data.ignore_channels) ? data.ignore_channels.join(",") : "";
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const raw = form.elements.namedItem("ignore_channels").value || "";
+    const ignore_channels = raw
+      .split(",")
+      .map((part) => part.trim())
+      .filter((part) => part && !Number.isNaN(Number(part)))
+      .map((part) => Number(part));
+    await apiFetch(`/api/guilds/${guildId}/word-emoji-stats`, {
+      method: "PUT",
+      body: JSON.stringify({
+        enabled: form.elements.namedItem("enabled").checked,
+        min_token_length: Number(form.elements.namedItem("min_token_length").value || 3),
+        max_tokens_per_message: Number(form.elements.namedItem("max_tokens_per_message").value || 20),
+        ignore_bots: form.elements.namedItem("ignore_bots").checked,
+        ignore_channels,
+        retention_days: Number(form.elements.namedItem("retention_days").value || 400),
+      }),
+    });
+    showToast("Настройки word/emoji stats сохранены", "success");
+  });
 };
 
 const initShop = async () => {

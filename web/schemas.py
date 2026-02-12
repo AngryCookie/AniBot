@@ -266,6 +266,9 @@ class ReportsIncludeSections(BaseModel):
     betting: bool = True
     pvp: bool = True
     moderation: bool = True
+    words: bool = True
+    emojis: bool = True
+    reactions: bool = True
 
 
 class ReportsMonthlySettings(BaseModel):
@@ -295,6 +298,32 @@ class ReportsSettings(BaseModel):
 
 class ReportsDryRunOut(BaseModel):
     payload: dict
+
+class WordEmojiStatsSettings(BaseModel):
+    enabled: bool = True
+    min_token_length: int = Field(3, ge=1, le=20)
+    max_tokens_per_message: int = Field(20, ge=1, le=200)
+    ignore_bots: bool = True
+    ignore_channels: list[int] = Field(default_factory=list)
+    retention_days: int = Field(400, ge=30, le=3650)
+
+
+class TokenCountItem(BaseModel):
+    key: str
+    count: int
+
+
+class DailyCountItem(BaseModel):
+    day: str
+    count: int
+
+
+class WordEmojiStatsResponse(BaseModel):
+    guild_id: int
+    days: int
+    top: list[TokenCountItem]
+    series: list[DailyCountItem] = Field(default_factory=list)
+
 
 class AnalyticsMonthlySettings(BaseModel):
     monthly_reports_enabled: bool = False

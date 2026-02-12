@@ -895,6 +895,80 @@ async def migration_add_operational_indexes(conn: AsyncConnection) -> None:
         )
     )
 
+async def migration_create_word_emoji_stats(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS word_stats_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                day DATE NOT NULL,
+                token VARCHAR(64) NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                CONSTRAINT uq_word_stats_daily UNIQUE (guild_id, day, token)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_word_stats_daily_guild_id ON word_stats_daily (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_word_stats_daily_day ON word_stats_daily (day)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_word_stats_daily_token ON word_stats_daily (token)"))
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_word_stats_daily_guild_day "
+            "ON word_stats_daily (guild_id, day)"
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS emoji_stats_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                day DATE NOT NULL,
+                emoji_key VARCHAR(128) NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                CONSTRAINT uq_emoji_stats_daily UNIQUE (guild_id, day, emoji_key)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emoji_stats_daily_guild_id ON emoji_stats_daily (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emoji_stats_daily_day ON emoji_stats_daily (day)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emoji_stats_daily_emoji_key ON emoji_stats_daily (emoji_key)"))
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_emoji_stats_daily_guild_day "
+            "ON emoji_stats_daily (guild_id, day)"
+        )
+    )
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS reaction_stats_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                day DATE NOT NULL,
+                emoji_key VARCHAR(128) NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                CONSTRAINT uq_reaction_stats_daily UNIQUE (guild_id, day, emoji_key)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reaction_stats_daily_guild_id ON reaction_stats_daily (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reaction_stats_daily_day ON reaction_stats_daily (day)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reaction_stats_daily_emoji_key ON reaction_stats_daily (emoji_key)"))
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_reaction_stats_daily_guild_day "
+            "ON reaction_stats_daily (guild_id, day)"
+        )
+    )
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -912,4 +986,5 @@ MIGRATIONS: List[Migration] = [
     migration_create_guild_reports,
     migration_create_activity_events,
     migration_add_operational_indexes,
+    migration_create_word_emoji_stats,
 ]

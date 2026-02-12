@@ -30,6 +30,9 @@ DEFAULT_REPORTS_SETTINGS = {
             "betting": True,
             "pvp": True,
             "moderation": True,
+            "words": True,
+            "emojis": True,
+            "reactions": True,
         },
     },
     "yearly": {
@@ -45,6 +48,9 @@ DEFAULT_REPORTS_SETTINGS = {
             "betting": True,
             "pvp": True,
             "moderation": True,
+            "words": True,
+            "emojis": True,
+            "reactions": True,
         },
     },
 }

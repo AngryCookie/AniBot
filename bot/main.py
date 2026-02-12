@@ -32,6 +32,7 @@ COGS = [
     "bot.cogs.referral",
     "bot.cogs.observability",
     "bot.cogs.reports",
+    "bot.cogs.word_emoji_stats",
 ]
 
 
