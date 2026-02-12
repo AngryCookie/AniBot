@@ -257,6 +257,34 @@ class ChangeHistoryEntry(BaseModel):
 
 
 
+
+
+class ReportsIncludeSections(BaseModel):
+    messages: bool = True
+    voice: bool = True
+    economy: bool = True
+    betting: bool = True
+    pvp: bool = True
+    moderation: bool = True
+
+
+class ReportsMonthlySettings(BaseModel):
+    enabled: bool = True
+    channel_id: Optional[int] = None
+    post_day: int = Field(1, ge=1, le=28)
+    post_hour: int = Field(12, ge=0, le=23)
+    include_sections: ReportsIncludeSections = Field(default_factory=ReportsIncludeSections)
+
+
+class ReportsSettings(BaseModel):
+    enabled: bool = True
+    timezone: str = Field("UTC", min_length=1, max_length=64)
+    monthly: ReportsMonthlySettings = Field(default_factory=ReportsMonthlySettings)
+
+
+class ReportsDryRunOut(BaseModel):
+    payload: dict
+
 class AnalyticsMonthlySettings(BaseModel):
     monthly_reports_enabled: bool = False
     monthly_reports_autopost: bool = False

@@ -10,6 +10,7 @@ import { initReferralPromo } from "./pages/referral_promo.js";
 import { initGrowth } from "./pages/growth.js";
 import { initBetting } from "./pages/betting.js";
 import { initPvp } from "./pages/pvp.js";
+import { initReports } from "./pages/reports.js";
 
 const appState = { guildId: null, currentRoute: null };
 
@@ -29,6 +30,7 @@ const routes = {
   "community-goal": { title: "Community Goal", page: "/static/pages/community-goal.html", init: () => initCommunityGoal(appState.guildId) },
   "monthly-goals": { title: "Monthly Goals", page: "/static/pages/monthly-goals.html", init: () => initMonthlyGoals(appState.guildId) },
   "referral-promo": { title: "Referral & Promo", page: "/static/pages/referral-promo.html", init: () => initReferralPromo(appState.guildId) },
+  reports: { title: "Reports", page: "/static/pages/reports.html", init: () => initReports(appState.guildId) },
 };
 
 let pageContent; let pageTitle; let pageError; let pageLoading;

@@ -261,6 +261,47 @@ class MonthlyAnalyticsReport(Base):
     autoposted_at = Column(DateTime, nullable=True)
 
 
+class GuildReport(Base):
+    __tablename__ = "guild_reports"
+    __table_args__ = (
+        UniqueConstraint(
+            "guild_id",
+            "report_type",
+            "period_start",
+            "period_end",
+            name="uq_guild_reports_period",
+        ),
+        Index("ix_guild_reports_guild_id", "guild_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    report_type = Column(String(32), nullable=False, default="monthly")
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    channel_id = Column(BigInteger, nullable=False)
+    message_id = Column(BigInteger, nullable=True)
+    payload_json = Column(JSON, nullable=False)
+    status = Column(String(16), nullable=False, default="posted")
+
+
+class ActivityEvent(Base):
+    __tablename__ = "activity_events"
+    __table_args__ = (
+        Index("ix_activity_events_guild_created", "guild_id", "created_at"),
+        Index("ix_activity_events_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    event_type = Column(String(32), nullable=False)
+    value = Column(Integer, nullable=False, default=1)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
 class UserTrustProfile(Base):
     __tablename__ = "user_trust_profiles"
     __table_args__ = (UniqueConstraint("user_id", "guild_id", name="uq_trust_user_guild"),)

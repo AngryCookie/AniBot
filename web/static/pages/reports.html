@@ -1,0 +1,51 @@
+<section class="card">
+  <h3>Reports</h3>
+  <form id="reportsForm" class="settings-form">
+    <label class="setting">
+      <span>Включить отчёты</span>
+      <input type="checkbox" name="enabled" />
+    </label>
+
+    <label class="setting">
+      <span>Timezone</span>
+      <input type="text" name="timezone" placeholder="UTC" />
+    </label>
+
+    <label class="setting">
+      <span>Monthly enabled</span>
+      <input type="checkbox" name="monthly.enabled" data-path="monthly.enabled" />
+    </label>
+
+    <label class="setting">
+      <span>Channel ID</span>
+      <input type="number" name="monthly.channel_id" data-path="monthly.channel_id" placeholder="123456789012345678" />
+      <p class="field-hint">ID канала, куда публиковать Monthly Wrapped.</p>
+    </label>
+
+    <label class="setting">
+      <span>Post day</span>
+      <input type="number" min="1" max="28" name="monthly.post_day" data-path="monthly.post_day" />
+    </label>
+
+    <label class="setting">
+      <span>Post hour (0-23)</span>
+      <input type="number" min="0" max="23" name="monthly.post_hour" data-path="monthly.post_hour" />
+    </label>
+
+    <fieldset class="settings-group">
+      <legend>Секции отчёта</legend>
+      <label class="setting"><span>Messages</span><input type="checkbox" data-path="monthly.include_sections.messages" /></label>
+      <label class="setting"><span>Voice</span><input type="checkbox" data-path="monthly.include_sections.voice" /></label>
+      <label class="setting"><span>Economy</span><input type="checkbox" data-path="monthly.include_sections.economy" /></label>
+      <label class="setting"><span>Betting</span><input type="checkbox" data-path="monthly.include_sections.betting" /></label>
+      <label class="setting"><span>PvP</span><input type="checkbox" data-path="monthly.include_sections.pvp" /></label>
+      <label class="setting"><span>Moderation</span><input type="checkbox" data-path="monthly.include_sections.moderation" /></label>
+    </fieldset>
+
+    <div class="row gap-sm">
+      <button type="submit">Сохранить</button>
+      <button type="button" class="secondary" id="reportsDryRunBtn">Dry run</button>
+    </div>
+  </form>
+  <pre id="reportsDryRunOut" class="notice hidden" style="white-space: pre-wrap;"></pre>
+</section>
