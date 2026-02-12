@@ -76,6 +76,41 @@ class PvpSeasonSettings(BaseModel):
     reward_roles: PvpSeasonRewardRoles = Field(default_factory=PvpSeasonRewardRoles)
 
 
+class PvpTavernSettings(BaseModel):
+    enabled: bool = True
+    season_reset_clears_loadout: bool = True
+
+
+class TavernItemIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field("", max_length=1000)
+    slot_type: str = Field(..., pattern="^(attack|defense)$")
+    effect_type: str = Field(
+        ...,
+        pattern="^(attack_bonus_percent|defense_bonus_percent|crit_chance_percent|dodge_chance_percent|elo_protection_percent|win_bonus_elo_flat)$",
+    )
+    value: float = Field(..., ge=0)
+    duration_seconds: int = Field(..., ge=1, le=2592000)
+    price: int = Field(..., ge=0, le=10_000_000)
+    enabled: bool = True
+
+
+class TavernItemOut(TavernItemIn):
+    id: int
+    guild_id: int
+
+
+class TavernUsageItem(BaseModel):
+    item_id: int
+    purchases: int
+
+
+class TavernUsageOut(BaseModel):
+    days: int
+    active_loadouts_count: int
+    most_bought_items: list[TavernUsageItem]
+
+
 class ShopSettings(BaseModel):
     enabled: bool = True
     show_out_of_stock: bool = True

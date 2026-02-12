@@ -22,6 +22,7 @@ from bot.database.models import (
     GuildMonthlyGoalContribution,
     UserProfile,
 )
+from bot.services.tavern import TavernService
 from bot.referral.models import PromoRedemptionV2, ReferralAttributionV2, ReferralRewardV2
 from bot.reports.betting import build_betting_report_metrics
 
@@ -250,12 +251,14 @@ async def _build_pvp(session: AsyncSession, guild_id: int, start: dt.datetime, e
     )
     longest_streak = int(streaks.scalar() or 0)
 
+    tavern_stats = await TavernService(session).monthly_tavern_stats(guild_id=guild_id, start=start, end=end)
     return {
         "pvp_duels_count": int(duels_count or 0),
         "pvp_total_volume": int(total_volume or 0),
         "pvp_fees_burned": int(float(fees_burned or 0)),
         "top_pvp_players": top_players,
         "longest_streak": longest_streak,
+        **tavern_stats,
     }
 
 
@@ -399,7 +402,8 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
             value=(
                 f"Дуэлей: **{int(pvp.get('pvp_duels_count', 0))}**\n"
                 f"Оборот: **{int(pvp.get('pvp_total_volume', 0))}**\n"
-                f"Комиссии: **{int(pvp.get('pvp_fees_burned', 0))}**"
+                f"Комиссии: **{int(pvp.get('pvp_fees_burned', 0))}**\n"
+                f"Таверна: активных бафов **{int(pvp.get('tavern_active_buffs', 0))}**, покупок **{int(pvp.get('tavern_purchases', 0))}**"
             ),
             inline=False,
         )

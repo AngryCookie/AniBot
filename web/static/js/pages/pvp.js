@@ -61,4 +61,58 @@ export const initPvp = async (guildId) => {
     await refresh();
   }));
   await refresh();
+  await initTavernAdmin(guildId);
+};
+
+
+const formToPayload = (form) => {
+  const fd = new FormData(form);
+  const out = {};
+  for (const [k, v] of fd.entries()) out[k] = v;
+  for (const el of form.querySelectorAll('input[type="checkbox"]')) out[el.name] = el.checked;
+  ["value", "duration_seconds", "price"].forEach((k) => { if (k in out) out[k] = Number(out[k] || 0); });
+  return out;
+};
+
+const initTavernAdmin = async (guildId) => {
+  const settingsForm = document.getElementById("pvpTavernSettingsForm");
+  const itemForm = document.getElementById("tavernItemForm");
+  const body = document.getElementById("tavernItemsBody");
+  if (!settingsForm || !itemForm || !body) return;
+
+  const loadSettings = async () => {
+    const data = await apiFetch(`/api/guilds/${guildId}/pvp/tavern`);
+    if (!data) return;
+    settingsForm.querySelector('[name="enabled"]').checked = !!data.enabled;
+    settingsForm.querySelector('[name="season_reset_clears_loadout"]').checked = !!data.season_reset_clears_loadout;
+  };
+
+  const loadItems = async () => {
+    const items = await apiFetch(`/api/guilds/${guildId}/pvp/tavern/items`);
+    body.innerHTML = "";
+    (items || []).forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${item.id}</td><td>${item.name}</td><td>${item.slot_type}</td><td>${item.effect_type}</td><td>${item.value}</td><td>${item.price}</td><td>${item.enabled ? "Да" : "Нет"}</td><td><button class="secondary" data-id="${item.id}">Удалить</button></td>`;
+      tr.querySelector("button")?.addEventListener("click", async () => {
+        await apiFetch(`/api/guilds/${guildId}/pvp/tavern/items/${item.id}`, { method: "DELETE" });
+        await loadItems();
+      });
+      body.appendChild(tr);
+    });
+  };
+
+  settingsForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await apiFetch(`/api/guilds/${guildId}/pvp/tavern`, { method: "PUT", body: JSON.stringify(formToPayload(settingsForm)) });
+  });
+
+  itemForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await apiFetch(`/api/guilds/${guildId}/pvp/tavern/items`, { method: "POST", body: JSON.stringify(formToPayload(itemForm)) });
+    itemForm.reset();
+    await loadItems();
+  });
+
+  await loadSettings();
+  await loadItems();
 };

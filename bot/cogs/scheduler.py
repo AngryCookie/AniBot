@@ -21,6 +21,7 @@ from bot.pvp.seasons import PvpSeasonService
 from bot.reports.rituals import RitualsService
 from bot.reports.service import MonthlyWrappedService
 from bot.services.buffs import BuffService
+from bot.services.tavern import TavernService
 
 logger = logging.getLogger(__name__)
 
@@ -177,8 +178,11 @@ class SchedulerCog(commands.Cog):
             async with self.bot.db.session() as session:
                 async with session.begin():
                     deactivated = await BuffService(session).deactivate_expired_buffs()
+                    tavern_cleaned = await TavernService(session).cleanup_expired_loadouts()
                     if deactivated > 0:
                         logger.info("Expired buffs deactivated", extra={"count": deactivated})
+                    if tavern_cleaned > 0:
+                        logger.info("Expired tavern loadouts cleaned", extra={"count": tavern_cleaned})
 
         await self._run_task("buff_expiry_task", _job)
 

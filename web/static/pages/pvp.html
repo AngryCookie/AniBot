@@ -31,3 +31,26 @@
   <canvas id="pvpChart" height="120"></canvas>
   <table class="table hidden" id="pvpFallback"><thead><tr><th>Дата</th><th>Объем</th><th>Комиссии</th></tr></thead><tbody></tbody></table>
 </section>
+
+<section class="card">
+  <h4>Таверна PvP (v1)</h4>
+  <p class="notice">Ровно 2 слота: Attack/Defense. Только временные баффы. Капы: атака/защита 15%, crit/dodge 5%, защита ELO 20%, бонус победы +5 ELO.</p>
+  <form id="pvpTavernSettingsForm">
+    <label><span>Включить Таверну</span><input type="checkbox" name="enabled" /></label>
+    <label><span>Сброс слотов в конце сезона</span><input type="checkbox" name="season_reset_clears_loadout" /></label>
+    <div class="footer-actions"><button type="submit">Сохранить</button></div>
+  </form>
+  <hr />
+  <form id="tavernItemForm">
+    <label><span>Название</span><input type="text" name="name" required maxlength="100" /></label>
+    <label><span>Описание</span><input type="text" name="description" maxlength="1000" /></label>
+    <label><span>Слот</span><select name="slot_type"><option value="attack">Attack</option><option value="defense">Defense</option></select></label>
+    <label><span>Эффект</span><select name="effect_type"><option value="attack_bonus_percent">attack_bonus_percent</option><option value="defense_bonus_percent">defense_bonus_percent</option><option value="crit_chance_percent">crit_chance_percent</option><option value="dodge_chance_percent">dodge_chance_percent</option><option value="elo_protection_percent">elo_protection_percent</option><option value="win_bonus_elo_flat">win_bonus_elo_flat</option></select></label>
+    <label><span>Значение</span><input type="number" step="0.1" name="value" min="0" required /></label>
+    <label><span>Длительность (сек)</span><input type="number" name="duration_seconds" min="1" max="2592000" required /></label>
+    <label><span>Цена</span><input type="number" name="price" min="0" required /></label>
+    <label><span>Включен</span><input type="checkbox" name="enabled" checked /></label>
+    <div class="footer-actions"><button type="submit">Добавить</button></div>
+  </form>
+  <table class="table"><thead><tr><th>ID</th><th>Название</th><th>Слот</th><th>Эффект</th><th>Знач.</th><th>Цена</th><th>Вкл</th><th></th></tr></thead><tbody id="tavernItemsBody"></tbody></table>
+</section>

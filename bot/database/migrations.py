@@ -1495,6 +1495,77 @@ async def migration_presence_settings(conn: AsyncConnection) -> None:
     )
 
 
+async def migration_pvp_tavern_v1(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS tavern_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description TEXT DEFAULT '',
+                slot_type VARCHAR(16) NOT NULL,
+                effect_type VARCHAR(64) NOT NULL,
+                value FLOAT NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                price INTEGER NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_items_guild_id ON tavern_items (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_items_guild_enabled ON tavern_items (guild_id, enabled)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_items_guild_slot ON tavern_items (guild_id, slot_type)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS user_tavern_loadouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                attack_item_id INTEGER NULL,
+                defense_item_id INTEGER NULL,
+                attack_ends_at DATETIME NULL,
+                defense_ends_at DATETIME NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_user_tavern_loadouts_guild_user UNIQUE (guild_id, user_id),
+                FOREIGN KEY(attack_item_id) REFERENCES tavern_items(id) ON DELETE SET NULL,
+                FOREIGN KEY(defense_item_id) REFERENCES tavern_items(id) ON DELETE SET NULL
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_tavern_loadouts_guild_user ON user_tavern_loadouts (guild_id, user_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS tavern_purchase_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                item_id INTEGER NOT NULL,
+                purchased_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                price INTEGER NOT NULL,
+                FOREIGN KEY(item_id) REFERENCES tavern_items(id) ON DELETE CASCADE
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_guild_id ON tavern_purchase_logs (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_user_id ON tavern_purchase_logs (user_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_item_id ON tavern_purchase_logs (item_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tavern_purchase_logs_purchased_at ON tavern_purchase_logs (purchased_at)"))
+
+    pvp_duel_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(pvp_duels)"))).all()}
+    if "applied_buffs_json" not in pvp_duel_cols:
+        await conn.execute(text("ALTER TABLE pvp_duels ADD COLUMN applied_buffs_json JSON"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1526,4 +1597,5 @@ MIGRATIONS: List[Migration] = [
     migration_shop_buffs_v2,
     migration_jobs_core,
     migration_presence_settings,
+    migration_pvp_tavern_v1,
 ]

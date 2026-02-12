@@ -45,6 +45,9 @@ from bot.database.models import (
     ShopItem,
     ShopPurchaseLog,
     JobDefinition,
+    TavernItem,
+    UserTavernLoadout,
+    TavernPurchaseLog,
     UserProfile,
     Warning,
     WordStatDaily,
@@ -58,6 +61,7 @@ from bot.reports.monthly import calculate_previous_month_period, build_monthly_p
 from bot.reports.quarterly import calculate_quarter_period, build_quarterly_payload
 from bot.reports.yearly import calculate_previous_year_period, build_yearly_payload
 from bot.reports.service import DEFAULT_REPORTS_SETTINGS
+from bot.services.tavern import TavernService
 from bot.presence import PresenceDataProvider, PresenceSettingsService, render_presence_text
 
 from .analytics.behavior import build_behavior_analytics
@@ -122,6 +126,10 @@ from .schemas import (
     GrowthOverviewV2,
     ShopItemIn,
     ShopItemOut,
+    PvpTavernSettings,
+    TavernItemIn,
+    TavernItemOut,
+    TavernUsageOut,
     JobDefinitionIn,
     JobDefinitionOut,
     ShopPurchaseLogOut,
@@ -1511,6 +1519,42 @@ app.post("/api/guilds/{guild_id}/pvp/reset", response_model=PvpSettings)(pvp_res
 app.get("/api/guilds/{guild_id}/pvp/season", response_model=PvpSeasonSettings)(pvp_season_get)
 app.put("/api/guilds/{guild_id}/pvp/season", response_model=PvpSeasonSettings)(pvp_season_put)
 
+@app.get("/api/guilds/{guild_id}/pvp/tavern", response_model=PvpTavernSettings)
+async def get_pvp_tavern_settings(context: Dict[str, Any] = Depends(_settings_dependency("pvp"))) -> PvpTavernSettings:
+    settings_map = context["settings_map"]
+    pvp = settings_map.get("pvp", {}) if isinstance(settings_map.get("pvp", {}), dict) else {}
+    tavern = pvp.get("tavern", {}) if isinstance(pvp.get("tavern", {}), dict) else {}
+    return PvpTavernSettings(**{**PvpTavernSettings().dict(), **tavern})
+
+
+@app.put("/api/guilds/{guild_id}/pvp/tavern", response_model=PvpTavernSettings)
+async def put_pvp_tavern_settings(
+    payload: PvpTavernSettings,
+    request: Request,
+    context: Dict[str, Any] = Depends(_settings_dependency("pvp")),
+    access_token: str = Depends(get_access_token),
+) -> PvpTavernSettings:
+    config = context["config"]
+    settings_map = context["settings_map"]
+    pvp = settings_map.get("pvp", {}) if isinstance(settings_map.get("pvp", {}), dict) else {}
+    previous_settings = (pvp.get("tavern", {}) if isinstance(pvp.get("tavern", {}), dict) else {}).copy()
+    pvp["tavern"] = payload.dict()
+    settings_map["pvp"] = pvp
+    _save_settings(config, settings_map)
+    async with database.session() as session:
+        session.add(config)
+        await session.commit()
+    await _record_config_change(
+        guild_id=config.guild_id,
+        category="pvp.tavern",
+        previous_settings=previous_settings,
+        new_settings=pvp["tavern"],
+        reason=request.headers.get("X-Change-Reason", ""),
+        access_token=access_token,
+    )
+    return payload
+
+
 app.get("/api/guilds/{guild_id}/feature-toggles", response_model=FeatureToggles)(
     feature_get
 )
@@ -1949,6 +1993,73 @@ async def delete_shop_item(
         await session.commit()
     return {"status": "deleted"}
 
+
+
+@app.get("/api/guilds/{guild_id}/pvp/tavern/items", response_model=list[TavernItemOut])
+async def list_tavern_items(guild_id: int, access_token: str = Depends(get_access_token)) -> list[TavernItemOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        result = await session.execute(select(TavernItem).where(TavernItem.guild_id == guild_id).order_by(TavernItem.id.asc()))
+        rows = result.scalars().all()
+    return [TavernItemOut(id=int(r.id), guild_id=int(r.guild_id), name=r.name, description=r.description or "", slot_type=r.slot_type, effect_type=r.effect_type, value=float(r.value or 0), duration_seconds=int(r.duration_seconds), price=int(r.price), enabled=bool(r.enabled)) for r in rows]
+
+
+@app.post("/api/guilds/{guild_id}/pvp/tavern/items", response_model=TavernItemOut)
+async def create_tavern_item(guild_id: int, payload: TavernItemIn, access_token: str = Depends(get_access_token)) -> TavernItemOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    try:
+        TavernService.validate_item_payload(slot_type=payload.slot_type, effect_type=payload.effect_type, value=payload.value, duration_seconds=payload.duration_seconds, price=payload.price)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    item = TavernItem(guild_id=guild_id, **payload.dict())
+    async with database.session() as session:
+        session.add(item)
+        await session.commit()
+        await session.refresh(item)
+    return TavernItemOut(id=int(item.id), guild_id=int(item.guild_id), **payload.dict())
+
+
+@app.put("/api/guilds/{guild_id}/pvp/tavern/items/{item_id}", response_model=TavernItemOut)
+async def update_tavern_item(guild_id: int, item_id: int, payload: TavernItemIn, access_token: str = Depends(get_access_token)) -> TavernItemOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    try:
+        TavernService.validate_item_payload(slot_type=payload.slot_type, effect_type=payload.effect_type, value=payload.value, duration_seconds=payload.duration_seconds, price=payload.price)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    async with database.session() as session:
+        row = (await session.execute(select(TavernItem).where(TavernItem.guild_id == guild_id, TavernItem.id == item_id))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Tavern item not found")
+        for k, v in payload.dict().items():
+            setattr(row, k, v)
+        await session.commit()
+        await session.refresh(row)
+    return TavernItemOut(id=int(row.id), guild_id=int(row.guild_id), **payload.dict())
+
+
+@app.delete("/api/guilds/{guild_id}/pvp/tavern/items/{item_id}")
+async def delete_tavern_item(guild_id: int, item_id: int, access_token: str = Depends(get_access_token)) -> Dict[str, Any]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(TavernItem).where(TavernItem.guild_id == guild_id, TavernItem.id == item_id))).scalars().first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Tavern item not found")
+        await session.delete(row)
+        await session.commit()
+    return {"status": "deleted"}
+
+
+@app.get("/api/guilds/{guild_id}/pvp/tavern/usage", response_model=TavernUsageOut)
+async def tavern_usage(guild_id: int, days: int = 30, access_token: str = Depends(get_access_token)) -> TavernUsageOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        data = await TavernService(session).get_usage_metrics(guild_id=guild_id, days=days)
+    return TavernUsageOut(**data)
 
 @app.get("/api/guilds/{guild_id}/shop/purchases", response_model=list[ShopPurchaseLogOut])
 async def list_shop_purchases(
