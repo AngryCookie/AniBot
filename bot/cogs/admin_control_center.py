@@ -326,10 +326,9 @@ class AdminControlCenterCog(commands.Cog):
         description="Админ-центр",
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
-        fallback="open",
     )
 
-    @admin_group.command(name="open", description="Открыть центр настроек")
+    @admin_group.command(name="hub", description="Открыть центр настроек")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def admin_hub(self, interaction: discord.Interaction) -> None:
         if interaction.guild is None:
