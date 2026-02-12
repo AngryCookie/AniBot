@@ -17,30 +17,7 @@ import { initPresence } from "./pages/presence.js";
 
 const appState = { guildId: null, currentRoute: null, sessionExpired: false };
 
-const routes = {
-  overview: { title: "Overview", page: "/static/pages/overview.html", init: () => initOverview(appState.guildId) },
-  economy: { title: "Economy", page: "/static/pages/economy.html", init: () => initEconomy(appState.guildId) },
-  shop: { title: "Shop", page: "/static/pages/shop.html", init: initShop },
-  jobs: { title: "Jobs", page: "/static/pages/jobs.html", init: initJobs },
-  betting: { title: "Betting", page: "/static/pages/betting.html", init: () => initBetting(appState.guildId) },
-  pvp: { title: "PvP", page: "/static/pages/pvp.html", init: () => initPvp(appState.guildId) },
-  growth: { title: "Growth", page: "/static/pages/growth.html", init: () => initGrowth(appState.guildId) },
-  logs: { title: "Logs", page: "/static/pages/logs.html", init: () => initSettingsPage("logs") },
-  passport: { title: "Passport", page: "/static/pages/passport.html", init: () => initSettingsPage("passport") },
-  "feature-flags": { title: "Feature Flags", page: "/static/pages/feature-flags.html" },
-  history: { title: "History", page: "/static/pages/history.html" },
-  leveling: { title: "Leveling", page: "/static/pages/leveling.html", init: () => initLeveling(appState.guildId) },
-  "economy-analytics": { title: "Economy Analytics", page: "/static/pages/economy-analytics.html", init: () => initEconomyAnalytics(appState.guildId) },
-  "economy-recommendations": { title: "Economy Recommendations", page: "/static/pages/economy-recommendations.html", init: () => initEconomyRecommendations(appState.guildId) },
-  gambling: { title: "Gambling", page: "/static/pages/gambling.html", init: () => initSettingsPage("gambling") },
-  "community-goal": { title: "Community Goal", page: "/static/pages/community-goal.html", init: () => initCommunityGoal(appState.guildId) },
-  "monthly-goals": { title: "Monthly Goals", page: "/static/pages/monthly-goals.html", init: () => initMonthlyGoals(appState.guildId) },
-  "referral-promo": { title: "Referral & Promo", page: "/static/pages/referral-promo.html", init: () => initReferralPromo(appState.guildId) },
-  reports: { title: "Reports", page: "/static/pages/reports.html", init: () => initReports(appState.guildId) },
-  rituals: { title: "Rituals", page: "/static/pages/rituals.html", init: () => initRituals(appState.guildId) },
-  presence: { title: "Presence", page: "/static/pages/presence.html", init: initPresence },
-  "word-emoji-stats": { title: "Word/Emoji Stats", page: "/static/pages/word-emoji-stats.html", init: () => initWordEmojiStats(appState.guildId) },
-};
+let routes = {};
 
 let pageContent; let pageTitle; let pageError; let pageLoading;
 
@@ -363,6 +340,31 @@ const initJobs = async () => {
   await render();
 };
 
+routes = {
+  overview: { title: "Overview", page: "/static/pages/overview.html", init: () => initOverview(appState.guildId) },
+  economy: { title: "Economy", page: "/static/pages/economy.html", init: () => initEconomy(appState.guildId) },
+  shop: { title: "Shop", page: "/static/pages/shop.html", init: () => initShop() },
+  jobs: { title: "Jobs", page: "/static/pages/jobs.html", init: () => initJobs() },
+  betting: { title: "Betting", page: "/static/pages/betting.html", init: () => initBetting(appState.guildId) },
+  pvp: { title: "PvP", page: "/static/pages/pvp.html", init: () => initPvp(appState.guildId) },
+  growth: { title: "Growth", page: "/static/pages/growth.html", init: () => initGrowth(appState.guildId) },
+  logs: { title: "Logs", page: "/static/pages/logs.html", init: () => initSettingsPage("logs") },
+  passport: { title: "Passport", page: "/static/pages/passport.html", init: () => initSettingsPage("passport") },
+  "feature-flags": { title: "Feature Flags", page: "/static/pages/feature-flags.html" },
+  history: { title: "History", page: "/static/pages/history.html" },
+  leveling: { title: "Leveling", page: "/static/pages/leveling.html", init: () => initLeveling(appState.guildId) },
+  "economy-analytics": { title: "Economy Analytics", page: "/static/pages/economy-analytics.html", init: () => initEconomyAnalytics(appState.guildId) },
+  "economy-recommendations": { title: "Economy Recommendations", page: "/static/pages/economy-recommendations.html", init: () => initEconomyRecommendations(appState.guildId) },
+  gambling: { title: "Gambling", page: "/static/pages/gambling.html", init: () => initSettingsPage("gambling") },
+  "community-goal": { title: "Community Goal", page: "/static/pages/community-goal.html", init: () => initCommunityGoal(appState.guildId) },
+  "monthly-goals": { title: "Monthly Goals", page: "/static/pages/monthly-goals.html", init: () => initMonthlyGoals(appState.guildId) },
+  "referral-promo": { title: "Referral & Promo", page: "/static/pages/referral-promo.html", init: () => initReferralPromo(appState.guildId) },
+  reports: { title: "Reports", page: "/static/pages/reports.html", init: () => initReports(appState.guildId) },
+  rituals: { title: "Rituals", page: "/static/pages/rituals.html", init: () => initRituals(appState.guildId) },
+  presence: { title: "Presence", page: "/static/pages/presence.html", init: () => initPresence(appState.guildId) },
+  "word-emoji-stats": { title: "Word/Emoji Stats", page: "/static/pages/word-emoji-stats.html", init: () => initWordEmojiStats(appState.guildId) },
+};
+
 
 const handleApiError = (message, status) => {
   if (status === 401) {
@@ -419,14 +421,28 @@ const loadLayout = async () => {
 };
 
 const initApp = async () => {
-  if (!(await loadLayout())) {
-    renderFatalState("Ошибка загрузки UI", "Не удалось загрузить шаблон интерфейса.");
-    return;
+  try {
+    if (!(await loadLayout())) {
+      renderFatalState("Ошибка загрузки UI", "Не удалось загрузить шаблон интерфейса.");
+      return;
+    }
+    setApiErrorHandler(handleApiError);
+    const bootstrapChecks = await Promise.allSettled([
+      apiFetch("/api/me"),
+      apiFetch("/api/guilds"),
+    ]);
+    bootstrapChecks.forEach((result, index) => {
+      if (result.status === "fulfilled") return;
+      const endpoint = index === 0 ? "/api/me" : "/api/guilds";
+      console.warn(`[app bootstrap] preflight failed for ${endpoint}`, result.reason);
+    });
+    if (!requireGuildId()) return;
+    await loadRoute();
+    window.addEventListener("hashchange", loadRoute);
+  } catch (error) {
+    console.error("[app bootstrap] initApp crashed", error);
+    renderFatalState("Ошибка загрузки UI", error?.message || "Не удалось инициализировать приложение");
   }
-  setApiErrorHandler(handleApiError);
-  if (!requireGuildId()) return;
-  await loadRoute();
-  window.addEventListener("hashchange", loadRoute);
 };
 
 window.addEventListener("error", (event) => {
