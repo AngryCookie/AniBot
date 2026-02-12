@@ -451,6 +451,64 @@ class ServerMonthlyGoal(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
+class GuildGoalTemplate(Base):
+    __tablename__ = "guild_goal_templates"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, default="", nullable=False)
+    goal_type = Column(String(32), nullable=False)
+    target_value = Column(Integer, nullable=False)
+    eligibility_type = Column(String(32), nullable=False)
+    eligibility_min_value = Column(Integer, nullable=False, default=0)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=dt.datetime.utcnow,
+        onupdate=dt.datetime.utcnow,
+        nullable=False,
+    )
+
+
+class GuildMonthlyGoal(Base):
+    __tablename__ = "guild_monthly_goals"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "month", name="uq_guild_monthly_goals_month"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    month = Column(Date, nullable=False)
+    template_id = Column(Integer, ForeignKey("guild_goal_templates.id", ondelete="SET NULL"), nullable=True)
+    goal_type = Column(String(32), nullable=False)
+    target_value = Column(Integer, nullable=False)
+    progress_value = Column(Integer, nullable=False, default=0)
+    status = Column(String(16), nullable=False, default="active")
+    started_at = Column(DateTime, nullable=False)
+    ends_at = Column(DateTime, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+    reward_role_id = Column(BigInteger, nullable=True)
+    announce_channel_id = Column(BigInteger, nullable=True)
+    summary_message_id = Column(BigInteger, nullable=True)
+
+
+class GuildMonthlyGoalContribution(Base):
+    __tablename__ = "guild_monthly_goal_contributions"
+    __table_args__ = (
+        UniqueConstraint("goal_id", "user_id", name="uq_guild_monthly_goal_contrib"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    goal_id = Column(Integer, ForeignKey("guild_monthly_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    contribution_value = Column(Integer, nullable=False, default=0)
+    eligible = Column(Boolean, nullable=False, default=False)
+    rewarded = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
 class ReferralCode(Base):
     __tablename__ = "referral_codes"
     __table_args__ = (

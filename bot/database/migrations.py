@@ -1096,6 +1096,78 @@ async def migration_create_growth_v2(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_v2_referrer_user_id ON referral_rewards_v2 (referrer_user_id)"))
 
 
+async def migration_create_monthly_goals_v2(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS guild_goal_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(128) NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                goal_type VARCHAR(32) NOT NULL,
+                target_value INTEGER NOT NULL,
+                eligibility_type VARCHAR(32) NOT NULL,
+                eligibility_min_value INTEGER NOT NULL DEFAULT 0,
+                enabled BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_goal_templates_guild_id ON guild_goal_templates (guild_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS guild_monthly_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                month DATE NOT NULL,
+                template_id INTEGER NULL,
+                goal_type VARCHAR(32) NOT NULL,
+                target_value INTEGER NOT NULL,
+                progress_value INTEGER NOT NULL DEFAULT 0,
+                status VARCHAR(16) NOT NULL DEFAULT 'active',
+                started_at DATETIME NOT NULL,
+                ends_at DATETIME NOT NULL,
+                closed_at DATETIME NULL,
+                reward_role_id BIGINT NULL,
+                announce_channel_id BIGINT NULL,
+                summary_message_id BIGINT NULL,
+                CONSTRAINT uq_guild_monthly_goals_month UNIQUE (guild_id, month),
+                CONSTRAINT fk_guild_monthly_goals_template FOREIGN KEY (template_id)
+                    REFERENCES guild_goal_templates (id) ON DELETE SET NULL
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_monthly_goals_guild_id ON guild_monthly_goals (guild_id)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS guild_monthly_goal_contributions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                goal_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                contribution_value INTEGER NOT NULL DEFAULT 0,
+                eligible BOOLEAN NOT NULL DEFAULT 0,
+                rewarded BOOLEAN NOT NULL DEFAULT 0,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_guild_monthly_goal_contrib UNIQUE (goal_id, user_id),
+                CONSTRAINT fk_guild_monthly_goal_contrib_goal FOREIGN KEY (goal_id)
+                    REFERENCES guild_monthly_goals (id) ON DELETE CASCADE
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_monthly_goal_contrib_guild_id ON guild_monthly_goal_contributions (guild_id)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_monthly_goal_contrib_user_id ON guild_monthly_goal_contributions (user_id)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1103,6 +1175,7 @@ MIGRATIONS: List[Migration] = [
     migration_create_economy_transactions,
     migration_add_monthly_analytics_support,
     migration_create_server_monthly_goals,
+    migration_create_monthly_goals_v2,
     migration_create_referrals,
     migration_create_referral_core,
     migration_create_referral_extended,

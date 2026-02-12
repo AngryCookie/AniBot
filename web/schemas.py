@@ -635,3 +635,51 @@ class GrowthOverviewV2(BaseModel):
     referrals_activated: int
     referrals_total_rewards: int
     top_referrers: list[GrowthTopReferrer]
+
+
+class MonthlyGoalsSettings(BaseModel):
+    enabled: bool = True
+    auto_generate: bool = True
+    announce_channel_id: Optional[int] = None
+    reward_role_id: Optional[int] = None
+    close_day: int = Field(1, ge=1, le=28)
+    close_hour: int = Field(12, ge=0, le=23)
+    timezone: str = Field("UTC", min_length=1, max_length=64)
+    default_template_id: Optional[int] = None
+
+
+class MonthlyGoalTemplateIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field("", max_length=1000)
+    goal_type: str = Field(..., pattern="^(voice_minutes|messages|economy_earned|betting_volume|pvp_volume)$")
+    target_value: int = Field(..., ge=1, le=1_000_000_000)
+    eligibility_type: str = Field(..., pattern="^(voice_minutes|messages|economy_activity)$")
+    eligibility_min_value: int = Field(0, ge=0, le=1_000_000_000)
+    enabled: bool = True
+
+
+class MonthlyGoalTemplateOut(MonthlyGoalTemplateIn):
+    id: int
+    guild_id: int
+    created_at: str
+    updated_at: str
+
+
+class MonthlyGoalCurrentOut(BaseModel):
+    id: int
+    guild_id: int
+    month: str
+    template_id: Optional[int] = None
+    goal_type: str
+    target_value: int
+    progress_value: int
+    status: str
+    started_at: str
+    ends_at: str
+    closed_at: Optional[str] = None
+    reward_role_id: Optional[int] = None
+    announce_channel_id: Optional[int] = None
+    summary_message_id: Optional[int] = None
+    percent_completed: float = 0.0
+    days_left: int = 0
+    eligible_count: int = 0

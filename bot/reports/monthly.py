@@ -18,6 +18,8 @@ from bot.database.models import (
     ReactionStatDaily,
     Warning,
     WordStatDaily,
+    GuildMonthlyGoal,
+    GuildMonthlyGoalContribution,
 )
 from bot.referral.models import PromoRedemptionV2, ReferralAttributionV2, ReferralRewardV2
 
@@ -81,6 +83,41 @@ async def build_monthly_payload(
         payload["language"] = await _build_words_emojis(session, guild_id, period_start, period_end)
 
     payload["growth"] = await _build_growth(session, guild_id, period_start, period_end)
+
+    monthly_goal_row = (
+        await session.execute(
+            select(GuildMonthlyGoal).where(
+                (GuildMonthlyGoal.guild_id == guild_id)
+                & (GuildMonthlyGoal.started_at >= period_start)
+                & (GuildMonthlyGoal.started_at < period_end)
+            )
+        )
+    ).scalars().first()
+    if monthly_goal_row is not None:
+        eligible_count = await session.scalar(
+            select(func.count()).select_from(GuildMonthlyGoalContribution).where(
+                (GuildMonthlyGoalContribution.goal_id == monthly_goal_row.id)
+                & (GuildMonthlyGoalContribution.eligible.is_(True))
+            )
+        )
+        top_rows = await session.execute(
+            select(GuildMonthlyGoalContribution.user_id, GuildMonthlyGoalContribution.contribution_value)
+            .where(GuildMonthlyGoalContribution.goal_id == monthly_goal_row.id)
+            .order_by(GuildMonthlyGoalContribution.contribution_value.desc())
+            .limit(5)
+        )
+        payload["monthly_goal"] = {
+            "name": f"{monthly_goal_row.goal_type}",
+            "status": monthly_goal_row.status,
+            "progress": int(monthly_goal_row.progress_value),
+            "target": int(monthly_goal_row.target_value),
+            "eligible_contributors": int(eligible_count or 0),
+            "top_contributors": [
+                {"user_id": int(r.user_id), "value": int(r.contribution_value or 0)}
+                for r in top_rows
+                if r.user_id is not None
+            ],
+        }
     return payload
 
 
@@ -417,6 +454,21 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
         embed.add_field(name="📝 Топ слов", value=words, inline=False)
         embed.add_field(name="😀 Топ эмодзи", value=emojis, inline=False)
         embed.add_field(name="👍 Топ реакций", value=reactions, inline=False)
+
+    monthly_goal = payload.get("monthly_goal") or {}
+    if monthly_goal:
+        top = "\n".join([f"• <@{row['user_id']}>: {row['value']}" for row in monthly_goal.get("top_contributors", [])[:5]]) or "—"
+        embed.add_field(
+            name="🎯 Цель месяца",
+            value=(
+                f"Название: **{monthly_goal.get('name', '—')}**\n"
+                f"Статус: **{monthly_goal.get('status', '—')}**\n"
+                f"Прогресс: **{int(monthly_goal.get('progress', 0))}/{int(monthly_goal.get('target', 0))}**\n"
+                f"Подходящих участников: **{int(monthly_goal.get('eligible_contributors', 0))}**\n"
+                f"Топ:\n{top}"
+            ),
+            inline=False,
+        )
 
     embed.set_footer(text="Сформировано автоматически • AniBot")
     return embed
