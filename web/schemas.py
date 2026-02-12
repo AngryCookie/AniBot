@@ -420,6 +420,35 @@ class ReportsSettings(BaseModel):
 class ReportsDryRunOut(BaseModel):
     payload: dict
 
+
+class RitualsDailyThisDaySettings(BaseModel):
+    enabled: bool = True
+    channel_id: Optional[int] = None
+    post_hour: int = Field(12, ge=0, le=23)
+    min_years_ago: int = Field(1, ge=1, le=20)
+    max_items: int = Field(3, ge=1, le=10)
+
+
+class RitualsMonthlyIncludeSettings(BaseModel):
+    top_word: bool = True
+    top_emoji: bool = True
+    top_reaction: bool = True
+
+
+class RitualsMonthlyHighlightsSettings(BaseModel):
+    enabled: bool = True
+    channel_id: Optional[int] = None
+    post_day: int = Field(1, ge=1, le=28)
+    post_hour: int = Field(12, ge=0, le=23)
+    include: RitualsMonthlyIncludeSettings = Field(default_factory=RitualsMonthlyIncludeSettings)
+
+
+class RitualsSettings(BaseModel):
+    enabled: bool = True
+    timezone: str = Field("UTC", min_length=1, max_length=64)
+    daily_this_day: RitualsDailyThisDaySettings = Field(default_factory=RitualsDailyThisDaySettings)
+    monthly_highlights: RitualsMonthlyHighlightsSettings = Field(default_factory=RitualsMonthlyHighlightsSettings)
+
 class WordEmojiStatsSettings(BaseModel):
     enabled: bool = True
     min_token_length: int = Field(3, ge=1, le=20)

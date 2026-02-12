@@ -12,6 +12,7 @@ import { initGrowth } from "./pages/growth.js";
 import { initBetting } from "./pages/betting.js";
 import { initPvp } from "./pages/pvp.js";
 import { initReports } from "./pages/reports.js";
+import { initRituals } from "./pages/rituals.js";
 
 const appState = { guildId: null, currentRoute: null };
 
@@ -34,6 +35,7 @@ const routes = {
   "monthly-goals": { title: "Monthly Goals", page: "/static/pages/monthly-goals.html", init: () => initMonthlyGoals(appState.guildId) },
   "referral-promo": { title: "Referral & Promo", page: "/static/pages/referral-promo.html", init: () => initReferralPromo(appState.guildId) },
   reports: { title: "Reports", page: "/static/pages/reports.html", init: () => initReports(appState.guildId) },
+  rituals: { title: "Rituals", page: "/static/pages/rituals.html", init: () => initRituals(appState.guildId) },
   "word-emoji-stats": { title: "Word/Emoji Stats", page: "/static/pages/word-emoji-stats.html", init: () => initWordEmojiStats(appState.guildId) },
 };
 

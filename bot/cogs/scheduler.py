@@ -17,6 +17,7 @@ from bot.database.models import EconomyLedger, GuildConfig, GuildReport, ModLog,
 from bot.goals.service import MonthlyCommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 from bot.pvp.seasons import PvpSeasonService
+from bot.reports.rituals import RitualsService
 from bot.reports.service import MonthlyWrappedService
 from bot.services.buffs import BuffService
 
@@ -27,6 +28,7 @@ class SchedulerCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.monthly_reports_service = MonthlyWrappedService(bot)
+        self.rituals_service = RitualsService(bot)
         self._task_locks: dict[str, asyncio.Lock] = {}
         self._next_run: dict[str, dt.datetime] = {}
         self._betting_auto_apply_next: dict[int, dt.datetime] = {}
@@ -35,6 +37,7 @@ class SchedulerCog(commands.Cog):
         self.community_goals_task.start()
         self.monthly_goals_task.start()
         self.monthly_reports_task.start()
+        self.rituals_task.start()
         self.monthly_community_goals_v2_task.start()
         self.pvp_seasons_task.start()
         self.betting_scheduling_task.start()
@@ -46,6 +49,7 @@ class SchedulerCog(commands.Cog):
         self.community_goals_task.cancel()
         self.monthly_goals_task.cancel()
         self.monthly_reports_task.cancel()
+        self.rituals_task.cancel()
         self.monthly_community_goals_v2_task.cancel()
         self.pvp_seasons_task.cancel()
         self.betting_scheduling_task.cancel()
@@ -390,6 +394,10 @@ class SchedulerCog(commands.Cog):
     async def monthly_reports_task(self) -> None:
         await self._run_task("monthly_reports_task", self.monthly_reports_service.run_scheduler_tick)
 
+    @tasks.loop(minutes=30)
+    async def rituals_task(self) -> None:
+        await self._run_task("rituals_task", self.rituals_service.run_scheduler_tick)
+
     @tasks.loop(minutes=20)
     async def monthly_community_goals_v2_task(self) -> None:
         async def _job() -> None:
@@ -405,6 +413,7 @@ class SchedulerCog(commands.Cog):
     @community_goals_task.before_loop
     @monthly_goals_task.before_loop
     @monthly_reports_task.before_loop
+    @rituals_task.before_loop
     @pvp_seasons_task.before_loop
     @betting_scheduling_task.before_loop
     @monthly_community_goals_v2_task.before_loop
