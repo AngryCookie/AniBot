@@ -34,6 +34,14 @@ class GuildConfig(Base):
     settings = Column(Text, default="{}")
 
 
+class BotSettings(Base):
+    __tablename__ = "bot_settings"
+
+    key = Column(String(64), primary_key=True)
+    value = Column(Text, nullable=False, default="{}")
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
 class UserProfile(Base):
     __tablename__ = "users"
     __table_args__ = (

@@ -868,3 +868,21 @@ class MonthlyGoalCurrentOut(BaseModel):
     percent_completed: float = 0.0
     days_left: int = 0
     eligible_count: int = 0
+
+
+class PresenceTemplate(BaseModel):
+    type: str = Field("playing", pattern="^(playing|watching|listening)$")
+    text: str = Field(..., min_length=1, max_length=128)
+
+
+class PresenceSettings(BaseModel):
+    enabled: bool = True
+    mode: str = Field("primary_guild", pattern="^(primary_guild|rotate_guilds)$")
+    primary_guild_id: Optional[int] = None
+    interval_seconds: int = Field(300, ge=60, le=86400)
+    templates: List[PresenceTemplate] = Field(default_factory=list)
+
+
+class PresencePreviewOut(BaseModel):
+    guild_id: int
+    rendered: List[str] = Field(default_factory=list)
