@@ -18,6 +18,7 @@ class Settings:
     session_max_age_seconds: int
     session_same_site: str
     session_https_only: bool
+    session_cookie_path: str
     cors_allowed_origins: tuple[str, ...]
 
 
@@ -47,6 +48,7 @@ settings = Settings(
     session_max_age_seconds=int(os.getenv("SESSION_MAX_AGE_SECONDS", "2592000")),
     session_same_site=os.getenv("SESSION_SAME_SITE", "lax").lower(),
     session_https_only=os.getenv("SESSION_HTTPS_ONLY", "false").lower() in {"1", "true", "yes", "on"},
+    session_cookie_path=os.getenv("SESSION_COOKIE_PATH", "/"),
     cors_allowed_origins=tuple(
         origin.strip()
         for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")

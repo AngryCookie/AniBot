@@ -15,7 +15,7 @@ import { initReports } from "./pages/reports.js";
 import { initRituals } from "./pages/rituals.js";
 import { initPresence } from "./pages/presence.js";
 
-const appState = { guildId: null, currentRoute: null };
+const appState = { guildId: null, currentRoute: null, sessionExpired: false };
 
 const routes = {
   overview: { title: "Overview", page: "/static/pages/overview.html", init: () => initOverview(appState.guildId) },
@@ -78,7 +78,10 @@ const fieldHelpText = {
   },
 };
 
-const getRouteFromHash = () => window.location.hash.replace(/^#\/?/, "") || "overview";
+const getRouteFromHash = () => {
+  const hashPath = window.location.hash.replace(/^#\/?/, "").split("?")[0];
+  return hashPath || "overview";
+};
 
 const setError = (message) => {
   if (!pageError) return;
@@ -92,10 +95,31 @@ const setActiveNav = (route) => {
   });
 };
 
+const getGuildIdFromLocation = () => {
+  const searchGuildId = new URLSearchParams(window.location.search).get("guild_id");
+  if (searchGuildId) return searchGuildId;
+  const hashPart = window.location.hash.split("?")[1] || "";
+  return new URLSearchParams(hashPart).get("guild_id");
+};
+
+const renderFatalState = (title, message) => {
+  const safeTitle = title || "Ошибка загрузки UI";
+  const safeMessage = message || "Произошла ошибка интерфейса";
+  document.body.innerHTML = `
+    <div class="page-content">
+      <div class="alert error"><strong>${safeTitle}</strong><div>${safeMessage}</div></div>
+      <p><a href="/servers.html">Перейти к выбору сервера</a></p>
+    </div>
+  `;
+};
+
 const requireGuildId = () => {
-  const guildId = new URLSearchParams(window.location.search).get("guild_id");
-  if (!guildId) {
-    window.location.href = "/servers.html";
+  const guildId = getGuildIdFromLocation();
+  if (!guildId || Number.isNaN(Number(guildId))) {
+    setError("Сервер не выбран. Выберите сервер, чтобы открыть панель.");
+    pageContent.innerHTML = `
+      <div class="alert">Сервер не выбран. Откройте <a href="/servers.html">список серверов</a> и выберите сервер.</div>
+    `;
     return null;
   }
   appState.guildId = guildId;
@@ -339,6 +363,23 @@ const initJobs = async () => {
   await render();
 };
 
+
+const handleApiError = (message, status) => {
+  if (status === 401) {
+    appState.sessionExpired = true;
+    pageContent.innerHTML = `
+      <div class="alert error">
+        <strong>Сессия истекла, войдите снова.</strong>
+        <div>${message || "Авторизация больше не действительна."}</div>
+      </div>
+      <p><a href="/login.html">Перейти ко входу</a></p>
+    `;
+    setError("Сессия истекла, войдите снова.");
+    return;
+  }
+  setError(message);
+};
+
 const loadRoute = async () => {
   const routeKey = routes[getRouteFromHash()] ? getRouteFromHash() : "overview";
   const route = routes[routeKey];
@@ -348,6 +389,11 @@ const loadRoute = async () => {
   document.title = `AniBot Admin - ${route.title}`;
   setError(null);
   setLoading(pageLoading, true);
+
+  if (appState.sessionExpired) {
+    setLoading(pageLoading, false);
+    return;
+  }
 
   await withErrorBoundary(async () => {
     const response = await fetch(route.page, { cache: "no-store" });
@@ -373,15 +419,27 @@ const loadLayout = async () => {
 };
 
 const initApp = async () => {
-  if (!(await loadLayout())) return;
-  setApiErrorHandler((message) => setError(message));
+  if (!(await loadLayout())) {
+    renderFatalState("Ошибка загрузки UI", "Не удалось загрузить шаблон интерфейса.");
+    return;
+  }
+  setApiErrorHandler(handleApiError);
   if (!requireGuildId()) return;
   await loadRoute();
   window.addEventListener("hashchange", loadRoute);
 };
 
+window.addEventListener("error", (event) => {
+  renderFatalState("Ошибка загрузки UI", event?.error?.message || event.message);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  renderFatalState("Ошибка загрузки UI", reason?.message || "Необработанная ошибка приложения");
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   withErrorBoundary(initApp, (message) => {
-    document.body.innerHTML = `<div class='page-content'><div class='alert error'>${message}</div></div>`;
+    renderFatalState("Ошибка загрузки UI", message);
   });
 });
