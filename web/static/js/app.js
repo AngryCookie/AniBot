@@ -209,14 +209,46 @@ const initShop = async () => {
   const guildId = appState.guildId;
   const itemForm = document.getElementById("shopItemForm");
   const itemTableBody = document.getElementById("shopItemsBody");
+  const itemType = document.getElementById("shopItemType");
+  const buffFields = document.getElementById("buffFields");
   if (!guildId || !itemForm || !itemTableBody) return;
+
+  const toggleBuffFields = () => {
+    const isBuff = itemType?.value === "buff";
+    if (buffFields) buffFields.style.display = isBuff ? "block" : "none";
+  };
+  itemType?.addEventListener("change", toggleBuffFields);
+  toggleBuffFields();
+
+  const toItemPayload = (form) => {
+    const payload = formToPayload(form);
+    const isBuff = payload.item_type === "buff";
+    const durationHours = Number(payload.duration_hours || 0);
+    payload.duration_seconds = isBuff && durationHours > 0 ? durationHours * 3600 : null;
+    payload.max_active_per_user = payload.max_active_per_user ? Number(payload.max_active_per_user) : 1;
+    payload.purchase_limit_per_user = payload.purchase_limit_per_user ? Number(payload.purchase_limit_per_user) : null;
+    payload.purchase_limit_total = payload.purchase_limit_total ? Number(payload.purchase_limit_total) : null;
+    payload.buff_json = isBuff
+      ? {
+          buff_type: payload.buff_type || "jobs_bonus",
+          value_percent: Number(payload.value_percent || 0),
+        }
+      : null;
+    delete payload.buff_type;
+    delete payload.value_percent;
+    delete payload.duration_hours;
+    return payload;
+  };
 
   const renderItems = async () => {
     const items = await apiFetch(`/api/guilds/${guildId}/shop/items`);
     itemTableBody.innerHTML = "";
     items.forEach((item) => {
       const row = document.createElement("tr");
-      row.innerHTML = `<td>${item.name}</td><td>${item.base_price}</td><td>${item.item_type}</td><td>${item.is_active ? "Да" : "Нет"}</td><td><button class="secondary" data-id="${item.id}">Удалить</button></td>`;
+      const buffText = item.item_type === "buff" && item.buff_json
+        ? `${item.buff_json.buff_type || ""}: +${Number(item.buff_json.value_percent || 0)}% / ${Math.round((item.duration_seconds || 0) / 3600)}ч`
+        : "—";
+      row.innerHTML = `<td>${item.name}</td><td>${item.base_price}</td><td>${item.item_type}</td><td>${buffText}</td><td>${item.is_active && item.enabled ? "Да" : "Нет"}</td><td><button class="secondary" data-id="${item.id}">Удалить</button></td>`;
       row.querySelector("button")?.addEventListener("click", async () => {
         if (!(await confirmModal("Удалить предмет?", `Предмет «${item.name}» будет удалён безвозвратно.`))) return;
         await apiFetch(`/api/guilds/${guildId}/shop/items/${item.id}`, { method: "DELETE" });
@@ -232,8 +264,9 @@ const initShop = async () => {
     if (!validateForm(itemForm)) return;
     const submitButton = itemForm.querySelector("button[type='submit']");
     setLoading(submitButton, true);
-    await apiFetch(`/api/guilds/${guildId}/shop/items`, { method: "POST", body: JSON.stringify(formToPayload(itemForm)) });
+    await apiFetch(`/api/guilds/${guildId}/shop/items`, { method: "POST", body: JSON.stringify(toItemPayload(itemForm)) });
     itemForm.reset();
+    toggleBuffFields();
     setLoading(submitButton, false);
     showToast("Товар добавлен", "success");
     await renderItems();
@@ -241,6 +274,7 @@ const initShop = async () => {
 
   await renderItems();
 };
+
 
 const loadRoute = async () => {
   const routeKey = routes[getRouteFromHash()] ? getRouteFromHash() : "overview";

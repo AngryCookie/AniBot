@@ -42,6 +42,7 @@ from bot.database.models import (
     GuildConfigHistory,
     GuildFeatureFlag,
     ShopItem,
+    ShopPurchaseLog,
     UserProfile,
     Warning,
     WordStatDaily,
@@ -117,6 +118,7 @@ from .schemas import (
     GrowthOverviewV2,
     ShopItemIn,
     ShopItemOut,
+    ShopPurchaseLogOut,
     ShopSettings,
     ShadowPenaltySettings,
     TrustScoreSettings,
@@ -1767,6 +1769,12 @@ async def list_shop_items(
             item_type=item.item_type,
             role_id=item.role_id,
             is_active=item.is_active,
+            buff_json=item.buff_json,
+            duration_seconds=item.duration_seconds,
+            max_active_per_user=item.max_active_per_user,
+            purchase_limit_per_user=item.purchase_limit_per_user,
+            purchase_limit_total=item.purchase_limit_total,
+            enabled=item.enabled,
         )
         for item in items
     ]
@@ -1831,6 +1839,40 @@ async def delete_shop_item(
         await session.delete(item)
         await session.commit()
     return {"status": "deleted"}
+
+
+@app.get("/api/guilds/{guild_id}/shop/purchases", response_model=list[ShopPurchaseLogOut])
+async def list_shop_purchases(
+    guild_id: int,
+    days: int = 7,
+    access_token: str = Depends(get_access_token),
+) -> list[ShopPurchaseLogOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if days not in {7, 30, 90}:
+        raise HTTPException(status_code=400, detail="Допустимые значения days: 7, 30, 90.")
+
+    since = dt.datetime.utcnow() - dt.timedelta(days=days)
+    async with database.session() as session:
+        result = await session.execute(
+            select(ShopPurchaseLog)
+            .where(ShopPurchaseLog.guild_id == guild_id, ShopPurchaseLog.purchased_at >= since)
+            .order_by(desc(ShopPurchaseLog.purchased_at), desc(ShopPurchaseLog.id))
+        )
+        rows = result.scalars().all()
+
+    return [
+        ShopPurchaseLogOut(
+            id=row.id,
+            guild_id=row.guild_id,
+            user_id=row.user_id,
+            item_id=row.item_id,
+            quantity=row.quantity,
+            total_price=row.total_price,
+            purchased_at=row.purchased_at.isoformat(),
+        )
+        for row in rows
+    ]
 
 
 @app.get("/api/guilds/{guild_id}/analytics/monthly-settings", response_model=AnalyticsMonthlySettings)

@@ -25,6 +25,7 @@
 </section>
 <section class="card">
   <h4>Товары магазина</h4>
+  <p class="notice">Баффы: jobs_bonus — бонус к /work, xp_bonus — бонус XP, fee_reduction_* — снижение комиссий в режимах с комиссиями.</p>
   <form id="shopItemForm">
     <label>
       <span>Название</span>
@@ -40,19 +41,49 @@
     </label>
     <label>
       <span>Тип</span>
-      <select name="item_type">
-        <option value="role">Роль</option>
-        <option value="item">Предмет</option>
-        <option value="boost">Буст</option>
+      <select name="item_type" id="shopItemType">
+        <option value="consumable">Обычный предмет</option>
+        <option value="buff">Временный бафф</option>
       </select>
     </label>
+    <div id="buffFields">
+      <label>
+        <span>Тип баффа</span>
+        <select name="buff_type">
+          <option value="jobs_bonus">jobs_bonus</option>
+          <option value="xp_bonus">xp_bonus</option>
+          <option value="fee_reduction_pvp">fee_reduction_pvp</option>
+          <option value="fee_reduction_betting">fee_reduction_betting</option>
+        </select>
+      </label>
+      <label>
+        <span>Сила баффа, %</span>
+        <input type="number" name="value_percent" min="1" max="100" />
+      </label>
+      <label>
+        <span>Длительность (часы)</span>
+        <input type="number" name="duration_hours" min="1" max="720" />
+      </label>
+      <label>
+        <span>Лимит активных у пользователя</span>
+        <input type="number" name="max_active_per_user" min="1" max="20" value="1" />
+      </label>
+    </div>
     <label>
-      <span>ID роли (если тип роль)</span>
-      <input type="number" name="role_id" />
+      <span>Лимит покупок на пользователя</span>
+      <input type="number" name="purchase_limit_per_user" min="1" />
+    </label>
+    <label>
+      <span>Общий лимит покупок</span>
+      <input type="number" name="purchase_limit_total" min="1" />
     </label>
     <label>
       <span>Активен</span>
       <input type="checkbox" name="is_active" checked />
+    </label>
+    <label>
+      <span>Включён (публикация)</span>
+      <input type="checkbox" name="enabled" checked />
     </label>
     <button type="submit">Добавить</button>
   </form>
@@ -62,6 +93,7 @@
         <th>Название</th>
         <th>Цена</th>
         <th>Тип</th>
+        <th>Эффект</th>
         <th>Активен</th>
         <th></th>
       </tr>

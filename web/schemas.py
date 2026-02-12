@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -390,14 +390,30 @@ class ShopItemIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field("", max_length=500)
     base_price: int = Field(0, ge=0, le=1000000)
-    item_type: str = Field("role", max_length=32)
+    item_type: str = Field("consumable", pattern="^(consumable|buff)$")
     role_id: Optional[int] = None
     is_active: bool = True
+    buff_json: Optional[dict[str, Any]] = None
+    duration_seconds: Optional[int] = Field(None, ge=60, le=31_536_000)
+    max_active_per_user: Optional[int] = Field(1, ge=1, le=20)
+    purchase_limit_per_user: Optional[int] = Field(None, ge=1, le=100000)
+    purchase_limit_total: Optional[int] = Field(None, ge=1, le=1000000)
+    enabled: bool = True
 
 
 class ShopItemOut(ShopItemIn):
     id: int
     guild_id: int
+
+
+class ShopPurchaseLogOut(BaseModel):
+    id: int
+    guild_id: int
+    user_id: int
+    item_id: int
+    quantity: int
+    total_price: int
+    purchased_at: str
 
 
 class CommunityGoalBase(BaseModel):
