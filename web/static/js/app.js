@@ -20,6 +20,7 @@ const routes = {
   overview: { title: "Overview", page: "/static/pages/overview.html", init: () => initOverview(appState.guildId) },
   economy: { title: "Economy", page: "/static/pages/economy.html", init: () => initEconomy(appState.guildId) },
   shop: { title: "Shop", page: "/static/pages/shop.html", init: initShop },
+  jobs: { title: "Jobs", page: "/static/pages/jobs.html", init: initJobs },
   betting: { title: "Betting", page: "/static/pages/betting.html", init: () => initBetting(appState.guildId) },
   pvp: { title: "PvP", page: "/static/pages/pvp.html", init: () => initPvp(appState.guildId) },
   growth: { title: "Growth", page: "/static/pages/growth.html", init: () => initGrowth(appState.guildId) },
@@ -279,6 +280,62 @@ const initShop = async () => {
   await renderItems();
 };
 
+
+
+
+const initJobs = async () => {
+  const guildId = appState.guildId;
+  const form = document.getElementById("jobsForm");
+  const body = document.getElementById("jobsBody");
+  if (!guildId || !form || !body) return;
+
+  const payloadFromForm = () => ({
+    name: form.elements.namedItem("name").value?.trim(),
+    description: form.elements.namedItem("description").value || "",
+    cooldown_seconds: Number(form.elements.namedItem("cooldown_seconds").value || 3600),
+    reward_min: Number(form.elements.namedItem("reward_min").value || 0),
+    reward_max: Number(form.elements.namedItem("reward_max").value || 0),
+    fail_chance: Number(form.elements.namedItem("fail_chance").value || 0),
+    penalty_min: Number(form.elements.namedItem("penalty_min").value || 0),
+    penalty_max: Number(form.elements.namedItem("penalty_max").value || 0),
+    weight: Number(form.elements.namedItem("weight").value || 1),
+    enabled: form.elements.namedItem("enabled").checked,
+  });
+
+  const render = async () => {
+    const jobs = await apiFetch(`/api/guilds/${guildId}/jobs`);
+    body.innerHTML = "";
+    jobs.forEach((job) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${job.name}</td><td>cd ${job.cooldown_seconds}с • reward ${job.reward_min}-${job.reward_max} • fail ${Math.round((job.fail_chance || 0) * 100)}% • penalty ${job.penalty_min}-${job.penalty_max}</td><td>${job.enabled ? "Вкл" : "Выкл"}</td><td><button class="secondary" data-action="toggle">${job.enabled ? "Отключить" : "Включить"}</button> <button class="danger" data-action="delete">Удалить</button></td>`;
+      row.querySelector('[data-action="toggle"]')?.addEventListener('click', async () => {
+        await apiFetch(`/api/guilds/${guildId}/jobs/${job.id}`, { method: 'PUT', body: JSON.stringify({ ...job, enabled: !job.enabled }) });
+        await render();
+      });
+      row.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
+        if (!(await confirmModal("Удалить работу?", `Работа «${job.name}» будет удалена.`))) return;
+        await apiFetch(`/api/guilds/${guildId}/jobs/${job.id}`, { method: 'DELETE' });
+        await render();
+      });
+      body.appendChild(row);
+    });
+  };
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = payloadFromForm();
+    if (payload.reward_min > payload.reward_max || payload.penalty_min > payload.penalty_max) {
+      showToast("Проверьте диапазоны min/max", "error");
+      return;
+    }
+    await apiFetch(`/api/guilds/${guildId}/jobs`, { method: "POST", body: JSON.stringify(payload) });
+    form.reset();
+    showToast("Работа добавлена", "success");
+    await render();
+  });
+
+  await render();
+};
 
 const loadRoute = async () => {
   const routeKey = routes[getRouteFromHash()] ? getRouteFromHash() : "overview";

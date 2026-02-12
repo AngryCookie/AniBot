@@ -191,6 +191,60 @@ class UserBuff(Base):
     metadata_json = Column(JSON, nullable=True)
 
 
+class JobDefinition(Base):
+    __tablename__ = "job_definitions"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "name", name="uq_job_definitions_guild_name"),
+        Index("ix_job_definitions_guild_enabled", "guild_id", "enabled"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, default="")
+    enabled = Column(Boolean, default=True, nullable=False)
+    cooldown_seconds = Column(Integer, nullable=False, default=3600)
+    reward_min = Column(Integer, nullable=False, default=10)
+    reward_max = Column(Integer, nullable=False, default=50)
+    fail_chance = Column(Float, nullable=False, default=0.1)
+    penalty_min = Column(Integer, nullable=False, default=1)
+    penalty_max = Column(Integer, nullable=False, default=10)
+    weight = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
+class JobRun(Base):
+    __tablename__ = "job_runs"
+    __table_args__ = (
+        Index("ix_job_runs_guild_user_ran", "guild_id", "user_id", "ran_at"),
+        Index("ix_job_runs_guild_job_ran", "guild_id", "job_id", "ran_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    job_id = Column(Integer, ForeignKey("job_definitions.id"), nullable=False, index=True)
+    ran_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+    outcome = Column(String(16), nullable=False)
+    amount_delta = Column(Integer, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+
+
+class UserJobCooldown(Base):
+    __tablename__ = "user_job_cooldowns"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "user_id", "job_id", name="uq_user_job_cooldowns_guild_user_job"),
+        Index("ix_user_job_cooldowns_guild_user", "guild_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    job_id = Column(Integer, ForeignKey("job_definitions.id"), nullable=False)
+    next_available_at = Column(DateTime, nullable=False)
+
+
 class CustomCommand(Base):
     __tablename__ = "custom_commands"
 

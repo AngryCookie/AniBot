@@ -44,6 +44,7 @@ from bot.database.models import (
     GuildFeatureFlag,
     ShopItem,
     ShopPurchaseLog,
+    JobDefinition,
     UserProfile,
     Warning,
     WordStatDaily,
@@ -120,6 +121,8 @@ from .schemas import (
     GrowthOverviewV2,
     ShopItemIn,
     ShopItemOut,
+    JobDefinitionIn,
+    JobDefinitionOut,
     ShopPurchaseLogOut,
     ShopSettings,
     ShadowPenaltySettings,
@@ -1775,6 +1778,83 @@ async def rollback_config(
     )
     return {"status": "rolled_back", "history_id": history_id}
 
+
+
+
+@app.get("/api/guilds/{guild_id}/jobs", response_model=list[JobDefinitionOut])
+async def list_jobs(guild_id: int, access_token: str = Depends(get_access_token)) -> list[JobDefinitionOut]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        result = await session.execute(select(JobDefinition).where(JobDefinition.guild_id == guild_id).order_by(JobDefinition.id))
+        rows = result.scalars().all()
+    return [
+        JobDefinitionOut(
+            id=row.id,
+            guild_id=row.guild_id,
+            name=row.name,
+            description=row.description or "",
+            enabled=bool(row.enabled),
+            cooldown_seconds=int(row.cooldown_seconds or 0),
+            reward_min=int(row.reward_min or 0),
+            reward_max=int(row.reward_max or 0),
+            fail_chance=float(row.fail_chance or 0),
+            penalty_min=int(row.penalty_min or 0),
+            penalty_max=int(row.penalty_max or 0),
+            weight=int(row.weight or 1),
+        )
+        for row in rows
+    ]
+
+
+@app.post("/api/guilds/{guild_id}/jobs", response_model=JobDefinitionOut)
+async def create_job(guild_id: int, payload: JobDefinitionIn, access_token: str = Depends(get_access_token)) -> JobDefinitionOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if payload.reward_min > payload.reward_max:
+        raise HTTPException(status_code=400, detail="reward_min должен быть <= reward_max")
+    if payload.penalty_min > payload.penalty_max:
+        raise HTTPException(status_code=400, detail="penalty_min должен быть <= penalty_max")
+    item = JobDefinition(guild_id=guild_id, **payload.dict())
+    async with database.session() as session:
+        session.add(item)
+        await session.commit()
+        await session.refresh(item)
+    return JobDefinitionOut(id=item.id, guild_id=item.guild_id, **payload.dict())
+
+
+@app.put("/api/guilds/{guild_id}/jobs/{job_id}", response_model=JobDefinitionOut)
+async def update_job(guild_id: int, job_id: int, payload: JobDefinitionIn, access_token: str = Depends(get_access_token)) -> JobDefinitionOut:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    if payload.reward_min > payload.reward_max:
+        raise HTTPException(status_code=400, detail="reward_min должен быть <= reward_max")
+    if payload.penalty_min > payload.penalty_max:
+        raise HTTPException(status_code=400, detail="penalty_min должен быть <= penalty_max")
+    async with database.session() as session:
+        result = await session.execute(select(JobDefinition).where(JobDefinition.guild_id == guild_id, JobDefinition.id == job_id))
+        item = result.scalars().first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Job not found")
+        for key, value in payload.dict().items():
+            setattr(item, key, value)
+        await session.commit()
+        await session.refresh(item)
+    return JobDefinitionOut(id=item.id, guild_id=item.guild_id, **payload.dict())
+
+
+@app.delete("/api/guilds/{guild_id}/jobs/{job_id}")
+async def delete_job(guild_id: int, job_id: int, access_token: str = Depends(get_access_token)) -> Dict[str, Any]:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        result = await session.execute(select(JobDefinition).where(JobDefinition.guild_id == guild_id, JobDefinition.id == job_id))
+        item = result.scalars().first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Job not found")
+        await session.delete(item)
+        await session.commit()
+    return {"status": "deleted"}
 
 @app.get("/api/guilds/{guild_id}/shop/items", response_model=list[ShopItemOut])
 async def list_shop_items(

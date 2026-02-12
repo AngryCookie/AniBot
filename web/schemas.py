@@ -501,6 +501,25 @@ class GuildFeatureFlagUpdate(BaseModel):
     enabled: bool
 
 
+
+
+class JobDefinitionIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field("", max_length=500)
+    enabled: bool = True
+    cooldown_seconds: int = Field(3600, ge=5, le=86_400)
+    reward_min: int = Field(10, ge=0, le=1_000_000)
+    reward_max: int = Field(50, ge=0, le=1_000_000)
+    fail_chance: float = Field(0.1, ge=0.0, le=1.0)
+    penalty_min: int = Field(1, ge=0, le=1_000_000)
+    penalty_max: int = Field(10, ge=0, le=1_000_000)
+    weight: int = Field(1, ge=1, le=1000)
+
+
+class JobDefinitionOut(JobDefinitionIn):
+    id: int
+    guild_id: int
+
 class ShopItemIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field("", max_length=500)

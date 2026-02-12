@@ -1351,6 +1351,71 @@ async def migration_betting_power_drift(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_betting_power_drift_logs_day ON betting_power_drift_logs (day)"))
 
 
+
+
+async def migration_jobs_core(conn: AsyncConnection) -> None:
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS job_definitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description TEXT DEFAULT '',
+                enabled BOOLEAN NOT NULL DEFAULT 1,
+                cooldown_seconds INTEGER NOT NULL DEFAULT 3600,
+                reward_min INTEGER NOT NULL DEFAULT 10,
+                reward_max INTEGER NOT NULL DEFAULT 50,
+                fail_chance FLOAT NOT NULL DEFAULT 0.1,
+                penalty_min INTEGER NOT NULL DEFAULT 1,
+                penalty_max INTEGER NOT NULL DEFAULT 10,
+                weight INTEGER NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_job_definitions_guild_name UNIQUE (guild_id, name)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_job_definitions_guild_enabled ON job_definitions (guild_id, enabled)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS job_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                job_id INTEGER NOT NULL,
+                ran_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                outcome VARCHAR(16) NOT NULL,
+                amount_delta INTEGER NOT NULL,
+                metadata_json JSON NULL,
+                FOREIGN KEY(job_id) REFERENCES job_definitions(id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_job_runs_guild_user_ran ON job_runs (guild_id, user_id, ran_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_job_runs_guild_job_ran ON job_runs (guild_id, job_id, ran_at)"))
+
+    await conn.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS user_job_cooldowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                job_id INTEGER NOT NULL,
+                next_available_at DATETIME NOT NULL,
+                CONSTRAINT uq_user_job_cooldowns_guild_user_job UNIQUE (guild_id, user_id, job_id),
+                FOREIGN KEY(job_id) REFERENCES job_definitions(id)
+            )
+            """
+        )
+    )
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_job_cooldowns_guild_user ON user_job_cooldowns (guild_id, user_id)"))
+
 async def migration_shop_buffs_v2(conn: AsyncConnection) -> None:
     shop_cols = {str(row[1]) for row in (await conn.execute(text("PRAGMA table_info(shop_items)"))).all()}
     if "buff_json" not in shop_cols:
@@ -1445,4 +1510,5 @@ MIGRATIONS: List[Migration] = [
     migration_betting_power_drift,
     migration_betting_automation_idempotency,
     migration_shop_buffs_v2,
+    migration_jobs_core,
 ]

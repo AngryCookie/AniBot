@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, case, distinct, exists, func, or_, select
+from sqlalchemy import and_, case, distinct, exists, func, select
 
-from bot.database.models import EconomyTransaction, ShopItem, ShopPurchaseLog, UserBuff
+from bot.database.models import EconomyTransaction, JobRun, ShopItem, ShopPurchaseLog, UserBuff
 
 SUPPORTED_RECOMMENDATION_DAYS = {7, 30, 90}
 
@@ -47,24 +47,16 @@ async def build_economy_recommendations(*, database, guild_id: int, days: int) -
             )
         ).one()
 
-        lower_source = func.lower(EconomyTransaction.source)
-        jobs_source_filter = or_(
-            lower_source.like("%job%"),
-            lower_source.like("%work%"),
-        )
-
         jobs_row = (
             await session.execute(
                 select(
-                    func.count(EconomyTransaction.id).label("runs_count"),
-                    func.count(distinct(EconomyTransaction.user_id)).label("unique_workers"),
-                    func.coalesce(func.sum(EconomyTransaction.amount), 0).label("total_paid_by_jobs"),
-                    func.coalesce(func.avg(EconomyTransaction.amount), 0).label("avg_payout_per_run"),
+                    func.count(JobRun.id).label("runs_count"),
+                    func.count(distinct(JobRun.user_id)).label("unique_workers"),
+                    func.coalesce(func.sum(case((JobRun.amount_delta > 0, JobRun.amount_delta), else_=0)), 0).label("total_paid_by_jobs"),
+                    func.coalesce(func.avg(case((JobRun.amount_delta > 0, JobRun.amount_delta), else_=None)), 0).label("avg_payout_per_run"),
                 ).where(
-                    (EconomyTransaction.guild_id == guild_id)
-                    & (EconomyTransaction.created_at >= cutoff)
-                    & (EconomyTransaction.amount > 0)
-                    & jobs_source_filter
+                    (JobRun.guild_id == guild_id)
+                    & (JobRun.ran_at >= cutoff)
                 )
             )
         ).one()
@@ -126,10 +118,10 @@ async def build_economy_recommendations(*, database, guild_id: int, days: int) -
                                 select(UserBuff.id).where(
                                     and_(
                                         UserBuff.guild_id == guild_id,
-                                        UserBuff.user_id == EconomyTransaction.user_id,
+                                        UserBuff.user_id == JobRun.user_id,
                                         UserBuff.buff_type == "jobs_bonus",
-                                        UserBuff.starts_at <= EconomyTransaction.created_at,
-                                        UserBuff.ends_at > EconomyTransaction.created_at,
+                                        UserBuff.starts_at <= JobRun.ran_at,
+                                        UserBuff.ends_at > JobRun.ran_at,
                                     )
                                 )
                             ),
@@ -137,14 +129,13 @@ async def build_economy_recommendations(*, database, guild_id: int, days: int) -
                         ),
                         else_="without_buff",
                     ).label("bucket"),
-                    func.avg(EconomyTransaction.amount).label("avg_payout"),
-                    func.count(EconomyTransaction.id).label("count_runs"),
+                    func.avg(JobRun.amount_delta).label("avg_payout"),
+                    func.count(JobRun.id).label("count_runs"),
                 )
                 .where(
-                    (EconomyTransaction.guild_id == guild_id)
-                    & (EconomyTransaction.created_at >= cutoff)
-                    & (EconomyTransaction.amount > 0)
-                    & jobs_source_filter
+                    (JobRun.guild_id == guild_id)
+                    & (JobRun.ran_at >= cutoff)
+                    & (JobRun.amount_delta > 0)
                 )
                 .group_by("bucket")
             )
