@@ -1,27 +1,48 @@
 <section class="page-header">
   <h3>Betting</h3>
-  <p class="notice">Настройки ставок и аналитика объёма выплат.</p>
+  <p class="notice">Управление командами, матчами и настройками betting v1.</p>
 </section>
+
 <section class="card">
-  <h4>Настройки ставок</h4>
-  <form data-endpoint="gambling" data-success-message="Настройки ставок сохранены.">
-    <label><span>Включить ставки</span><input type="checkbox" name="enabled" /></label>
-    <label><span>Минимальная ставка</span><input type="number" name="min_bet" min="1" max="100000" required /></label>
-    <label><span>Максимальная ставка</span><input type="number" name="max_bet" min="1" max="1000000" required /></label>
-    <label><span>Комиссия дома (%)</span><input type="number" name="house_edge_percent" min="0" max="25" step="0.1" required /></label>
-    <label><span>Бонус серии побед</span><input type="checkbox" name="streak_bonus" /></label>
-    <div class="footer-actions"><button type="submit">Сохранить</button><button type="button" class="danger" data-action="reset">Сбросить</button></div>
+  <h4>Настройки</h4>
+  <form id="bettingSettingsForm">
+    <label><span>Включено</span><input type="checkbox" name="enabled" /></label>
+    <label><span>Канал анонса (ID)</span><input type="number" name="announce_channel_id" min="0" /></label>
+    <small class="hint">Если не задан в матче, используется этот канал.</small>
+    <label><span>Min bet default</span><input type="number" name="min_bet_default" min="1" required /></label>
+    <label><span>Max bet default</span><input type="number" name="max_bet_default" min="1" required /></label>
+    <label><span>Odds min</span><input type="number" name="odds_min" step="0.01" min="1.01" required /></label>
+    <label><span>Odds max</span><input type="number" name="odds_max" step="0.01" min="1.01" required /></label>
+    <label><span>Odds randomness</span><input type="number" name="odds_randomness" step="0.01" min="0" max="1" required /></label>
+    <label><span>Odds power influence</span><input type="number" name="odds_power_influence" step="0.01" min="0" max="2" required /></label>
+    <label><span>Resolve power weight</span><input type="number" name="resolve_power_weight" step="0.01" min="0" max="2" required /></label>
+    <div class="footer-actions"><button type="submit">Сохранить настройки</button></div>
   </form>
 </section>
+
 <section class="card">
-  <div class="card-header">
-    <h4>Аналитика ставок</h4>
-    <div class="period-switcher" id="bettingPeriod">
-      <button type="button" class="tab-button is-active" data-period="7">7</button>
-      <button type="button" class="tab-button" data-period="30">30</button>
-      <button type="button" class="tab-button" data-period="90">90</button>
-    </div>
-  </div>
-  <canvas id="bettingChart" height="120"></canvas>
-  <table class="table hidden" id="bettingFallback"><thead><tr><th>Дата</th><th>Объем ставок</th><th>Выплаты</th></tr></thead><tbody></tbody></table>
+  <h4>Команды</h4>
+  <form id="teamForm">
+    <label><span>Название</span><input type="text" name="name" required /></label>
+    <label><span>Описание</span><input type="text" name="description" /></label>
+    <label><span>Base power</span><input type="number" name="base_power" min="1" required /></label>
+    <label><span>Активна</span><input type="checkbox" name="active" checked /></label>
+    <div class="footer-actions"><button type="submit">Добавить команду</button></div>
+  </form>
+  <table class="table"><thead><tr><th>ID</th><th>Название</th><th>Power</th><th>Активна</th><th></th></tr></thead><tbody id="teamsBody"></tbody></table>
+</section>
+
+<section class="card">
+  <h4>Матчи</h4>
+  <form id="matchForm">
+    <label><span>Team A ID</span><input type="number" name="team_a_id" min="1" required /></label>
+    <label><span>Team B ID</span><input type="number" name="team_b_id" min="1" required /></label>
+    <label><span>Open at (UTC)</span><input type="datetime-local" name="betting_open_at" required /></label>
+    <label><span>Close at (UTC)</span><input type="datetime-local" name="betting_close_at" required /></label>
+    <label><span>Min bet</span><input type="number" name="min_bet" min="1" /></label>
+    <label><span>Max bet</span><input type="number" name="max_bet" min="1" /></label>
+    <label><span>Announce channel ID</span><input type="number" name="announce_channel_id" min="0" /></label>
+    <div class="footer-actions"><button type="submit">Создать матч</button></div>
+  </form>
+  <table class="table"><thead><tr><th>ID</th><th>Команды</th><th>Коэфф.</th><th>Окно</th><th>Статус</th><th></th></tr></thead><tbody id="matchesBody"></tbody></table>
 </section>

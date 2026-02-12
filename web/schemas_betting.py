@@ -10,23 +10,26 @@ from bot.betting.enums import BettingMatchStatus
 class BettingTeamCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field("", max_length=255)
-    base_power: int = Field(..., ge=1, le=10000)
-    is_active: bool = True
+    base_power: float = Field(..., ge=1, le=10000)
+    active: bool = True
 
 
 class BettingTeamUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
     description: str = Field("", max_length=255)
-    base_power: int = Field(..., ge=1, le=10000)
-    is_active: bool = True
+    base_power: float = Field(..., ge=1, le=10000)
+    current_power: float = Field(..., ge=1, le=10000)
+    active: bool = True
 
 
 class BettingTeamOut(BaseModel):
     id: int
+    guild_id: int
     name: str
     description: str
-    base_power: int
-    current_power: int
-    is_active: bool
+    base_power: float
+    current_power: float
+    active: bool
 
 
 class BettingMatchCreate(BaseModel):
@@ -34,10 +37,23 @@ class BettingMatchCreate(BaseModel):
     team_b_id: int
     betting_open_at: dt.datetime
     betting_close_at: dt.datetime
+    min_bet: int | None = Field(default=None, ge=1, le=1_000_000)
+    max_bet: int | None = Field(default=None, ge=1, le=1_000_000)
+    announce_channel_id: int | None = None
+
+
+class BettingMatchUpdate(BaseModel):
+    betting_open_at: dt.datetime
+    betting_close_at: dt.datetime
+    min_bet: int = Field(..., ge=1, le=1_000_000)
+    max_bet: int = Field(..., ge=1, le=1_000_000)
+    announce_channel_id: int | None = None
+    status: BettingMatchStatus
 
 
 class BettingMatchOut(BaseModel):
     id: int
+    guild_id: int
     team_a_id: int
     team_b_id: int
     odds_a: float
@@ -46,17 +62,27 @@ class BettingMatchOut(BaseModel):
     betting_close_at: dt.datetime
     resolved_at: dt.datetime | None
     winner_team_id: int | None
+    min_bet: int
+    max_bet: int
+    announce_channel_id: int | None
     status: BettingMatchStatus
 
 
-class BettingScheduleGenerateIn(BaseModel):
-    month: str = Field(..., pattern=r"^\\d{4}-\\d{2}$")
-    matches_per_day: int = Field(..., ge=1, le=20)
-    betting_open_offset_minutes: int = Field(..., ge=-1440, le=1440)
-    betting_close_offset_minutes: int = Field(..., ge=-1440, le=1440)
+class BettingSettingsOdds(BaseModel):
+    min: float = Field(1.20, ge=1.01, le=20.0)
+    max: float = Field(3.50, ge=1.01, le=20.0)
+    randomness: float = Field(0.35, ge=0.0, le=1.0)
+    power_influence: float = Field(0.50, ge=0.0, le=2.0)
 
 
-class BettingScheduleGenerateOut(BaseModel):
-    month: str
-    matches_created: int
-    days_scheduled: int
+class BettingSettingsResolve(BaseModel):
+    power_weight: float = Field(0.60, ge=0.0, le=2.0)
+
+
+class BettingSettings(BaseModel):
+    enabled: bool = True
+    announce_channel_id: int | None = None
+    min_bet_default: int = Field(50, ge=1, le=1_000_000)
+    max_bet_default: int = Field(5000, ge=1, le=1_000_000)
+    odds: BettingSettingsOdds = Field(default_factory=BettingSettingsOdds)
+    resolve: BettingSettingsResolve = Field(default_factory=BettingSettingsResolve)
