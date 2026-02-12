@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import base64
+import logging
 from typing import Any, Dict, List
 
 import httpx
@@ -12,15 +12,32 @@ from .config import settings
 DISCORD_API_BASE = "https://discord.com/api"
 ADMINISTRATOR_BIT = 0x8
 MANAGE_GUILD_BIT = 0x20
+logger = logging.getLogger(__name__)
+
+
+def _build_fernet(key: str) -> Fernet:
+    try:
+        return Fernet(key)
+    except ValueError as exc:
+        raise RuntimeError(
+            "SESSION_ENCRYPTION_KEY must be a valid Fernet key (32 url-safe base64-encoded bytes)"
+        ) from exc
+
+
+def validate_session_encryption_key() -> None:
+    if not settings.session_encryption_key:
+        logger.error("SESSION_ENCRYPTION_KEY is missing; web app startup aborted")
+        raise RuntimeError("SESSION_ENCRYPTION_KEY is required")
+
+    try:
+        _build_fernet(settings.session_encryption_key)
+    except RuntimeError as exc:
+        logger.error("Invalid SESSION_ENCRYPTION_KEY: %s", exc)
+        raise
 
 
 def _get_fernet() -> Fernet:
-    if not settings.session_encryption_key:
-        raise RuntimeError("SESSION_ENCRYPTION_KEY is required")
-    key = settings.session_encryption_key
-    if len(key) != 44:
-        key = base64.urlsafe_b64encode(key.encode("utf-8").ljust(32, b"0"))
-    return Fernet(key)
+    return _build_fernet(settings.session_encryption_key)
 
 
 def encrypt_token(token: str) -> str:

@@ -155,6 +155,7 @@ from .security import (
     fetch_user_guilds,
     get_access_token,
     has_guild_permission,
+    validate_session_encryption_key,
 )
 from .observability import request_logger, setup_logging
 
@@ -179,6 +180,7 @@ GROWTH_ENABLED_FLAG = "growth_enabled"
 async def startup() -> None:
     if not settings.session_secret:
         raise RuntimeError("SESSION_SECRET is required")
+    validate_session_encryption_key()
     await database.apply_migrations(MIGRATIONS)
 
 
@@ -256,10 +258,13 @@ async def auth_callback(request: Request, code: str, state: str = "") -> Redirec
         "redirect_uri": settings.discord_redirect_uri,
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{DISCORD_API_BASE}/oauth2/token", data=data, headers=headers
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{DISCORD_API_BASE}/oauth2/token", data=data, headers=headers
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="OAuth provider unavailable") from exc
     if response.status_code != 200:
         raise HTTPException(status_code=400, detail="OAuth exchange failed")
     payload = response.json()
