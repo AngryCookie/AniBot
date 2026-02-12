@@ -44,6 +44,7 @@ from bot.referral.models import PromoCodeExtended, PromoCodeUsage, PromoRewardTy
 from bot.community_goals import CommunityGoalService
 from bot.monthly_goals import MonthlyGoalService
 from bot.reports.monthly import calculate_previous_month_period, build_monthly_payload
+from bot.reports.yearly import calculate_previous_year_period, build_yearly_payload
 from bot.reports.service import DEFAULT_REPORTS_SETTINGS
 
 from .analytics.behavior import build_behavior_analytics
@@ -1167,6 +1168,40 @@ async def reports_monthly_dry_run(
             period_end=period.period_end_utc,
             tz=merged.timezone,
             include_sections=merged.monthly.include_sections.dict(),
+        )
+
+    return ReportsDryRunOut(payload=payload)
+
+
+@app.post("/api/guilds/{guild_id}/reports/yearly/dry-run", response_model=ReportsDryRunOut)
+async def reports_yearly_dry_run(
+    guild_id: int,
+    range: str = "prev_year",
+    context: Dict[str, Any] = Depends(_settings_dependency("reports")),
+) -> ReportsDryRunOut:
+    if range != "prev_year":
+        raise HTTPException(status_code=400, detail="Only range=prev_year is supported")
+
+    settings_map = context["settings_map"]
+    report_settings = settings_map.get("reports", {})
+    merged = ReportsSettings(**{**DEFAULT_REPORTS_SETTINGS, **report_settings})
+
+    try:
+        ZoneInfo(merged.timezone)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid timezone: {merged.timezone}") from exc
+
+    now = dt.datetime.now(dt.timezone.utc)
+    period = calculate_previous_year_period(tz_name=merged.timezone, now_utc=now)
+
+    async with database.session() as session:
+        payload = await build_yearly_payload(
+            session,
+            guild_id=guild_id,
+            period_start=period.period_start_utc,
+            period_end=period.period_end_utc,
+            tz=merged.timezone,
+            include_sections=merged.yearly.include_sections.dict(),
         )
 
     return ReportsDryRunOut(payload=payload)

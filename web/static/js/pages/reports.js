@@ -53,4 +53,15 @@ export const initReports = async (guildId) => {
       output.textContent = JSON.stringify(result.payload, null, 2);
     }
   });
+
+  const yearlyDryRunBtn = document.getElementById("reportsYearlyDryRunBtn");
+  const yearlyOutput = document.getElementById("reportsYearlyDryRunOut");
+  yearlyDryRunBtn?.addEventListener("click", async () => {
+    const result = await apiFetch(`/api/guilds/${guildId}/reports/yearly/dry-run?range=prev_year`, { method: "POST" });
+    if (yearlyOutput) {
+      yearlyOutput.classList.remove("hidden");
+      yearlyOutput.textContent = JSON.stringify(result.payload, null, 2);
+    }
+  });
+
 };
