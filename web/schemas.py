@@ -276,10 +276,21 @@ class ReportsMonthlySettings(BaseModel):
     include_sections: ReportsIncludeSections = Field(default_factory=ReportsIncludeSections)
 
 
+
+
+class ReportsYearlySettings(BaseModel):
+    enabled: bool = True
+    channel_id: Optional[int] = None
+    post_month: int = Field(12, ge=1, le=12)
+    post_day: int = Field(28, ge=1, le=31)
+    post_hour: int = Field(12, ge=0, le=23)
+    include_sections: ReportsIncludeSections = Field(default_factory=ReportsIncludeSections)
+
 class ReportsSettings(BaseModel):
     enabled: bool = True
     timezone: str = Field("UTC", min_length=1, max_length=64)
     monthly: ReportsMonthlySettings = Field(default_factory=ReportsMonthlySettings)
+    yearly: ReportsYearlySettings = Field(default_factory=ReportsYearlySettings)
 
 
 class ReportsDryRunOut(BaseModel):

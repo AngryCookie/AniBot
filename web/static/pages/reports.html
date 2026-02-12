@@ -11,6 +11,7 @@
       <input type="text" name="timezone" placeholder="UTC" />
     </label>
 
+    <h4>Monthly Wrapped</h4>
     <label class="setting">
       <span>Monthly enabled</span>
       <input type="checkbox" name="monthly.enabled" data-path="monthly.enabled" />
@@ -33,7 +34,7 @@
     </label>
 
     <fieldset class="settings-group">
-      <legend>Секции отчёта</legend>
+      <legend>Monthly sections</legend>
       <label class="setting"><span>Messages</span><input type="checkbox" data-path="monthly.include_sections.messages" /></label>
       <label class="setting"><span>Voice</span><input type="checkbox" data-path="monthly.include_sections.voice" /></label>
       <label class="setting"><span>Economy</span><input type="checkbox" data-path="monthly.include_sections.economy" /></label>
@@ -42,10 +43,49 @@
       <label class="setting"><span>Moderation</span><input type="checkbox" data-path="monthly.include_sections.moderation" /></label>
     </fieldset>
 
+    <h4>Yearly Wrapped</h4>
+    <label class="setting">
+      <span>Yearly enabled</span>
+      <input type="checkbox" name="yearly.enabled" data-path="yearly.enabled" />
+    </label>
+
+    <label class="setting">
+      <span>Yearly channel ID</span>
+      <input type="number" name="yearly.channel_id" data-path="yearly.channel_id" placeholder="123456789012345678" />
+      <p class="field-hint">ID канала, куда публиковать Yearly Wrapped.</p>
+    </label>
+
+    <label class="setting">
+      <span>Post month</span>
+      <input type="number" min="1" max="12" name="yearly.post_month" data-path="yearly.post_month" />
+    </label>
+
+    <label class="setting">
+      <span>Post day</span>
+      <input type="number" min="1" max="31" name="yearly.post_day" data-path="yearly.post_day" />
+    </label>
+
+    <label class="setting">
+      <span>Post hour (0-23)</span>
+      <input type="number" min="0" max="23" name="yearly.post_hour" data-path="yearly.post_hour" />
+    </label>
+
+    <fieldset class="settings-group">
+      <legend>Yearly sections</legend>
+      <label class="setting"><span>Messages</span><input type="checkbox" data-path="yearly.include_sections.messages" /></label>
+      <label class="setting"><span>Voice</span><input type="checkbox" data-path="yearly.include_sections.voice" /></label>
+      <label class="setting"><span>Economy</span><input type="checkbox" data-path="yearly.include_sections.economy" /></label>
+      <label class="setting"><span>Betting</span><input type="checkbox" data-path="yearly.include_sections.betting" /></label>
+      <label class="setting"><span>PvP</span><input type="checkbox" data-path="yearly.include_sections.pvp" /></label>
+      <label class="setting"><span>Moderation</span><input type="checkbox" data-path="yearly.include_sections.moderation" /></label>
+    </fieldset>
+
     <div class="row gap-sm">
       <button type="submit">Сохранить</button>
-      <button type="button" class="secondary" id="reportsDryRunBtn">Dry run</button>
+      <button type="button" class="secondary" id="reportsDryRunBtn">Monthly dry run</button>
+      <button type="button" class="secondary" id="reportsYearlyDryRunBtn">Yearly dry run</button>
     </div>
   </form>
   <pre id="reportsDryRunOut" class="notice hidden" style="white-space: pre-wrap;"></pre>
+  <pre id="reportsYearlyDryRunOut" class="notice hidden" style="white-space: pre-wrap;"></pre>
 </section>
