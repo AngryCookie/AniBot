@@ -16,10 +16,12 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import case, func, select, desc
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from bot.analytics.economy import build_economy_analytics
 from bot.analytics.insights import build_economy_insights
@@ -155,6 +157,41 @@ async def startup() -> None:
         raise RuntimeError("SESSION_SECRET is required")
     await database.apply_migrations(MIGRATIONS)
 
+
+
+
+@app.exception_handler(HTTPException)
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    detail = exc.detail if isinstance(exc.detail, str) else "Ошибка запроса."
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error_code": f"HTTP_{exc.status_code}", "message": detail, "details": {"path": request.url.path}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error_code": "VALIDATION_ERROR",
+            "message": "Проверьте корректность параметров запроса.",
+            "details": {"path": request.url.path, "errors": exc.errors()},
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error_code": "INTERNAL_ERROR",
+            "message": "Внутренняя ошибка сервера. Повторите попытку позже.",
+            "details": {"path": request.url.path},
+        },
+    )
 
 @app.get("/")
 async def root() -> RedirectResponse:

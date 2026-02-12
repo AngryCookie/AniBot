@@ -1168,6 +1168,15 @@ async def migration_create_monthly_goals_v2(conn: AsyncConnection) -> None:
     await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_monthly_goal_contrib_user_id ON guild_monthly_goal_contributions (user_id)"))
 
 
+async def migration_add_step_k_audit_indexes(conn: AsyncConnection) -> None:
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_guild_reports_guild_created ON guild_reports (guild_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_mod_logs_guild_created ON mod_logs (guild_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_economy_ledger_guild_timestamp ON economy_ledger (guild_id, timestamp)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_duels_guild_created ON pvp_duels (guild_id, created_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pvp_seasons_guild_ends ON pvp_seasons (guild_id, ends_at)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_referral_rewards_guild_created ON referral_rewards (guild_id, created_at)"))
+
+
 MIGRATIONS: List[Migration] = [
     migration_create_all,
     migration_create_community_goals,
@@ -1188,4 +1197,5 @@ MIGRATIONS: List[Migration] = [
     migration_add_operational_indexes,
     migration_create_word_emoji_stats,
     migration_create_growth_v2,
+    migration_add_step_k_audit_indexes,
 ]

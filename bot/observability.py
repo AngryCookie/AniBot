@@ -5,6 +5,16 @@ import logging
 from datetime import datetime, timezone
 
 
+_SENSITIVE_MARKERS = ("token", "secret", "password", "key", "authorization")
+
+
+def _sanitize_value(key: str, value):
+    lowered = key.lower()
+    if any(marker in lowered for marker in _SENSITIVE_MARKERS):
+        return "***"
+    return value
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -19,7 +29,7 @@ class JsonFormatter(logging.Formatter):
             if key in {"name", "message", "asctime", "exc_info", "exc_text", "stack_info"}:
                 continue
             if key not in payload:
-                payload[key] = value
+                payload[key] = _sanitize_value(key, value)
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)

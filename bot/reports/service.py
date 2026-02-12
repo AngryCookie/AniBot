@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_REPORTS_SETTINGS = {
     "enabled": True,
     "timezone": "UTC",
+    "retention_days": None,
     "monthly": {
         "enabled": True,
         "channel_id": None,

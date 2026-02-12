@@ -292,6 +292,7 @@ class ReportsYearlySettings(BaseModel):
 class ReportsSettings(BaseModel):
     enabled: bool = True
     timezone: str = Field("UTC", min_length=1, max_length=64)
+    retention_days: Optional[int] = Field(None, ge=30, le=3650)
     monthly: ReportsMonthlySettings = Field(default_factory=ReportsMonthlySettings)
     yearly: ReportsYearlySettings = Field(default_factory=ReportsYearlySettings)
 
