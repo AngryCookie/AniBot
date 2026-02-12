@@ -443,10 +443,11 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "settings": {
             "leveling": {
                 "enabled": True,
-                "xp_per_message": 12,
-                "xp_cooldown_seconds": 75,
+                "message_xp": {"enabled": True, "min_length": 6, "cooldown_seconds": 75, "xp_min": 5, "xp_max": 12, "ignore_channels": []},
+                "voice_xp": {"enabled": True, "xp_per_minute": 1, "ignore_channels": [], "ignore_self_deaf": True},
+                "level_curve": {"type": "quadratic", "a": 50, "b": 50},
                 "announce_level_up": True,
-                "rewards_roles_enabled": True,
+                "role_rewards": {"enabled": True},
             },
             "economy": {
                 "enabled": True,
@@ -490,10 +491,11 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "settings": {
             "leveling": {
                 "enabled": True,
-                "xp_per_message": 10,
-                "xp_cooldown_seconds": 90,
+                "message_xp": {"enabled": True, "min_length": 6, "cooldown_seconds": 90, "xp_min": 4, "xp_max": 10, "ignore_channels": []},
+                "voice_xp": {"enabled": True, "xp_per_minute": 1, "ignore_channels": [], "ignore_self_deaf": True},
+                "level_curve": {"type": "quadratic", "a": 50, "b": 50},
                 "announce_level_up": False,
-                "rewards_roles_enabled": True,
+                "role_rewards": {"enabled": True},
             },
             "economy": {
                 "enabled": True,
@@ -537,10 +539,11 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "settings": {
             "leveling": {
                 "enabled": True,
-                "xp_per_message": 18,
-                "xp_cooldown_seconds": 45,
+                "message_xp": {"enabled": True, "min_length": 6, "cooldown_seconds": 45, "xp_min": 7, "xp_max": 18, "ignore_channels": []},
+                "voice_xp": {"enabled": True, "xp_per_minute": 2, "ignore_channels": [], "ignore_self_deaf": True},
+                "level_curve": {"type": "quadratic", "a": 50, "b": 50},
                 "announce_level_up": True,
-                "rewards_roles_enabled": True,
+                "role_rewards": {"enabled": True},
             },
             "economy": {
                 "enabled": True,
@@ -584,10 +587,11 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "settings": {
             "leveling": {
                 "enabled": True,
-                "xp_per_message": 14,
-                "xp_cooldown_seconds": 60,
+                "message_xp": {"enabled": True, "min_length": 6, "cooldown_seconds": 60, "xp_min": 5, "xp_max": 14, "ignore_channels": []},
+                "voice_xp": {"enabled": True, "xp_per_minute": 1, "ignore_channels": [], "ignore_self_deaf": True},
+                "level_curve": {"type": "quadratic", "a": 50, "b": 50},
                 "announce_level_up": True,
-                "rewards_roles_enabled": False,
+                "role_rewards": {"enabled": False},
             },
             "economy": {
                 "enabled": True,
@@ -714,6 +718,77 @@ async def update_guild_settings(
     return payload
 
 
+
+
+def _leveling_settings_from_map(settings_map: Dict[str, Any]) -> LevelingSettings:
+    raw = settings_map.get("leveling", {}) if isinstance(settings_map, dict) else {}
+    if not isinstance(raw, dict):
+        raw = {}
+
+    message = raw.get("message_xp", {}) if isinstance(raw.get("message_xp"), dict) else {}
+    voice = raw.get("voice_xp", {}) if isinstance(raw.get("voice_xp"), dict) else {}
+    curve = raw.get("level_curve", {}) if isinstance(raw.get("level_curve"), dict) else {}
+    role_rewards = raw.get("role_rewards", {}) if isinstance(raw.get("role_rewards"), dict) else {}
+
+    legacy_xp_per_message = raw.get("xp_per_message", 10)
+    return LevelingSettings(
+        enabled=bool(raw.get("enabled", True)),
+        message_xp_enabled=bool(message.get("enabled", True)),
+        message_xp_min_length=int(message.get("min_length", 6)),
+        message_xp_cooldown_seconds=int(message.get("cooldown_seconds", raw.get("xp_cooldown_seconds", 45))),
+        message_xp_min=int(message.get("xp_min", max(1, int(legacy_xp_per_message) - 2))),
+        message_xp_max=int(message.get("xp_max", max(2, int(legacy_xp_per_message)))),
+        message_ignore_channels=[int(v) for v in message.get("ignore_channels", []) if str(v).isdigit()],
+        voice_xp_enabled=bool(voice.get("enabled", True)),
+        voice_xp_per_minute=int(voice.get("xp_per_minute", 1)),
+        voice_ignore_channels=[int(v) for v in voice.get("ignore_channels", []) if str(v).isdigit()],
+        voice_ignore_self_deaf=bool(voice.get("ignore_self_deaf", True)),
+        voice_ignore_self_mute=bool(voice.get("ignore_self_mute", False)),
+        level_curve_type=str(curve.get("type", "quadratic")),
+        level_curve_a=int(curve.get("a", 50)),
+        level_curve_b=int(curve.get("b", 50)),
+        role_rewards_enabled=bool(role_rewards.get("enabled", raw.get("rewards_roles_enabled", True))),
+        announce_level_up=bool(raw.get("announce_level_up", True)),
+        level_up_channel_id=raw.get("level_up_channel_id"),
+        announce_cooldown_seconds=int(raw.get("announce_cooldown_seconds", 60)),
+    )
+
+
+def _leveling_settings_to_map(payload: LevelingSettings) -> Dict[str, Any]:
+    return {
+        "enabled": payload.enabled,
+        "message_xp": {
+            "enabled": payload.message_xp_enabled,
+            "min_length": payload.message_xp_min_length,
+            "cooldown_seconds": payload.message_xp_cooldown_seconds,
+            "xp_min": payload.message_xp_min,
+            "xp_max": payload.message_xp_max,
+            "ignore_channels": [int(v) for v in payload.message_ignore_channels],
+            "ignore_commands": True,
+        },
+        "voice_xp": {
+            "enabled": payload.voice_xp_enabled,
+            "xp_per_minute": payload.voice_xp_per_minute,
+            "ignore_channels": [int(v) for v in payload.voice_ignore_channels],
+            "ignore_self_deaf": payload.voice_ignore_self_deaf,
+            "ignore_self_mute": payload.voice_ignore_self_mute,
+            "require_multiple_users": True,
+        },
+        "level_curve": {
+            "type": payload.level_curve_type,
+            "a": payload.level_curve_a,
+            "b": payload.level_curve_b,
+        },
+        "role_rewards": {"enabled": payload.role_rewards_enabled},
+        "announce_level_up": payload.announce_level_up,
+        "level_up_channel_id": payload.level_up_channel_id,
+        "announce_cooldown_seconds": payload.announce_cooldown_seconds,
+        "xp_per_message": payload.message_xp_max,
+        "xp_cooldown_seconds": payload.message_xp_cooldown_seconds,
+        "rewards_roles_enabled": payload.role_rewards_enabled,
+    }
+
+
 def _category_routes(category: str, model):
     async def get_category(context: Dict[str, Any] = Depends(_settings_dependency(category))):
         settings_map = context["settings_map"]
@@ -769,9 +844,61 @@ def _category_routes(category: str, model):
     return get_category, update_category, reset_category
 
 
-leveling_get, leveling_put, leveling_reset = _category_routes(
-    "leveling", LevelingSettings
-)
+
+async def leveling_get(context: Dict[str, Any] = Depends(_settings_dependency("leveling"))):
+    settings_map = context["settings_map"]
+    return _leveling_settings_from_map(settings_map)
+
+
+async def leveling_put(
+    payload: LevelingSettings,
+    request: Request,
+    context: Dict[str, Any] = Depends(_settings_dependency("leveling")),
+    access_token: str = Depends(get_access_token),
+):
+    config = context["config"]
+    settings_map = context["settings_map"]
+    previous_settings = settings_map.get("leveling", {}).copy()
+    settings_map["leveling"] = _leveling_settings_to_map(payload)
+    _save_settings(config, settings_map)
+    async with database.session() as session:
+        session.add(config)
+        await session.commit()
+    await _record_config_change(
+        guild_id=config.guild_id,
+        category="leveling",
+        previous_settings=previous_settings,
+        new_settings=settings_map["leveling"],
+        reason=request.headers.get("X-Change-Reason", ""),
+        access_token=access_token,
+    )
+    return payload
+
+
+async def leveling_reset(
+    request: Request,
+    context: Dict[str, Any] = Depends(_settings_dependency("leveling")),
+    access_token: str = Depends(get_access_token),
+):
+    config = context["config"]
+    settings_map = context["settings_map"]
+    previous_settings = settings_map.get("leveling", {}).copy()
+    payload = LevelingSettings()
+    settings_map["leveling"] = _leveling_settings_to_map(payload)
+    _save_settings(config, settings_map)
+    async with database.session() as session:
+        session.add(config)
+        await session.commit()
+    await _record_config_change(
+        guild_id=config.guild_id,
+        category="leveling",
+        previous_settings=previous_settings,
+        new_settings=settings_map["leveling"],
+        reason=request.headers.get("X-Change-Reason", ""),
+        access_token=access_token,
+    )
+    return payload
+
 economy_get, economy_put, economy_reset = _category_routes("economy", EconomySettings)
 gambling_get, gambling_put, gambling_reset = _category_routes(
     "gambling", GamblingSettings

@@ -20,6 +20,7 @@ from bot.database.models import (
     WordStatDaily,
     GuildMonthlyGoal,
     GuildMonthlyGoalContribution,
+    UserProfile,
 )
 from bot.referral.models import PromoRedemptionV2, ReferralAttributionV2, ReferralRewardV2
 
@@ -135,11 +136,28 @@ async def _build_activity(session: AsyncSession, guild_id: int, start: dt.dateti
         )
     )
     total_messages, unique_chatters, total_voice_minutes, unique_voice_users = result.one()
+
+    top_xp_result = await session.execute(
+        select(UserProfile.user_id, UserProfile.level, UserProfile.xp)
+        .where(UserProfile.guild_id == guild_id)
+        .order_by(UserProfile.level.desc(), UserProfile.xp.desc())
+        .limit(5)
+    )
+    top_xp_users = [
+        {"user_id": int(row.user_id), "level": int(row.level or 0), "xp": int(row.xp or 0)}
+        for row in top_xp_result
+    ]
+    total_xp = await session.scalar(
+        select(func.coalesce(func.sum(UserProfile.xp), 0)).where(UserProfile.guild_id == guild_id)
+    )
+
     return {
         "total_messages": int(total_messages or 0),
         "unique_chatters": int(unique_chatters or 0),
         "total_voice_minutes": int(total_voice_minutes or 0),
         "unique_voice_users": int(unique_voice_users or 0),
+        "total_xp": int(total_xp or 0),
+        "top_xp_users": top_xp_users,
     }
 
 
@@ -393,7 +411,8 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
             value=(
                 f"Сообщений: **{int(activity.get('total_messages', 0))}**\n"
                 f"Участников чата: **{int(activity.get('unique_chatters', 0))}**\n"
-                f"Войс (мин): **{int(activity.get('total_voice_minutes', 0))}**"
+                f"Войс (мин): **{int(activity.get('total_voice_minutes', 0))}**\n"
+                f"Суммарный XP: **{int(activity.get('total_xp', 0))}**"
             ),
             inline=False,
         )
@@ -471,6 +490,11 @@ def build_monthly_embed(payload: dict) -> discord.Embed:
         )
 
     embed.set_footer(text="Сформировано автоматически • AniBot")
+
+    top_xp = activity.get("top_xp_users", []) if isinstance(activity, dict) else []
+    if top_xp:
+        lines = "\n".join([f"• <@{row['user_id']}> — Lvl {row['level']} / XP {row['xp']}" for row in top_xp[:5]])
+        embed.add_field(name="🏅 Топ по XP", value=lines, inline=False)
     return embed
 
 

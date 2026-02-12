@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+from copy import deepcopy
 from typing import Any, Dict, Optional
 
 import discord
@@ -27,9 +28,49 @@ ROLE_MULTIPLIERS = {
     "Muted": 0.0,
 }
 
+DEFAULT_LEVELING_SETTINGS: Dict[str, Any] = {
+    "enabled": True,
+    "message_xp": {
+        "enabled": True,
+        "min_length": 6,
+        "cooldown_seconds": 45,
+        "xp_min": 5,
+        "xp_max": 10,
+        "ignore_channels": [],
+        "ignore_commands": True,
+    },
+    "voice_xp": {
+        "enabled": True,
+        "xp_per_minute": 1,
+        "ignore_channels": [],
+        "ignore_self_deaf": True,
+        "ignore_self_mute": False,
+        "require_multiple_users": True,
+    },
+    "level_curve": {
+        "type": "quadratic",
+        "a": 50,
+        "b": 50,
+    },
+    "role_rewards": {
+        "enabled": True,
+    },
+    "announce_level_up": True,
+    "level_up_channel_id": None,
+    "announce_cooldown_seconds": 60,
+    "max_xp_per_day": 500,
+}
 
-def xp_to_next(level: int) -> int:
-    return int(100 * (level**1.5))
+
+def xp_to_next(level: int, curve: Optional[Dict[str, Any]] = None) -> int:
+    normalized_level = max(1, int(level))
+    level_curve = curve or DEFAULT_LEVELING_SETTINGS["level_curve"]
+    curve_type = str(level_curve.get("type", "quadratic")).lower()
+    if curve_type == "quadratic":
+        a = max(0, int(level_curve.get("a", 50)))
+        b = max(0, int(level_curve.get("b", 50)))
+        return max(1, a * normalized_level * normalized_level + b * normalized_level)
+    return int(100 * (normalized_level**1.5))
 
 
 def base_reward(level: int) -> int:
@@ -55,6 +96,17 @@ def parse_settings(settings_raw: str) -> Dict[str, Any]:
 
 def dump_settings(settings: Dict[str, Any]) -> str:
     return json.dumps(settings, ensure_ascii=False)
+
+
+def merge_leveling_settings(raw_settings: Dict[str, Any] | None) -> Dict[str, Any]:
+    data = raw_settings if isinstance(raw_settings, dict) else {}
+    merged = deepcopy(DEFAULT_LEVELING_SETTINGS)
+    for key, value in data.items():
+        if key in {"message_xp", "voice_xp", "level_curve", "role_rewards"} and isinstance(value, dict):
+            merged[key].update(value)
+        else:
+            merged[key] = value
+    return merged
 
 
 async def get_or_create_guild(session, guild_id: int, currency_name: str) -> GuildConfig:

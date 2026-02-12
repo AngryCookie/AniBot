@@ -1,6 +1,6 @@
 <section class="page-header">
   <h3>Leveling</h3>
-  <p class="notice">Управляйте опытом, кулдауном и наградами за уровни.</p>
+  <p class="notice">Управляйте опытом, анти-спамом, войсом и кривой уровней.</p>
 </section>
 <section class="card">
   <h4>Настройки уровней</h4>
@@ -17,93 +17,44 @@
           <span class="toggle-track" aria-hidden="true"></span>
         </span>
       </div>
-      <p class="field-hint">
-        Отключение системы уровней временно замораживает начисление опыта.
-      </p>
     </label>
 
     <fieldset class="settings-group" id="levelingDependent">
-      <label class="setting">
-        <div class="setting-row">
-          <span class="setting-title">XP за сообщение</span>
-          <input
-            class="input-field"
-            type="number"
-            name="xp_per_message"
-            min="1"
-            max="100"
-            step="1"
-          />
-        </div>
-        <p class="field-hint">
-          Сколько опыта получает пользователь за одно сообщение.
-        </p>
-      </label>
-      <label class="setting">
-        <div class="setting-row">
-          <span class="setting-title">Кулдаун сообщений (сек)</span>
-          <input
-            class="input-field"
-            type="number"
-            name="xp_cooldown_seconds"
-            min="0"
-            max="3600"
-            step="5"
-          />
-        </div>
-        <p class="field-hint">
-          Минимальное время между начислением опыта за сообщения.
-        </p>
-      </label>
-      <label class="setting">
-        <div class="setting-row">
-          <span class="setting-title">Анонсировать повышение уровня</span>
-          <span class="toggle">
-            <input type="checkbox" name="announce_level_up" />
-            <span class="toggle-track" aria-hidden="true"></span>
-          </span>
-        </div>
-        <p class="field-hint">
-          Отправлять уведомление в канал, когда пользователь повышает уровень.
-        </p>
-      </label>
-      <label class="setting">
-        <div class="setting-row">
-          <span class="setting-title">Награды за роли</span>
-          <span class="toggle">
-            <input type="checkbox" name="rewards_roles_enabled" />
-            <span class="toggle-track" aria-hidden="true"></span>
-          </span>
-        </div>
-        <p class="field-hint">
-          Позволяет выдавать роли за достижение определённых уровней.
-        </p>
-      </label>
+      <h5>XP за сообщения</h5>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Включено</span><span class="toggle"><input type="checkbox" name="message_xp_enabled" /><span class="toggle-track" aria-hidden="true"></span></span></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Мин. длина сообщения</span><input class="input-field" type="number" name="message_xp_min_length" min="1" max="2000" /></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Кулдаун сообщений (сек)</span><input class="input-field" type="number" name="message_xp_cooldown_seconds" min="0" max="3600" /></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">XP min / max</span><div><input class="input-field" type="number" name="message_xp_min" min="0" max="100" style="width:90px" /> <input class="input-field" type="number" name="message_xp_max" min="0" max="100" style="width:90px" /></div></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Игнор-каналы (ID через запятую)</span><input class="input-field" type="text" name="message_ignore_channels" /></div></label>
+
+      <h5>XP за голос</h5>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Включено</span><span class="toggle"><input type="checkbox" name="voice_xp_enabled" /><span class="toggle-track" aria-hidden="true"></span></span></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">XP в минуту</span><input class="input-field" type="number" name="voice_xp_per_minute" min="0" max="20" /></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Игнор-каналы (ID через запятую)</span><input class="input-field" type="text" name="voice_ignore_channels" /></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Игнорировать self-deaf</span><span class="toggle"><input type="checkbox" name="voice_ignore_self_deaf" /><span class="toggle-track" aria-hidden="true"></span></span></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Игнорировать self-mute</span><span class="toggle"><input type="checkbox" name="voice_ignore_self_mute" /><span class="toggle-track" aria-hidden="true"></span></span></div></label>
+
+      <h5>Кривая и уведомления</h5>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Тип кривой</span><select class="input-field" name="level_curve_type"><option value="quadratic">quadratic</option><option value="legacy">legacy</option></select></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Параметры a / b</span><div><input class="input-field" type="number" name="level_curve_a" min="0" max="10000" style="width:90px" /> <input class="input-field" type="number" name="level_curve_b" min="0" max="10000" style="width:90px" /></div></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Выдача ролей за уровни</span><span class="toggle"><input type="checkbox" name="role_rewards_enabled" /><span class="toggle-track" aria-hidden="true"></span></span></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Анонсировать повышение уровня</span><span class="toggle"><input type="checkbox" name="announce_level_up" /><span class="toggle-track" aria-hidden="true"></span></span></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Канал анонсов (ID)</span><input class="input-field" type="number" name="level_up_channel_id" /></div></label>
+      <label class="setting"><div class="setting-row"><span class="setting-title">Кулдаун анонсов (сек)</span><input class="input-field" type="number" name="announce_cooldown_seconds" min="0" max="3600" /></div></label>
+      <p class="field-hint">Подсказка: для анти-спама используйте кулдаун 30-60 сек и min длину 6+ символов.</p>
     </fieldset>
 
-    <div class="notice hidden dirty-indicator" id="levelingDirty">
-      Есть несохранённые изменения.
-    </div>
+    <div class="notice hidden dirty-indicator" id="levelingDirty">Есть несохранённые изменения.</div>
     <div class="footer-actions">
       <button type="submit" id="levelingSave" disabled>Сохранить изменения</button>
-      <button type="button" class="danger" id="levelingReset">
-        Сбросить настройки
-      </button>
+      <button type="button" class="danger" id="levelingReset">Сбросить настройки</button>
     </div>
   </form>
 </section>
-<div
-  class="modal-backdrop hidden"
-  id="levelingResetModal"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="levelingResetTitle"
->
+<div class="modal-backdrop hidden" id="levelingResetModal" role="dialog" aria-modal="true" aria-labelledby="levelingResetTitle">
   <div class="modal-card">
     <h4 id="levelingResetTitle">Сбросить настройки уровней?</h4>
-    <p class="field-hint">
-      Настройки будут возвращены к значениям по умолчанию для сервера.
-    </p>
+    <p class="field-hint">Настройки будут возвращены к значениям по умолчанию для сервера.</p>
     <div class="modal-actions">
       <button type="button" class="secondary" data-action="cancel">Отмена</button>
       <button type="button" class="danger" data-action="confirm">Сбросить</button>

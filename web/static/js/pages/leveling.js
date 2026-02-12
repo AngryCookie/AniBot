@@ -6,32 +6,78 @@ import {
 
 const fieldNames = [
   "enabled",
-  "xp_per_message",
-  "xp_cooldown_seconds",
+  "message_xp_enabled",
+  "message_xp_min_length",
+  "message_xp_cooldown_seconds",
+  "message_xp_min",
+  "message_xp_max",
+  "message_ignore_channels",
+  "voice_xp_enabled",
+  "voice_xp_per_minute",
+  "voice_ignore_channels",
+  "voice_ignore_self_deaf",
+  "voice_ignore_self_mute",
+  "level_curve_type",
+  "level_curve_a",
+  "level_curve_b",
+  "role_rewards_enabled",
   "announce_level_up",
-  "rewards_roles_enabled",
+  "level_up_channel_id",
+  "announce_cooldown_seconds",
 ];
 
 const defaults = {
-  enabled: false,
-  xp_per_message: 10,
-  xp_cooldown_seconds: 60,
+  enabled: true,
+  message_xp_enabled: true,
+  message_xp_min_length: 6,
+  message_xp_cooldown_seconds: 45,
+  message_xp_min: 5,
+  message_xp_max: 10,
+  message_ignore_channels: "",
+  voice_xp_enabled: true,
+  voice_xp_per_minute: 1,
+  voice_ignore_channels: "",
+  voice_ignore_self_deaf: true,
+  voice_ignore_self_mute: false,
+  level_curve_type: "quadratic",
+  level_curve_a: 50,
+  level_curve_b: 50,
+  role_rewards_enabled: true,
   announce_level_up: true,
-  rewards_roles_enabled: false,
+  level_up_channel_id: null,
+  announce_cooldown_seconds: 60,
 };
+
+const listFields = new Set(["message_ignore_channels", "voice_ignore_channels"]);
 
 const setHidden = (element, isHidden) => {
   if (!element) return;
   element.classList.toggle("hidden", isHidden);
 };
 
+const parseChannels = (value) =>
+  String(value || "")
+    .split(",")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => Number(chunk))
+    .filter((num) => Number.isInteger(num) && num > 0);
+
 const readFormValues = (form) => {
   const values = {};
   fieldNames.forEach((name) => {
     const input = form.elements.namedItem(name);
     if (!input) return;
+    if (listFields.has(name)) {
+      values[name] = parseChannels(input.value);
+      return;
+    }
     if (input.type === "checkbox") {
       values[name] = input.checked;
+      return;
+    }
+    if (name === "level_curve_type") {
+      values[name] = input.value || "quadratic";
       return;
     }
     const parsed = input.value === "" ? null : Number(input.value);
@@ -46,7 +92,9 @@ const fillForm = (form, data) => {
     const input = form.elements.namedItem(name);
     if (!input) return;
     const value = merged[name];
-    if (input.type === "checkbox") {
+    if (listFields.has(name)) {
+      input.value = Array.isArray(value) ? value.join(",") : "";
+    } else if (input.type === "checkbox") {
       input.checked = Boolean(value);
     } else {
       input.value = value ?? "";
@@ -55,7 +103,7 @@ const fillForm = (form, data) => {
 };
 
 const isDirty = (current, initial) =>
-  fieldNames.some((name) => current[name] !== initial[name]);
+  fieldNames.some((name) => JSON.stringify(current[name]) !== JSON.stringify(initial[name]));
 
 export const initLeveling = async (guildId) => {
   const form = document.getElementById("levelingForm");
@@ -225,12 +273,6 @@ export const initLeveling = async (guildId) => {
       isSubmitting = false;
       updateDirtyState();
       setFormDisabled(false);
-    }
-  });
-
-  modal?.addEventListener("click", (event) => {
-    if (event.target === modal) {
-      closeModal();
     }
   });
 
