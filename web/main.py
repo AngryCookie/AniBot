@@ -3294,3 +3294,25 @@ async def force_close_monthly_goal(guild_id: int, access_token: str = Depends(ge
         result = await service.close_monthly_goal(guild_obj, int(row.id), dt.datetime.utcnow())
         await session.commit()
         return {"ok": True, **result}
+
+
+@app.get("/api/guilds/{guild_id}/monthly-goals/current/dry-run")
+async def dry_run_monthly_goal(guild_id: int, access_token: str = Depends(get_access_token)) -> dict:
+    guilds = await fetch_user_guilds(access_token)
+    ensure_guild_access(guilds, guild_id)
+    async with database.session() as session:
+        row = (await session.execute(select(GuildMonthlyGoal).where(GuildMonthlyGoal.guild_id == guild_id).order_by(GuildMonthlyGoal.month.desc()))).scalars().first()
+        if row is None:
+            return {"ok": True, "exists": False}
+        eligible = await session.scalar(select(func.count()).select_from(GuildMonthlyGoalContribution).where((GuildMonthlyGoalContribution.goal_id == row.id) & (GuildMonthlyGoalContribution.eligible.is_(True))))
+        return {
+            "ok": True,
+            "exists": True,
+            "goal_id": int(row.id),
+            "status": row.status,
+            "progress_value": int(row.progress_value),
+            "target_value": int(row.target_value),
+            "eligible_count": int(eligible or 0),
+            "will_complete": int(row.progress_value) >= int(row.target_value),
+            "will_rotate_role": bool(row.reward_role_id),
+        }
