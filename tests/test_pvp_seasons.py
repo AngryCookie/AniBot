@@ -5,7 +5,7 @@ import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from bot.database.models import Base, GuildConfig, PvpSeason, PvpSeasonResult, PvpStats
+from bot.database.models import Base, GuildConfig, PvpSeason, PvpSeasonResult, PvpStats, TavernItem, UserTavernLoadout
 from bot.pvp.seasons import PvpSeasonService
 
 
@@ -116,5 +116,40 @@ def test_process_rotation_closes_and_starts_next_season():
             assert seasons[0].status == "closed"
             assert seasons[1].status == "active"
             assert seasons[1].season_number == 2
+
+    _run(scenario())
+
+
+def test_season_reset_clears_tavern_loadout_when_toggle_enabled():
+    async def scenario() -> None:
+        session = await _make_session()
+        async with session:
+            async with session.begin():
+                session.add(
+                    GuildConfig(
+                        guild_id=1,
+                        settings=json.dumps(
+                            {
+                                "pvp_season": {"enabled": True, "reset_mode": "hard"},
+                                "pvp": {"tavern": {"enabled": True, "season_reset_clears_loadout": True}},
+                            }
+                        ),
+                    )
+                )
+                session.add(PvpStats(guild_id=1, user_id=10, rating=1200, wins=3, losses=1))
+                item = TavernItem(guild_id=1, name="test", slot_type="attack", effect_type="attack_bonus_percent", value=5, duration_seconds=3600, price=1, enabled=True)
+                session.add(item)
+                await session.flush()
+                session.add(UserTavernLoadout(guild_id=1, user_id=10, attack_item_id=item.id, attack_ends_at=dt.datetime.utcnow() + dt.timedelta(hours=1)))
+
+            now = dt.datetime(2026, 1, 1, 0, 0, 0)
+            async with session.begin():
+                service = PvpSeasonService(session)
+                season = await service.get_or_create_active_season(1, now)
+                await service.close_season(1, season.id, now + dt.timedelta(days=40))
+
+            row = (await session.execute(select(UserTavernLoadout).where(UserTavernLoadout.guild_id == 1, UserTavernLoadout.user_id == 10))).scalars().first()
+            assert row is not None
+            assert row.attack_item_id is None
 
     _run(scenario())

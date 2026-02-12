@@ -11,6 +11,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import GuildConfig, PvpDuel, PvpStats, UserProfile
+from bot.services.tavern import TavernService
 from bot.services.economy import EconomyService
 
 
@@ -190,6 +191,11 @@ class PvpService:
             participants = (int(duel.challenger_id), int(duel.opponent_id))
 
             resolved_winner_id = winner_id
+            tavern = TavernService(self.session)
+            buffs_map = await tavern.get_active_effects_for_users(guild_id=guild_id, user_ids=[participants[0], participants[1]])
+            challenger_buffs = buffs_map.get(participants[0], {})
+            opponent_buffs = buffs_map.get(participants[1], {})
+
             if resolved_winner_id is None:
                 challenger_level = int(challenger.level or 1)
                 opponent_level = int(opponent.level or 1)
@@ -197,6 +203,8 @@ class PvpService:
                     challenger_level,
                     opponent_level,
                     level_influence_percent,
+                    challenger_buffs=challenger_buffs,
+                    opponent_buffs=opponent_buffs,
                 )
                 resolved_winner_id = participants[0] if random.random() < chance_challenger else participants[1]
             if resolved_winner_id not in participants:
@@ -229,12 +237,15 @@ class PvpService:
                 amount=int(duel.amount),
                 fee_amount=fee_amount,
                 k_factor=k_factor,
+                winner_buffs=challenger_buffs if resolved_winner_id == participants[0] else opponent_buffs,
+                loser_buffs=opponent_buffs if resolved_winner_id == participants[0] else challenger_buffs,
             )
 
             now = dt.datetime.utcnow()
             duel.status = "resolved"
             duel.winner_id = resolved_winner_id
             duel.resolved_at = now
+            duel.applied_buffs_json = self._serialize_applied_buffs(challenger_buffs, opponent_buffs, participants)
             winner_profile.last_pvp_at = now
             loser_profile.last_pvp_at = now
             winner_profile.total_pvp_wins = int(winner_profile.total_pvp_wins or 0) + 1
@@ -342,14 +353,27 @@ class PvpService:
         amount: int,
         fee_amount: int,
         k_factor: int,
+        winner_buffs: dict[str, Any] | None = None,
+        loser_buffs: dict[str, Any] | None = None,
     ) -> None:
         winner = await self._get_or_create_stats(guild_id, winner_id)
         loser = await self._get_or_create_stats(guild_id, loser_id)
 
-        expected_winner = self._expected_score(int(winner.rating), int(loser.rating))
-        expected_loser = self._expected_score(int(loser.rating), int(winner.rating))
-        winner.rating = self._next_rating(int(winner.rating), 1.0, expected_winner, k_factor)
-        loser.rating = self._next_rating(int(loser.rating), 0.0, expected_loser, k_factor)
+        winner_before = int(winner.rating)
+        loser_before = int(loser.rating)
+        expected_winner = self._expected_score(winner_before, loser_before)
+        expected_loser = self._expected_score(loser_before, winner_before)
+        winner.rating = self._next_rating(winner_before, 1.0, expected_winner, k_factor)
+        loser.rating = self._next_rating(loser_before, 0.0, expected_loser, k_factor)
+
+        winner_elo_bonus = self._extract_win_bonus_elo_flat(winner_buffs)
+        loser_protection = self._extract_elo_protection_percent(loser_buffs)
+        if winner_elo_bonus > 0:
+            winner.rating += winner_elo_bonus
+        if loser_protection > 0:
+            loss_points = max(0, loser_before - int(loser.rating))
+            protected = min(int(round(loss_points * loser_protection / 100.0)), 6)
+            loser.rating = int(loser.rating) + protected
 
         winner.wins = int(winner.wins) + 1
         loser.losses = int(loser.losses) + 1
@@ -396,12 +420,76 @@ class PvpService:
             k_factor = DEFAULT_K_FACTOR
         return max(100, int(round(rating + k_factor * (score - expected))))
 
-    def _calculate_win_chance(self, challenger_level: int, opponent_level: int, level_influence_percent: float) -> float:
+    def _calculate_win_chance(
+        self,
+        challenger_level: int,
+        opponent_level: int,
+        level_influence_percent: float,
+        challenger_buffs: dict[str, Any] | None = None,
+        opponent_buffs: dict[str, Any] | None = None,
+    ) -> float:
         level_diff = challenger_level - opponent_level
         modifier = level_diff * (level_influence_percent / 1000.0)
         modifier = max(-0.1, min(0.1, modifier))
         chance = 0.5 + modifier
-        return max(0.4, min(0.6, chance))
+
+        attack = self._extract_effect_percent(challenger_buffs, "attack", "attack_bonus_percent")
+        defense = self._extract_effect_percent(opponent_buffs, "defense", "defense_bonus_percent")
+        crit = self._extract_effect_percent(challenger_buffs, "attack", "crit_chance_percent")
+        dodge = self._extract_effect_percent(opponent_buffs, "defense", "dodge_chance_percent")
+        buff_shift = ((attack - defense) * 0.0025) + ((crit - dodge) * 0.003)
+        chance += max(-0.06, min(0.06, buff_shift))
+
+        return max(0.35, min(0.65, chance))
+
+    def _extract_effect_percent(
+        self,
+        buffs: dict[str, Any] | None,
+        expected_slot: str,
+        expected_effect: str,
+    ) -> float:
+        if not buffs:
+            return 0.0
+        buff = buffs.get(expected_slot)
+        if not buff:
+            return 0.0
+        if getattr(buff, "effect_type", "") != expected_effect:
+            return 0.0
+        return float(getattr(buff, "value", 0.0))
+
+    def _extract_win_bonus_elo_flat(self, buffs: dict[str, Any] | None) -> int:
+        value = self._extract_effect_percent(buffs, "attack", "win_bonus_elo_flat")
+        return max(0, min(int(round(value)), 5))
+
+    def _extract_elo_protection_percent(self, buffs: dict[str, Any] | None) -> float:
+        return max(0.0, min(self._extract_effect_percent(buffs, "defense", "elo_protection_percent"), 20.0))
+
+    def _serialize_applied_buffs(
+        self,
+        challenger_buffs: dict[str, Any],
+        opponent_buffs: dict[str, Any],
+        participants: tuple[int, int],
+    ) -> dict[str, Any]:
+        return {
+            str(participants[0]): {
+                slot: {
+                    "item_id": int(buff.item_id),
+                    "item_name": buff.item_name,
+                    "effect_type": buff.effect_type,
+                    "value": float(buff.value),
+                }
+                for slot, buff in challenger_buffs.items()
+            },
+            str(participants[1]): {
+                slot: {
+                    "item_id": int(buff.item_id),
+                    "item_name": buff.item_name,
+                    "effect_type": buff.effect_type,
+                    "value": float(buff.value),
+                }
+                for slot, buff in opponent_buffs.items()
+            },
+        }
 
     def _ensure_cooldown(self, profile: UserProfile, cooldown_seconds: int) -> None:
         if cooldown_seconds <= 0:

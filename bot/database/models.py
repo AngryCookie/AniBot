@@ -721,6 +721,7 @@ class PvpDuel(Base):
     amount = Column(Integer, nullable=False)
     fee_percent = Column(Float, nullable=False, default=0.0)
     winner_id = Column(BigInteger, nullable=True)
+    applied_buffs_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
     resolved_at = Column(DateTime, nullable=True)
     status = Column(String(16), nullable=False, default="pending")
@@ -785,3 +786,52 @@ class PvpSeasonResult(Base):
     total_profit = Column(Integer, nullable=False, default=0)
     total_volume = Column(Integer, nullable=False, default=0)
     rank = Column(Integer, nullable=False)
+
+
+class TavernItem(Base):
+    __tablename__ = "tavern_items"
+    __table_args__ = (
+        Index("ix_tavern_items_guild_enabled", "guild_id", "enabled"),
+        Index("ix_tavern_items_guild_slot", "guild_id", "slot_type"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, default="")
+    slot_type = Column(String(16), nullable=False)
+    effect_type = Column(String(64), nullable=False)
+    value = Column(Float, nullable=False)
+    duration_seconds = Column(Integer, nullable=False)
+    price = Column(Integer, nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
+class UserTavernLoadout(Base):
+    __tablename__ = "user_tavern_loadouts"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "user_id", name="uq_user_tavern_loadouts_guild_user"),
+        Index("ix_user_tavern_loadouts_guild_user", "guild_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    attack_item_id = Column(Integer, ForeignKey("tavern_items.id", ondelete="SET NULL"), nullable=True)
+    defense_item_id = Column(Integer, ForeignKey("tavern_items.id", ondelete="SET NULL"), nullable=True)
+    attack_ends_at = Column(DateTime, nullable=True)
+    defense_ends_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
+class TavernPurchaseLog(Base):
+    __tablename__ = "tavern_purchase_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("tavern_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    purchased_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+    price = Column(Integer, nullable=False)

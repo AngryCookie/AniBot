@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import GuildConfig, PvpSeason, PvpSeasonResult, PvpStats
 from bot.services.pvp import DEFAULT_RATING
+from bot.services.tavern import TavernService
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +277,19 @@ class PvpSeasonService:
                 item.current_streak = 0
                 item.best_streak = 0
             item.updated_at = now
+
+        config = await self.session.get(GuildConfig, guild_id)
+        should_clear_loadout = True
+        if config and config.settings:
+            try:
+                payload = json.loads(config.settings or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            tavern_cfg = ((payload.get("pvp") or {}).get("tavern") or {}) if isinstance(payload, dict) else {}
+            if isinstance(tavern_cfg, dict):
+                should_clear_loadout = bool(tavern_cfg.get("season_reset_clears_loadout", True))
+        if should_clear_loadout:
+            await TavernService(self.session).clear_loadouts_for_guild(guild_id)
 
     async def process_rotation_for_guild(self, guild_id: int, now: dt.datetime) -> None:
         settings = await self.get_settings(guild_id)
