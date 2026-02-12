@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import discord
 
+from .embed_factory import EmbedFactory
+
 
 def map_exception_message(exc: Exception) -> tuple[str, str | None]:
     if isinstance(exc, ValueError):
@@ -11,11 +13,17 @@ def map_exception_message(exc: Exception) -> tuple[str, str | None]:
     return "Не удалось выполнить действие.", "Повторите попытку чуть позже."
 
 
-async def _send(interaction: discord.Interaction, content: str, ephemeral: bool) -> None:
+async def _send(
+    interaction: discord.Interaction,
+    *,
+    content: str | None = None,
+    embed: discord.Embed | None = None,
+    ephemeral: bool,
+) -> None:
     if interaction.response.is_done():
-        await interaction.followup.send(content, ephemeral=ephemeral)
+        await interaction.followup.send(content=content, embed=embed, ephemeral=ephemeral)
     else:
-        await interaction.response.send_message(content, ephemeral=ephemeral)
+        await interaction.response.send_message(content=content, embed=embed, ephemeral=ephemeral)
 
 
 async def reply_error(
@@ -24,10 +32,13 @@ async def reply_error(
     hint: str | None = None,
     ephemeral: bool = True,
 ) -> None:
-    content = f"❌ {message}"
+    title = message.strip()
+    if not title.startswith(("❌", "⛔", "⚠")):
+        title = f"❌ {title}"
+    embed = EmbedFactory.error(title)
     if hint:
-        content += f"\n💡 {hint}"
-    await _send(interaction, content, ephemeral)
+        EmbedFactory.add_section(embed, "💡", "Подсказка", [hint])
+    await _send(interaction, embed=embed, ephemeral=ephemeral)
 
 
 async def reply_success(
@@ -36,7 +47,10 @@ async def reply_success(
     hint: str | None = None,
     ephemeral: bool = True,
 ) -> None:
-    content = f"✅ {message}"
+    title = message.strip()
+    if not title.startswith("✅"):
+        title = f"✅ {title}"
+    embed = EmbedFactory.success(title)
     if hint:
-        content += f"\n💡 {hint}"
-    await _send(interaction, content, ephemeral)
+        EmbedFactory.add_section(embed, "💡", "Что дальше", [hint])
+    await _send(interaction, embed=embed, ephemeral=ephemeral)
